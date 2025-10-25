@@ -1,0 +1,34 @@
+╭─ DEPLOYMENT CONFIGURATION ──────────────────────────────────────────────────╮
+│                                                                             │
+│  HARDWARE PARAMETERS                                                        │
+│                                                                             │
+│  Compute:                      NVIDIA_A10                                   │
+│  CPU:                          2.0                                          │
+│  Memory:                       8 GB                                         │
+│  GPU Count:                    1                                            │
+│  Region:                       us-east-1                                    │
+│  Provider:                     aws                                          │
+│                                                                             │
+│  DEPLOYMENT PARAMETERS                                                      │
+│                                                                             │
+│  Name:                         comprehensive-app                            │
+│  Runtime:                      cortex                                       │
+│  Python Version:               3.11                                         │
+│  Include:                      *.py, requirements.txt                       │
+│  Exclude:                      __pycache__, *.pyc                           │
+│                                                                             │
+│  SCALING PARAMETERS                                                         │
+│                                                                             │
+│  Cooldown:                     60s                                          │
+│  Min Replicas:                 0                                            │
+│  Max Replicas:                 5                                            │
+│  Replica Concurrency:          2 ⚠️  (Multiple concurrent requests on GPU)  │
+│                                                                             │
+│  DEPENDENCIES                                                               │
+│                                                                             │
+│  Pip:                          numpy, torch==2.0.0, transformers==4.30.0    │
+│  Apt:                          ffmpeg                                       │
+│                                                                             │
+╰─────────────────────────────────────────────────────────────────────────────╯
+                                                                               
+Do you want to deploy? (Y/n):

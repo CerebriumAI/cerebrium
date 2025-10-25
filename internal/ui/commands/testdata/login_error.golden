@@ -1,0 +1,6 @@
+✓  Initialised authentication
+✓  Received credentials
+✓  Saved auth token
+✓  Set project context
+
+✗ Error: authentication failed: invalid credentials

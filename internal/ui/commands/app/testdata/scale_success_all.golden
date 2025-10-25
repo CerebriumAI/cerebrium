@@ -1,0 +1,6 @@
+✓ App 'test-app' scaled successfully
+
+  • Cooldown period: 60 seconds
+  • Minimum replicas: 2
+  • Maximum replicas: 10
+  • Response grace period: 900 seconds

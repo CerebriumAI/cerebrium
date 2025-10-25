@@ -1,0 +1,7 @@
+✓  Loaded 0 files
+✓  Zipped files (0 B)
+✓  Created app (Build ID: build-cancel-fail)
+✓  Uploaded to Cerebrium
+⚠  Build cancelled
+
+⚠️  Warning: Failed to cancel build: cancellation API error ctrl+c: cancel build | ctrl+l: view logs

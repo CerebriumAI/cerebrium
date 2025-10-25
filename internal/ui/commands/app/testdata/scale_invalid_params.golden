@@ -1,0 +1,1 @@
+✗ Error: invalid parameters: minReplicaCount must be <= maxReplicaCount

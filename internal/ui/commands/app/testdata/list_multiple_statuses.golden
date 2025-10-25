@@ -1,0 +1,9 @@
+Apps 
+
+ ID                    Status            Last Updated                
+─────────────────────────────────────────────────────────────────────
+ active-app            Active            2024-01-15 15:30:00         
+ building-app          Building          2024-01-15 14:30:00         
+ failed-app            Failed            2024-01-15 13:30:00         
+ pending-app           Pending           2024-01-15 12:30:00         
+ stopped-app           Stopped           2024-01-15 11:30:00

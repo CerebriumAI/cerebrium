@@ -1,0 +1,25 @@
+╭─ App Details for empty-app ─────────────────────────╮
+│                                                     │
+│  APP                                                │
+│                                                     │
+│  ID                            empty-app            │
+│  Created At                    2024-01-15 10:30:00  │
+│                                                     │
+│  HARDWARE                                           │
+│                                                     │
+│  Compute                       Data Unavailable     │
+│  CPU                           Data Unavailable     │
+│  Memory                        Data Unavailable     │
+│                                                     │
+│  SCALING PARAMETERS                                 │
+│                                                     │
+│  Cooldown Period               60s                  │
+│  Minimum Replicas              0                    │
+│  Maximum Replicas              1                    │
+│                                                     │
+│  STATUS                                             │
+│                                                     │
+│  Status                        Pending              │
+│  Last Build Status             Pending              │
+│                                                     │
+╰─────────────────────────────────────────────────────╯

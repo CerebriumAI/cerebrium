@@ -1,0 +1,9 @@
+Runs for my-app 
+
+ Run ID                 Function Name          Status             Created At                   Async         
+─────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ run-success            predict                success            2025-01-05 12:00:00          No            
+ run-failure            train                  failure            2025-01-04 12:00:00          Yes           
+ run-running            inference              running            2025-01-03 12:00:00          No            
+ run-pending            process                pending            2025-01-02 12:00:00          Yes           
+ run-cancelled          cleanup                cancelled          2025-01-01 12:00:00          No

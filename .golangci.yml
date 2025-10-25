@@ -1,0 +1,88 @@
+version: "2"
+
+run:
+  timeout: 5m
+  tests: true
+  modules-download-mode: readonly
+
+linters:
+  enable:
+    # Core linters
+    - errcheck        # Check for unchecked errors
+    - govet           # Go vet
+    - ineffassign     # Detect ineffectual assignments
+    - staticcheck     # Static analysis (includes gosimple)
+    - unused          # Check for unused code
+    # Additional linters
+    - gosec           # Security checks
+    - noctx           # Check for missing context.Context
+    - nolintlint      # Validate nolint directives
+    - unconvert       # Remove unnecessary type conversions
+    - unparam         # Find unused function parameters
+    - misspell        # Spell checking
+    # Code quality
+    - errorlint       # Go 1.13+ error wrapping
+    - nilerr          # Returns nil even if error is not nil
+
+  settings:
+    funlen:
+      lines: 150
+      statements: 80
+
+    depguard:
+      rules:
+        main:
+          deny:
+            - pkg: "log"
+              desc: "use log/slog instead"
+            - pkg: "io/ioutil"
+              desc: "use os or io package instead (deprecated)"
+
+    errcheck:
+      check-type-assertions: true
+      check-blank: false
+
+    gosec:
+      exclude:
+        - G404  # Use of weak random generator is ok for non-security purposes
+
+    dupl:
+      threshold: 100  # Tokens threshold for duplicate code detection
+
+issues:
+  exclude-dirs:
+    - .claude
+    - python-wrapper
+    - testdata
+    - mock
+    - bin
+    - dist
+    - .github
+
+  exclude-rules:
+    # Exclude certain linters for test files
+    - path: _test\.go
+      linters:
+        - errcheck       # Don't require checking all errors in tests
+        - errorlint      # Error wrapping less important in tests
+        - nilerr         # Nil error returns ok in tests
+        - gosec          # Security checks less important in tests
+        - dupl           # Duplicate code ok in table tests
+        - funlen         # Test functions can be long
+        - gocognit       # Tests can be complex
+        - cyclop         # Cyclomatic complexity ok in tests
+        - noctx          # Context not always needed in tests
+
+    # Exclude certain linters for main.go
+    - path: cmd/cerebrium/main\.go
+      linters:
+        - depguard       # Allow 'log' package in main.go as per CLAUDE.md
+
+    # Allow fmt.Printf in ui/ packages (per CLAUDE.md user output guidelines)
+    - path: internal/ui/
+      text: "use of `fmt.Printf`"
+      linters:
+        - forbidigo
+
+  max-issues-per-linter: 0
+  max-same-issues: 0

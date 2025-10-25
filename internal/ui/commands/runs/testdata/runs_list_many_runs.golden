@@ -1,0 +1,18 @@
+Runs for test-app 
+
+ Run ID          Function Name          Status           Created At                   Async         
+────────────────────────────────────────────────────────────────────────────────────────────────────
+ run-25          predict                success          2025-01-01 12:24:00          Yes           
+ run-24          predict                success          2025-01-01 12:23:00          No            
+ run-23          predict                success          2025-01-01 12:22:00          Yes           
+ run-22          predict                success          2025-01-01 12:21:00          No            
+ run-21          predict                success          2025-01-01 12:20:00          Yes           
+ run-20          predict                success          2025-01-01 12:19:00          No            
+ run-19          predict                success          2025-01-01 12:18:00          Yes           
+ run-18          predict                success          2025-01-01 12:17:00          No            
+ run-17          predict                success          2025-01-01 12:16:00          Yes           
+ run-16          predict                success          2025-01-01 12:15:00          No            
+ run-15          predict                success          2025-01-01 12:14:00          Yes           
+ run-14          predict                success          2025-01-01 12:13:00          No            
+ run-13          predict                success          2025-01-01 12:12:00          Yes           
+ run-12          predict                success          2025-01-01 12:11:00          No

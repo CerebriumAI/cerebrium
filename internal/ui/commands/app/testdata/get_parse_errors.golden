@@ -1,0 +1,33 @@
+╭─ App Details for parse-error-app ─────────────────────────╮
+│                                                           │
+│  APP                                                      │
+│                                                           │
+│  ID                            parse-error-app            │
+│  Created At                    2024-01-15 10:30:00        │
+│                                                           │
+│  HARDWARE                                                 │
+│                                                           │
+│  Compute                       GPU                        │
+│  CPU                           [error parsing CPU]        │
+│  Memory                        [error parsing Memory]     │
+│  GPU Count                     [error parsing GPU Count]  │
+│                                                           │
+│  SCALING PARAMETERS                                       │
+│                                                           │
+│  Cooldown Period               60s                        │
+│  Minimum Replicas              0                          │
+│  Maximum Replicas              5                          │
+│  Response Grace Period         900s                       │
+│                                                           │
+│  STATUS                                                   │
+│                                                           │
+│  Status                        Active                     │
+│  Last Build Status             Success                    │
+│  Last Build ID                 build-123                  │
+│                                                           │
+╰───────────────────────────────────────────────────────────╯
+                                                             
+⚠ Some fields could not be parsed correctly.
+This may indicate a CLI version mismatch with the API.
+Try updating your CLI or reach out to Cerebrium on Discord for support:
+https://discord.gg/ATj6USmeE2

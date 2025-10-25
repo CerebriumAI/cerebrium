@@ -1,0 +1,6 @@
+Runs for test-app 
+
+ Run ID          Function Name          Status           Created At                   Async         
+────────────────────────────────────────────────────────────────────────────────────────────────────
+ run-2           train                  running          2025-01-02 12:00:00          Yes           
+ run-1           predict                success          2025-01-01 12:00:00          No

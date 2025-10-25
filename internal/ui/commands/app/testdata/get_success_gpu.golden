@@ -1,0 +1,34 @@
+╭─ App Details for test-app-gpu ──────────────────────╮
+│                                                     │
+│  APP                                                │
+│                                                     │
+│  ID                            test-app-gpu         │
+│  Created At                    2024-01-15 10:30:00  │
+│  Updated At                    2024-01-15 11:30:00  │
+│                                                     │
+│  HARDWARE                                           │
+│                                                     │
+│  Compute                       GPU                  │
+│  CPU                           4 cores              │
+│  Memory                        16 GB                │
+│  GPU Count                     1                    │
+│                                                     │
+│  SCALING PARAMETERS                                 │
+│                                                     │
+│  Cooldown Period               60s                  │
+│  Minimum Replicas              0                    │
+│  Maximum Replicas              5                    │
+│  Response Grace Period         900s                 │
+│                                                     │
+│  STATUS                                             │
+│                                                     │
+│  Status                        Active               │
+│  Last Build Status             Success              │
+│  Last Build ID                 build-123            │
+│                                                     │
+│  LIVE PODS                                          │
+│                                                     │
+│  Pod 1                         pod-1                │
+│  Pod 2                         pod-2                │
+│                                                     │
+╰─────────────────────────────────────────────────────╯

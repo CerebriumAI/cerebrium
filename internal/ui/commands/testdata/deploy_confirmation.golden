@@ -1,0 +1,10 @@
+╭─ DEPLOYMENT CONFIGURATION ───────────────╮
+│                                          │
+│  DEPLOYMENT PARAMETERS                   │
+│                                          │
+│  Name:                         test-app  │
+│  Runtime:                      cortex    │
+│                                          │
+╰──────────────────────────────────────────╯
+                                            
+Do you want to deploy? (Y/n):

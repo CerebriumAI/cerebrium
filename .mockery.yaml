@@ -1,0 +1,18 @@
+# Mockery v3 configuration
+# See: https://vektra.github.io/mockery/v3.5/configuration/
+
+# Global defaults
+all: false
+dir: "{{.InterfaceDir}}/mock"
+filename: "{{.InterfaceName | lower}}.go"
+structname: "{{.Mock}}{{.InterfaceName}}"
+pkgname: mock
+formatter: goimports
+
+# Package-specific configuration
+packages:
+  github.com/cerebriumai/cerebrium/internal/api:
+    interfaces:
+      Client:
+        config:
+          filename: "client_gen.go"

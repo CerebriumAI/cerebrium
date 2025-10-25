@@ -1,0 +1,8 @@
+✓  Loaded 0 files
+✓  Zipped files (0 B)
+✓  Created app (Build ID: build-fail)
+✓  Uploaded to Cerebrium
+✓  Built app
+
+✗ Error: build failed with status: failed
+ ctrl+c: cancel build | ctrl+l: hide logs
