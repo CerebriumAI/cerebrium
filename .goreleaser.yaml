@@ -1,0 +1,108 @@
+version: 2
+
+before:
+  hooks:
+    - go mod tidy
+    - go test ./...
+
+builds:
+  - id: cerebrium
+    main: ./cmd/cerebrium
+    binary: cerebrium
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    # Inject version information at build time
+    ldflags:
+      - -s -w
+      - -X github.com/cerebriumai/cerebrium/internal/version.Version={{.Version}}
+      - -X github.com/cerebriumai/cerebrium/internal/version.Commit={{.Commit}}
+      - -X github.com/cerebriumai/cerebrium/internal/version.BuildDate={{.Date}}
+
+archives:
+  - id: cerebrium
+    formats:
+      - tar.gz
+    name_template: >-
+      cerebrium_cli_
+      {{- .Version }}_
+      {{- .Os }}_
+      {{- .Arch }}
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+    # Don't wrap in directory - binary goes at root of archive
+    # This makes extraction simpler for Python wrapper and users
+    wrap_in_directory: false
+    files:
+      - LICENSE*
+      - README*
+      - CHANGELOG*
+
+checksum:
+  name_template: 'checksums.txt'
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^chore:'
+      - 'typo'
+
+# Homebrew tap
+homebrew_casks:
+  - name: cerebrium
+    repository:
+      owner: CerebriumAI
+      name: homebrew-tap
+    homepage: https://www.cerebrium.ai
+    description: CLI for deploying and managing Cerebrium apps
+    license: AGPL-3.0
+
+# Linux packages
+nfpms:
+  - id: cerebrium
+    package_name: cerebrium
+    homepage: https://www.cerebrium.ai
+    maintainer: Cerebrium AI <support@cerebrium.ai>
+    description: CLI for deploying and managing Cerebrium apps
+    license: AGPL-3.0
+
+    # Debian/Ubuntu (apt)
+    formats:
+      - deb
+      - rpm
+
+    # Dependencies
+    dependencies: []
+
+    # Binary name
+    bindir: /usr/bin
+
+# GitHub Release
+release:
+  github:
+    owner: CerebriumAI
+    name: cerebrium
+  draft: false
+  prerelease: auto
+  name_template: "v{{.Version}}"
+
+# Docker images (optional)
+# dockers:
+#   - image_templates:
+#       - "cerebriumai/cerebrium:{{ .Version }}"
+#       - "cerebriumai/cerebrium:latest"
+#     dockerfile: Dockerfile

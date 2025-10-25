@@ -1,0 +1,13 @@
+✓  Loaded 0 files
+✓  Zipped files (0 B)
+✓  Created app (Build ID: build-success)
+✓  Uploaded to Cerebrium
+✓  Built app
+
+✓ test-app is now live!
+
+App Dashboard: https://dashboard.cerebrium.ai/app/test-app
+
+Endpoint:
+POST https://test-app.internal/{function_name}
+ ctrl+c: cancel build | ctrl+l: hide logs

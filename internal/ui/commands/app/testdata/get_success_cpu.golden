@@ -1,0 +1,26 @@
+╭─ App Details for test-app-cpu ──────────────────────╮
+│                                                     │
+│  APP                                                │
+│                                                     │
+│  ID                            test-app-cpu         │
+│  Created At                    2024-01-15 10:30:00  │
+│                                                     │
+│  HARDWARE                                           │
+│                                                     │
+│  Compute                       CPU                  │
+│  CPU                           2 cores              │
+│  Memory                        8 GB                 │
+│                                                     │
+│  SCALING PARAMETERS                                 │
+│                                                     │
+│  Cooldown Period               30s                  │
+│  Minimum Replicas              1                    │
+│  Maximum Replicas              3                    │
+│  Response Grace Period         600s                 │
+│                                                     │
+│  STATUS                                             │
+│                                                     │
+│  Status                        Pending              │
+│  Last Build Status             Building             │
+│                                                     │
+╰─────────────────────────────────────────────────────╯

@@ -1,0 +1,5 @@
+Runs for test-app (async only) 
+
+ Run ID               Function Name          Status           Created At                   Async         
+─────────────────────────────────────────────────────────────────────────────────────────────────────────
+ async-run-1          async_task             success          2025-01-01 12:00:00          Yes
