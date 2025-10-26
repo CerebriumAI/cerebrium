@@ -195,10 +195,11 @@ func TestRunInit(t *testing.T) {
 			validate:      func(t *testing.T, dir string, projectName string) {},
 		},
 		{
-			name:          "error with absolute path",
-			projectName:   "/tmp/evil-app",
-			dir:           "./",
-			setupFunc:     func(t *testing.T, dir string, projectName string) {},
+			name:        "error with absolute path",
+			projectName: filepath.Join(os.TempDir(), "evil-app"),
+			dir:         "./",
+			setupFunc:   func(t *testing.T, dir string, projectName string) {},
+			// Absolute paths are detected on all platforms using filepath.Join with os.TempDir()
 			expectedError: "project name cannot be an absolute path",
 			validate:      func(t *testing.T, dir string, projectName string) {},
 		},

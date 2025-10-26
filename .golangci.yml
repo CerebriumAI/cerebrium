@@ -43,46 +43,47 @@ linters:
       check-blank: false
 
     gosec:
-      exclude:
+      excludes:
         - G404  # Use of weak random generator is ok for non-security purposes
 
     dupl:
       threshold: 100  # Tokens threshold for duplicate code detection
 
+  exclusions:
+    paths:
+      - ".claude"
+      - "python-wrapper"
+      - "testdata"
+      - "mock"
+      - "bin"
+      - "dist"
+      - ".github"
+
+    rules:
+      # Exclude certain linters for test files
+      - path: _test\.go
+        linters:
+          - errcheck       # Don't require checking all errors in tests
+          - errorlint      # Error wrapping less important in tests
+          - nilerr         # Nil error returns ok in tests
+          - gosec          # Security checks less important in tests
+          - dupl           # Duplicate code ok in table tests
+          - funlen         # Test functions can be long
+          - gocognit       # Tests can be complex
+          - cyclop         # Cyclomatic complexity ok in tests
+          - noctx          # Context not always needed in tests
+
+      # Exclude certain linters for main.go
+      - path: cmd/cerebrium/main\.go
+        linters:
+          - depguard       # Allow 'log' package in main.go as per CLAUDE.md
+
+      # Allow fmt.Printf in ui/ packages (per CLAUDE.md user output guidelines)
+      - path: internal/ui/
+        text: "use of `fmt.Printf`"
+        linters:
+          - forbidigo
+
 issues:
-  exclude-dirs:
-    - .claude
-    - python-wrapper
-    - testdata
-    - mock
-    - bin
-    - dist
-    - .github
-
-  exclude-rules:
-    # Exclude certain linters for test files
-    - path: _test\.go
-      linters:
-        - errcheck       # Don't require checking all errors in tests
-        - errorlint      # Error wrapping less important in tests
-        - nilerr         # Nil error returns ok in tests
-        - gosec          # Security checks less important in tests
-        - dupl           # Duplicate code ok in table tests
-        - funlen         # Test functions can be long
-        - gocognit       # Tests can be complex
-        - cyclop         # Cyclomatic complexity ok in tests
-        - noctx          # Context not always needed in tests
-
-    # Exclude certain linters for main.go
-    - path: cmd/cerebrium/main\.go
-      linters:
-        - depguard       # Allow 'log' package in main.go as per CLAUDE.md
-
-    # Allow fmt.Printf in ui/ packages (per CLAUDE.md user output guidelines)
-    - path: internal/ui/
-      text: "use of `fmt.Printf`"
-      linters:
-        - forbidigo
-
   max-issues-per-linter: 0
   max-same-issues: 0

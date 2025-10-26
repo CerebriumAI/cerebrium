@@ -11,6 +11,12 @@
 *.json text eol=lf
 *.md text eol=lf
 
+# Python files (including test fixtures)
+*.py text eol=lf
+
+# Text files (including test fixtures)
+*.txt text eol=lf
+
 # Shell scripts
 *.sh text eol=lf
 
