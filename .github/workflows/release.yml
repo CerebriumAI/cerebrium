@@ -78,11 +78,20 @@ jobs:
       - name: Create Cerebrium config
         run: |
           mkdir -p ~/.cerebrium
-          cat > ~/.cerebrium/config.yaml << EOF
+          # For prod, config keys have no prefix. For dev/local, they have the env prefix
+          if [ "${{ env.CEREBRIUM_ENV }}" = "prod" ] || [ -z "${{ env.CEREBRIUM_ENV }}" ]; then
+            cat > ~/.cerebrium/config.yaml << EOF
+          project: ${{ env.PROJECT_ID }}
+          accesstoken: ${{ env.ACCESS_TOKEN }}
+          refreshtoken: ${{ env.REFRESH_TOKEN }}
+          EOF
+          else
+            cat > ~/.cerebrium/config.yaml << EOF
           ${{ env.CEREBRIUM_ENV }}-project: ${{ env.PROJECT_ID }}
           ${{ env.CEREBRIUM_ENV }}-accesstoken: ${{ env.ACCESS_TOKEN }}
           ${{ env.CEREBRIUM_ENV }}-refreshtoken: ${{ env.REFRESH_TOKEN }}
           EOF
+          fi
 
       - name: Run smoke tests
         run: |
