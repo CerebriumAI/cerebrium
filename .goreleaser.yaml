@@ -25,13 +25,28 @@ builds:
       - -X github.com/cerebriumai/cerebrium/internal/version.Commit={{.Commit}}
       - -X github.com/cerebriumai/cerebrium/internal/version.BuildDate={{.Date}}
 
+# Sign and notarize macOS binaries
+#notarize:
+#  macos:
+#    - enabled: '{{ isEnvSet "MACOS_SIGN_P12" }}'
+#      ids:
+#        - cerebrium
+#      sign:
+#        certificate: "{{.Env.MACOS_SIGN_P12}}"
+#        password: "{{.Env.MACOS_SIGN_PASSWORD}}"
+#      notarize:
+#        issuer_id: "{{.Env.MACOS_NOTARY_ISSUER_ID}}"
+#        key_id: "{{.Env.MACOS_NOTARY_KEY_ID}}"
+#        key: "{{.Env.MACOS_NOTARY_KEY}}"
+#        wait: true
+#        timeout: 20m
+
 archives:
   - id: cerebrium
     formats:
       - tar.gz
     name_template: >-
       cerebrium_cli_
-      {{- .Version }}_
       {{- .Os }}_
       {{- .Arch }}
     format_overrides:
@@ -69,7 +84,7 @@ homebrew_casks:
       name: homebrew-tap
     homepage: https://www.cerebrium.ai
     description: CLI for deploying and managing Cerebrium apps
-    license: AGPL-3.0
+    license: MIT
 
 # Linux packages
 nfpms:
@@ -78,7 +93,7 @@ nfpms:
     homepage: https://www.cerebrium.ai
     maintainer: Cerebrium AI <support@cerebrium.ai>
     description: CLI for deploying and managing Cerebrium apps
-    license: AGPL-3.0
+    license: MIT
 
     # Debian/Ubuntu (apt)
     formats:

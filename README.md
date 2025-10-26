@@ -1,53 +1,75 @@
 # Cerebrium CLI
 
 [![Go Version](https://img.shields.io/badge/go-1.25-blue.svg)](https://golang.org)
-[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-Command-line interface for [Cerebrium](https://cerebrium.ai) — the serverless infrastructure platform for deploying AI and compute workloads with instant scaling.
+Command-line interface for [Cerebrium](https://cerebrium.ai) - the serverless infrastructure platform for deploying AI and compute workloads with instant scaling.
 
 ## Installation
 
 ### macOS
 
 ```bash
-# Using Homebrew
+# Using Homebrew (recommended)
 brew tap cerebriumai/tap
 brew install cerebrium
 
-# Or download the latest release
-curl -L https://github.com/CerebriumAI/cerebrium/releases/latest/download/cerebrium-darwin-amd64 -o cerebrium
-chmod +x cerebrium
+# Or download the latest release directly
+curl -L https://github.com/CerebriumAI/cerebrium/releases/latest/download/cerebrium_cli_darwin_arm64.tar.gz | tar xz
 sudo mv cerebrium /usr/local/bin/
+# For Intel Macs, use: cerebrium_cli_darwin_amd64.tar.gz
 ```
+
+**Note:** Code signing and notarization are coming soon. In the meantime, if macOS blocks the binary, remove the quarantine flag:
+
+```bash
+xattr -d com.apple.quarantine /usr/local/bin/cerebrium
+```
+
+Or right-click the binary in Finder → Open → confirm the security prompt.
 
 ### Linux
 
 ```bash
 # Download the latest release
-curl -L https://github.com/CerebriumAI/cerebrium/releases/latest/download/cerebrium-linux-amd64 -o cerebrium
-chmod +x cerebrium
+curl -L https://github.com/CerebriumAI/cerebrium/releases/latest/download/cerebrium_cli_linux_amd64.tar.gz | tar xz
 sudo mv cerebrium /usr/local/bin/
+# For ARM64, use: cerebrium_cli_linux_arm64.tar.gz
 
-# Or using a package manager
-# Debian/Ubuntu
-wget https://github.com/CerebriumAI/cerebrium/releases/latest/download/cerebrium_amd64.deb
-sudo dpkg -i cerebrium_amd64.deb
-
-# RHEL/CentOS/Fedora
-wget https://github.com/CerebriumAI/cerebrium/releases/latest/download/cerebrium_amd64.rpm
-sudo rpm -i cerebrium_amd64.rpm
+# Or install via package manager (Ubuntu/Debian)
+wget https://github.com/CerebriumAI/cerebrium/releases/latest/download/cerebrium_linux_amd64.deb
+sudo dpkg -i cerebrium_linux_amd64.deb
 ```
 
 ### Windows
 
-```powershell
-# Using Scoop
-scoop bucket add cerebrium https://github.com/CerebriumAI/scoop-bucket
-scoop install cerebrium
+**PowerShell (Run as Administrator):**
 
-# Or download directly from releases
-# https://github.com/CerebriumAI/cerebrium/releases/latest
+```powershell
+# Download the latest release for AMD64
+Invoke-WebRequest -Uri "https://github.com/CerebriumAI/cerebrium/releases/latest/download/cerebrium_cli_windows_amd64.zip" -OutFile "cerebrium.zip"
+
+# Extract the archive
+Expand-Archive -Path "cerebrium.zip" -DestinationPath "."
+
+# Move to a directory in PATH
+New-Item -ItemType Directory -Force -Path "C:\Program Files\cerebrium"
+Move-Item -Force cerebrium.exe "C:\Program Files\cerebrium\cerebrium.exe"
+
+# Add to PATH (permanent)
+$env:Path += ";C:\Program Files\cerebrium"
+[Environment]::SetEnvironmentVariable("Path", $env:Path, [EnvironmentVariableTarget]::Machine)
+
+# Clean up
+Remove-Item cerebrium.zip
 ```
+
+**Or download manually:**
+1. Visit https://github.com/CerebriumAI/cerebrium/releases/latest
+2. Download `cerebrium_cli_windows_amd64.zip` (or `arm64` for ARM)
+3. Extract and add `cerebrium.exe` to your PATH
+
+**Note:** Package manager support (Chocolatey/Scoop) coming soon!
 
 ### Verify Installation
 
@@ -163,4 +185,4 @@ We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guid
 
 ## License
 
-Apache 2.0 - See [LICENSE](LICENSE) for details.
+MIT - See [LICENSE](LICENSE) for details.
