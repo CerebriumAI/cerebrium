@@ -21,6 +21,11 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v5
 
+      - name: Configure Git line endings
+        # Ensure .gitattributes rules are respected on all platforms
+        # This is critical for golden test files to work on Windows
+        run: git config --global core.autocrlf false
+
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
