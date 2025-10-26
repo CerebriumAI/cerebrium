@@ -48,8 +48,6 @@ jobs:
       (github.event_name == 'push' && !contains(github.ref_name, '-RC') && !contains(github.ref_name, '-beta') && !contains(github.ref_name, '-alpha')) ||
       (github.event_name == 'workflow_dispatch' && github.event.inputs.skip-tests == 'false')
     runs-on: ubuntu-latest
-    # Use prod environment for releases to ensure we test against production
-    environment: prod
     env:
       CEREBRIUM_ENV: prod
       API_KEY: ${{ secrets.E2E_TEST_PRIVATE_API_KEY }}
