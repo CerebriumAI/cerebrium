@@ -1,4 +1,4 @@
-package app
+package apps
 
 import (
 	"errors"
@@ -7,7 +7,7 @@ import (
 
 	"github.com/cerebriumai/cerebrium/internal/api"
 	"github.com/cerebriumai/cerebrium/internal/ui"
-	uiApp "github.com/cerebriumai/cerebrium/internal/ui/commands/app"
+	uiApp "github.com/cerebriumai/cerebrium/internal/ui/commands/apps"
 	"github.com/cerebriumai/cerebrium/pkg/config"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
@@ -27,8 +27,8 @@ func newScaleCmd() *cobra.Command {
 		Long: `Change the cooldown, min and max replicas of your app via the CLI.
 
 Example:
-  cerebrium app scale p-abc123 --cooldown 60 --min-replicas 0 --max-replicas 5 --response-grace-period 30
-  cerebrium app scale p-abc123 --cooldown 120 --min-replicas 1 --max-replicas 10 --response-grace-period 60 --no-color`,
+  cerebrium apps scale p-abc123 --cooldown 60 --min-replicas 0 --max-replicas 5 --response-grace-period 30
+  cerebrium apps scale p-abc123 --cooldown 120 --min-replicas 1 --max-replicas 10 --response-grace-period 60 --no-color`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runScale(cmd, args, cooldown, minReplicas, maxReplicas, responseGracePeriod)
@@ -55,7 +55,7 @@ func runScale(cmd *cobra.Command, args []string, cooldown, minReplicas, maxRepli
 
 	// Validate app ID format
 	if !strings.HasPrefix(appID, "p-") && !strings.HasPrefix(appID, "dev-p-") {
-		return fmt.Errorf("invalid app ID format: '%s' should begin with 'p-'. Run 'cerebrium app list' to get the correct app ID", appID)
+		return fmt.Errorf("invalid app ID format: '%s' should begin with 'p-'. Run 'cerebrium apps list' to get the correct app ID", appID)
 	}
 
 	// Build updates map from flags

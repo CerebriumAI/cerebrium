@@ -6,10 +6,10 @@ import (
 	"log/slog"
 	"os"
 
-	appCmd "github.com/cerebriumai/cerebrium/internal/commands/app"
+	appCmd "github.com/cerebriumai/cerebrium/internal/commands/apps"
 	configCmd "github.com/cerebriumai/cerebrium/internal/commands/config"
 	filesCmd "github.com/cerebriumai/cerebrium/internal/commands/files"
-	projectCmd "github.com/cerebriumai/cerebrium/internal/commands/project"
+	projectCmd "github.com/cerebriumai/cerebrium/internal/commands/projects"
 	regionCmd "github.com/cerebriumai/cerebrium/internal/commands/region"
 	runsCmd "github.com/cerebriumai/cerebrium/internal/commands/runs"
 	"github.com/cerebriumai/cerebrium/internal/ui"
@@ -95,8 +95,8 @@ func NewRootCmd() *cobra.Command {
 	rootCmd.AddCommand(NewLogsCmd())
 	rootCmd.AddCommand(NewVersionCmd())
 	rootCmd.AddCommand(configCmd.NewConfigCmd())
-	rootCmd.AddCommand(appCmd.NewAppCmd())
-	rootCmd.AddCommand(projectCmd.NewProjectCmd())
+	rootCmd.AddCommand(appCmd.NewAppsCmd())
+	rootCmd.AddCommand(projectCmd.NewProjectsCmd())
 	rootCmd.AddCommand(regionCmd.NewRegionCmd())
 	rootCmd.AddCommand(runsCmd.NewRunsCmd())
 

@@ -1,45 +1,36 @@
-package app
+package apps
 
 import (
 	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/cerebriumai/cerebrium/internal/api"
 	"github.com/cerebriumai/cerebrium/internal/ui"
-	uiApp "github.com/cerebriumai/cerebrium/internal/ui/commands/app"
+	"github.com/cerebriumai/cerebrium/internal/ui/commands/apps"
 	"github.com/cerebriumai/cerebrium/pkg/config"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
 )
 
-func newDeleteCmd() *cobra.Command {
+func newListCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "delete APP_ID",
-		Short: "Delete an app",
-		Long: `Delete an app from Cerebrium.
+		Use:   "list",
+		Short: "List all apps",
+		Long: `List all apps under your current context.
 
 Example:
-  cerebrium app delete p-abc123
-  cerebrium app delete p-abc123 --no-color  # Disable animations and colors`,
-		Args: cobra.ExactArgs(1),
-		RunE: runDelete,
+  cerebrium apps list
+  cerebrium apps list --no-color  # Disable animations and colors`,
+		RunE: runList,
 	}
 
 	return cmd
 }
 
-func runDelete(cmd *cobra.Command, args []string) error {
-	// Suppress Cobra's default error handling
+func runList(cmd *cobra.Command, args []string) error {
+	// Suppress Cobra's default error handling - we control it in main.go
 	cmd.SilenceUsage = true
 	cmd.SilenceErrors = true
-
-	appID := args[0]
-
-	// Validate app ID format
-	if !strings.HasPrefix(appID, "p-") && !strings.HasPrefix(appID, "dev-p-") {
-		return fmt.Errorf("invalid app ID format: '%s' should begin with 'p-'. Run 'cerebrium app list' to get the correct app ID", appID)
-	}
 
 	// Get display options from context (loaded once in root command)
 	displayOpts, err := ui.GetDisplayConfigFromContext(cmd)
@@ -65,12 +56,11 @@ func runDelete(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to create API client: %w", err)
 	}
 
-	// Create Bubbletea model
-	model := uiApp.NewDeleteView(cmd.Context(), uiApp.DeleteConfig{
+	// Create Bubbletea model with display options
+	model := apps.NewListView(cmd.Context(), apps.ListConfig{
 		DisplayConfig: displayOpts,
 		Client:        client,
 		ProjectID:     projectID,
-		AppID:         appID,
 	})
 
 	// Configure Bubbletea based on display options
@@ -84,7 +74,7 @@ func runDelete(cmd *cobra.Command, args []string) error {
 		)
 	}
 
-	// Run Bubbletea program
+	// Run Bubbletea program (it will fetch data, show spinner/table, then exit)
 	p := tea.NewProgram(model, programOpts...)
 	doneCh := ui.SetupSignalHandling(p, 0)
 	defer close(doneCh)
@@ -95,10 +85,13 @@ func runDelete(cmd *cobra.Command, args []string) error {
 	}
 
 	// Extract model
-	m, ok := finalModel.(*uiApp.DeleteView)
+	m, ok := finalModel.(*apps.ListView)
 	if !ok {
 		return fmt.Errorf("unexpected model type")
 	}
+
+	// In non-TTY mode, output has already been printed directly
+	// No need to print View() output since it returns empty string
 
 	// Check if there were any errors during execution
 	// Handle UIError - check if it should be silent

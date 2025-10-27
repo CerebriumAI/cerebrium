@@ -1,4 +1,4 @@
-package project
+package projects
 
 import (
 	"fmt"
@@ -16,7 +16,7 @@ func newCurrentCmd() *cobra.Command {
 This shows the project ID that is currently set in your configuration.
 
 Example:
-  cerebrium project current`,
+  cerebrium projects current`,
 		RunE: runCurrent,
 	}
 

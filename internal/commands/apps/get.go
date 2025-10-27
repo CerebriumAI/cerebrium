@@ -1,4 +1,4 @@
-package app
+package apps
 
 import (
 	"errors"
@@ -6,7 +6,7 @@ import (
 
 	"github.com/cerebriumai/cerebrium/internal/api"
 	"github.com/cerebriumai/cerebrium/internal/ui"
-	uiApp "github.com/cerebriumai/cerebrium/internal/ui/commands/app"
+	uiApp "github.com/cerebriumai/cerebrium/internal/ui/commands/apps"
 	"github.com/cerebriumai/cerebrium/pkg/config"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
@@ -19,8 +19,8 @@ func newGetCmd() *cobra.Command {
 		Long: `Get specific details around an app.
 
 Example:
-  cerebrium app get p-abc123
-  cerebrium app get p-abc123 --no-ansi  # Disable animations and colors`,
+  cerebrium apps get p-abc123
+  cerebrium apps get p-abc123 --no-ansi  # Disable animations and colors`,
 		Args: cobra.ExactArgs(1),
 		RunE: runGet,
 	}

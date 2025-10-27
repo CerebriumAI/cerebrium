@@ -1,4 +1,4 @@
-package project
+package projects
 
 import (
 	"errors"
@@ -6,7 +6,7 @@ import (
 
 	"github.com/cerebriumai/cerebrium/internal/api"
 	"github.com/cerebriumai/cerebrium/internal/ui"
-	"github.com/cerebriumai/cerebrium/internal/ui/commands/project"
+	"github.com/cerebriumai/cerebrium/internal/ui/commands/projects"
 	"github.com/cerebriumai/cerebrium/pkg/config"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
@@ -19,8 +19,8 @@ func newListCmd() *cobra.Command {
 		Long: `List all projects under your account.
 
 Example:
-  cerebrium project list
-  cerebrium project list --no-color  # Disable animations and colors`,
+  cerebrium projects list
+  cerebrium projects list --no-color  # Disable animations and colors`,
 		RunE: runList,
 	}
 
@@ -51,7 +51,7 @@ func runList(cmd *cobra.Command, args []string) error {
 	}
 
 	// Create Bubbletea model with display options
-	model := project.NewListView(cmd.Context(), project.ListConfig{
+	model := projects.NewListView(cmd.Context(), projects.ListConfig{
 		DisplayConfig: displayOpts,
 		Client:        client,
 	})
@@ -78,7 +78,7 @@ func runList(cmd *cobra.Command, args []string) error {
 	}
 
 	// Extract model
-	m, ok := finalModel.(*project.ListView)
+	m, ok := finalModel.(*projects.ListView)
 	if !ok {
 		return fmt.Errorf("unexpected model type")
 	}

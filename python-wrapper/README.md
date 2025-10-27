@@ -15,8 +15,8 @@ After installation, use the `cerebrium` command:
 ```bash
 cerebrium login
 cerebrium deploy
-cerebrium app list
-cerebrium app get <app-id>
+cerebrium apps list
+cerebrium apps get <app-id>
 ```
 
 ## What's Inside

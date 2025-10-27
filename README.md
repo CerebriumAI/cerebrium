@@ -102,8 +102,8 @@ Available Commands:
   deploy      Deploy your application to Cerebrium
   login       Authenticate with Cerebrium
   logs        View application logs
-  app         Manage applications (list, delete, describe)
-  project     Manage projects
+  apps         Manage applications (list, delete, describe)
+  projects     Manage projects
   run         Execute code in your project context
   status      Check service status
 

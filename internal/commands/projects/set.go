@@ -1,4 +1,4 @@
-package project
+package projects
 
 import (
 	"fmt"
@@ -16,7 +16,7 @@ func newSetCmd() *cobra.Command {
 The project ID should start with 'p-'
 
 Example:
-  cerebrium project set p-abcd1234`,
+  cerebrium projects set p-abcd1234`,
 		Args: cobra.ExactArgs(1),
 		RunE: runSet,
 	}

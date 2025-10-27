@@ -1,4 +1,4 @@
-package project
+package projects
 
 import (
 	"context"
@@ -263,7 +263,7 @@ func (m *ListView) View() string {
 		output.WriteString(ui.HelpStyle.Render(navHelp))
 		output.WriteString("\n")
 	}
-	output.WriteString(ui.HelpStyle.Render("You can set your current project by running `cerebrium project set {project_id}`\n"))
+	output.WriteString(ui.HelpStyle.Render("You can set your current projects by running `cerebrium projects set {project_id}`\n"))
 
 	return output.String()
 }

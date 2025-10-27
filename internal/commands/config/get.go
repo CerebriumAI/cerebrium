@@ -37,7 +37,6 @@ func runGet(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("'%s' is not a recognized configuration key. Run 'cerebrium config set --help' for valid keys", key)
 	}
 
-	// Get the environment-prefixed key (e.g., "project" → "dev-project" if in dev)
 	env := config.GetEnvironment()
 	actualKey := config.GetEnvironmentPrefixedKey(normalizedKey, env)
 

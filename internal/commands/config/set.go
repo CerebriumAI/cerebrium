@@ -58,7 +58,6 @@ func runSet(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("invalid configuration key")
 	}
 
-	// Get the environment-prefixed key (e.g., "project" → "dev-project" if in dev)
 	env := config.GetEnvironment()
 	actualKey := config.GetEnvironmentPrefixedKey(normalizedKey, env)
 
@@ -73,7 +72,6 @@ func runSet(cmd *cobra.Command, args []string) error {
 		typedValue = value
 	}
 
-	// Set the value in viper (using the environment-prefixed key)
 	viper.Set(actualKey, typedValue)
 
 	// Save to config file
