@@ -1,6 +1,6 @@
 # Cerebrium CLI
 
-[![Go Version](https://img.shields.io/badge/go-1.25-blue.svg)](https://golang.org)
+[![Go Version](https://img.shields.io/badge/go-1.25.2-blue.svg)](https://golang.org)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 Command-line interface for [Cerebrium](https://cerebrium.ai) - the serverless infrastructure platform for deploying AI and compute workloads with instant scaling.

@@ -24,9 +24,10 @@ from setuptools.command.install import install
 VERSION = "2.0.0"
 
 # GitHub release URL pattern
+# Note: Archive names don't include version (for /latest/ compatibility)
 RELEASE_URL_TEMPLATE = (
     "https://github.com/CerebriumAI/cerebrium/releases/download/"
-    "v{version}/cerebrium_{version}_{os}_{arch}.{ext}"
+    "v{version}/cerebrium_cli_{os}_{arch}.{ext}"
 )
 
 # Checksums URL
@@ -109,7 +110,7 @@ def download_binary(version):
     """Download the appropriate binary for this platform."""
     os_name, arch_name, ext = get_platform_info()
 
-    archive_name = f"cerebrium_{version}_{os_name}_{arch_name}.{ext}"
+    archive_name = f"cerebrium_cli_{os_name}_{arch_name}.{ext}"
     url = RELEASE_URL_TEMPLATE.format(
         version=version, os=os_name, arch=arch_name, ext=ext
     )
@@ -214,11 +215,11 @@ setup(
         "Source": "https://github.com/CerebriumAI/cerebrium",
         "Bug Tracker": "https://github.com/CerebriumAI/cerebrium/issues",
     },
-    license="AGPL-3.0",
+    license="MIT",
     classifiers=[
         "Development Status :: 5 - Production/Stable",
         "Intended Audience :: Developers",
-        "License :: OSI Approved :: GNU Affero General Public License v3",
+        "License :: OSI Approved :: MIT License",
         "Programming Language :: Python :: 3",
         "Programming Language :: Python :: 3.8",
         "Programming Language :: Python :: 3.9",

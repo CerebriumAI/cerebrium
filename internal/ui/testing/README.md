@@ -408,10 +408,9 @@ ViewAssert: func(t *testing.T, view string) {
 Add debug prints in your ModelAssert:
 
 ```go
-ModelAssert: func(t *testing.T, m tea.Model) {
-    model := m.(*DeployView)
-    t.Logf("Model state: %+v", model)
-    assert.Equal(t, expectedState, model.state)
+ModelAssert: func(t *testing.T, m *DeployView) {
+    t.Logf("Model state: %+v", m)
+    assert.Equal(t, expectedState, m.state)
 }
 ```
 
@@ -449,7 +448,7 @@ harness.
         },
     }).
     Run(t)
-// ← Stops here! createApp command is NOT executed
+// ← Stops here! The model returns a command `createApp`, but that command is NOT executed
 ```
 
 **Use case**: Test a state transition without triggering the next async operation.

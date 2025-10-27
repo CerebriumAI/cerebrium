@@ -54,7 +54,7 @@ This project follows specific architectural patterns documented in [CLAUDE.md](.
 
 ### Go Standards
 
-Follow the patterns in [CLAUDE.md](./CLAUDE.md), and defer to [Effective Go](https://go.dev/doc/effective_go) where no obvious convention exists, especially for naming:
+Follow the patterns in [CLAUDE.md](./CLAUDE.md), and defer to [Effective Go](https://go.dev/doc/effective_go) where no obvious convention exists, especially for naming.
 
 ### Formatting
 
