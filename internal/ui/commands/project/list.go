@@ -86,7 +86,11 @@ func (m *ListView) onLoaded(projects []api.Project) (tea.Model, tea.Cmd) {
 
 	// Interactive mode: create fancy scrollable table
 	m.table = m.createTable()
-	// Don't quit - let user scroll and interact
+
+	// Auto-quit if table fits on screen (no scrolling needed)
+	if !ui.TableBiggerThanView(m.table) {
+		return m, tea.Quit
+	}
 	return m, nil
 }
 
@@ -118,6 +122,14 @@ func (m *ListView) onKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.scrollToBottom()
 	case "K":
 		return m.scrollToTop()
+	case "j":
+		return m.scrollDown()
+	case "k":
+		return m.scrollUp()
+	case "ctrl+d":
+		return m.pageDown()
+	case "ctrl+u":
+		return m.pageUp()
 	}
 
 	// Let table handle navigation (j/k, arrows)
@@ -138,7 +150,7 @@ func (m *ListView) onDefault(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // scrollToBottom scrolls the table to the bottom
 func (m *ListView) scrollToBottom() (tea.Model, tea.Cmd) {
-	if !m.loading && len(m.projects) > 0 {
+	if !m.loading && len(m.table.Rows()) > 0 {
 		m.table.GotoBottom()
 	}
 	return m, nil
@@ -146,8 +158,40 @@ func (m *ListView) scrollToBottom() (tea.Model, tea.Cmd) {
 
 // scrollToTop scrolls the table to the top
 func (m *ListView) scrollToTop() (tea.Model, tea.Cmd) {
-	if !m.loading && len(m.projects) > 0 {
+	if !m.loading && len(m.table.Rows()) > 0 {
 		m.table.GotoTop()
+	}
+	return m, nil
+}
+
+// scrollDown scrolls the table down
+func (m *ListView) scrollDown() (tea.Model, tea.Cmd) {
+	if !m.loading && len(m.table.Rows()) > 0 {
+		m.table.MoveDown(1)
+	}
+	return m, nil
+}
+
+// scrollUp scrolls the table up
+func (m *ListView) scrollUp() (tea.Model, tea.Cmd) {
+	if !m.loading && len(m.table.Rows()) > 0 {
+		m.table.MoveUp(1)
+	}
+	return m, nil
+}
+
+// pageDown scrolls the table down by page
+func (m *ListView) pageDown() (tea.Model, tea.Cmd) {
+	if !m.loading && len(m.table.Rows()) > 0 {
+		m.table.MoveDown(10)
+	}
+	return m, nil
+}
+
+// pageUp scrolls the table up by page
+func (m *ListView) pageUp() (tea.Model, tea.Cmd) {
+	if !m.loading && len(m.table.Rows()) > 0 {
+		m.table.MoveUp(10)
 	}
 	return m, nil
 }
@@ -183,9 +227,6 @@ func (m *ListView) printSimpleOutput() {
 
 	// Print simple table format
 	fmt.Print(m.formatProjectsTable())
-	// Add helpful message about setting project context
-	fmt.Println()
-	fmt.Printf("You can set your current project context by running 'cerebrium project set %s'\n", m.projects[0].ID)
 }
 
 // View renders the output
@@ -216,14 +257,13 @@ func (m *ListView) View() string {
 	output.WriteString(m.table.View())
 	output.WriteString("\n\n")
 
-	// Add helpful messages (indented by one space to distinguish from regular output)
-	helpText := fmt.Sprintf(" You can set your current project context by running 'cerebrium project set %s'", m.projects[0].ID)
-	output.WriteString(ui.HelpStyle.Render(helpText))
-	output.WriteString("\n")
-
-	// Add navigation help
-	navHelp := " Use ↑/↓ or j/k to scroll • J/K to scroll to bottom/top • <esc> or q to quit"
-	output.WriteString(ui.HelpStyle.Render(navHelp))
+	if ui.TableBiggerThanView(m.table) {
+		// Add navigation help (indented by one space to distinguish from regular output)
+		navHelp := " j/k scroll • J/K scroll to bottom/top • ctrl+d/ctrl+u page up/down • <esc> or q to quit"
+		output.WriteString(ui.HelpStyle.Render(navHelp))
+		output.WriteString("\n")
+	}
+	output.WriteString(ui.HelpStyle.Render("You can set your current project by running `cerebrium project set {project_id}`\n"))
 
 	return output.String()
 }
@@ -282,15 +322,13 @@ func newTable(rows []table.Row) table.Model {
 		Padding(0, 1)
 	// Keep selected row subtle since we're just browsing, not selecting
 	s.Selected = s.Selected.
-		Foreground(lipgloss.Color("11")).
 		Bold(false)
 
 	// Create table with styling
-	// Set height to 15 rows for scrolling through projects
 	t := table.New(
 		table.WithColumns(columns),
 		table.WithRows(rows),
-		table.WithHeight(15),
+		table.WithHeight(min(len(rows)+1, ui.MAX_TABLE_HEIGHT)),
 		table.WithFocused(true), // Make it interactive/scrollable
 	)
 	t.SetStyles(s)

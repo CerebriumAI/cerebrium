@@ -3,8 +3,32 @@ package api
 import (
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 )
+
+type NullableTime struct {
+	time.Time
+}
+
+func (nt *NullableTime) UnmarshalJSON(b []byte) error {
+	s := string(b)
+	// Handle null, empty string, or missing
+	if s == "null" || s == `""` || s == "" {
+		return nil
+	}
+
+	// Try parsing with different formats as needed
+	t, err := time.Parse(`"`+time.RFC3339+`"`, s)
+	if err != nil {
+		t, err = time.Parse(`"`+time.RFC3339Nano+`"`, s)
+		if err != nil {
+			return err
+		}
+	}
+	nt.Time = t
+	return nil
+}
 
 // App represents a Cerebrium application (used in list)
 type App struct {
@@ -222,20 +246,6 @@ type DownloadURLResponse struct {
 	URL string `json:"url"`
 }
 
-// Run represents a single run for an app
-type Run struct {
-	ID           string    `json:"id"`
-	FunctionName string    `json:"functionName"`
-	Status       string    `json:"status"`
-	CreatedAt    time.Time `json:"createdAt"`
-	IsAsync      bool      `json:"isAsync"`
-}
-
-// RunsListResponse represents the response from listing runs
-type RunsListResponse struct {
-	Items []Run `json:"items"`
-}
-
 // RunResponse represents the response from running an app
 type RunResponse struct {
 	RunID string `json:"runId"`
@@ -259,4 +269,82 @@ type RunLog struct {
 type RunLogsResponse struct {
 	Logs          []RunLog `json:"logs"`
 	NextPageToken string   `json:"nextPageToken"`
+}
+
+type ListRunsResponse struct {
+	Items     []Run  `json:"items"`
+	NextToken string `json:"nextToken"`
+}
+
+type Run struct {
+	Async                   bool         `json:"async"`
+	CompletedAt             NullableTime `json:"completedAt,omitempty"`
+	ContainerId             string       `json:"containerId"`
+	ContainerStartedAt      string       `json:"containerStartedAt"`
+	CreatedAt               time.Time    `json:"createdAt"`
+	FunctionName            string       `json:"functionName"`
+	ID                      string       `json:"id"`
+	IP                      string       `json:"ip"`
+	Method                  string       `json:"method"`
+	ModelId                 string       `json:"modelId"`
+	ProjectId               string       `json:"projectId"`
+	QueueProxyReceivedAt    NullableTime `json:"queueProxyReceivedAt,omitempty"`
+	QueueProxyWaitEndedAt   NullableTime `json:"queueProxyWaitEndedAt,omitempty"`
+	QueueProxyWaitStartedAt NullableTime `json:"queueProxyWaitStartedAt,omitempty"`
+	QueueTimeMs             float64      `json:"queueTimeMs"`
+	Region                  string       `json:"region"`
+	ResponseTimeMs          float64      `json:"responseTimeMs"`
+	RuntimeMs               float64      `json:"runtimeMs"`
+	Status                  string       `json:"status"`
+	StatusCode              *int         `json:"statusCode,omitempty"` // Use pointer to allow nil values
+	UpdatedAt               NullableTime `json:"updatedAt,omitempty"`
+	WebhookEndpoint         string       `json:"webhookEndpoint"`
+	Websocket               bool         `json:"websocket"`
+
+	// Calculated timings
+	ActivatorQueueTimeMs int `json:"activatorQueueTimeMs"`
+	ContainerQueueTimeMs int `json:"containerQueueTimeMs"`
+	TotalQueueTimeMs     int `json:"totalQueueTimeMs"`
+	ExecutionTimeMs      int `json:"executionTimeMs"`
+	TotalResponseTimeMs  int `json:"totalResponseTimeMs"`
+}
+
+// GetDisplayStatus returns the formatted status string for display.
+// Follows the logic from the TypeScript implementation with human-readable status:
+// - Always prefer statusCode when available
+// - Handle special status codes: -1 = closed, 0 = cancelled
+// - Map 2xx codes to 'success', 5xx codes to 'failure'
+// - Apply status text transformations for queued/pending states
+// - Always return lowercase status
+func (r *Run) GetDisplayStatus() string {
+	// Always prefer status code when available
+	if r.StatusCode != nil {
+		code := *r.StatusCode
+		if code == -1 {
+			return "closed"
+		} else if code == 0 {
+			return "cancelled"
+		} else if code >= 200 && code < 300 {
+			return "success"
+		} else if code >= 500 && code < 600 {
+			return "failure"
+		}
+		// For other codes (1xx, 3xx, 4xx), show the code number
+		return strconv.Itoa(code)
+	}
+
+	// Only use status text when no status code is available
+	status := r.Status
+	if status == "" {
+		return "unknown"
+	}
+
+	// Handle special status text cases
+	if status == "containerQueued" || status == "proxyQueued" {
+		return "queued"
+	} else if status == "pending" || status == "processing" {
+		return strings.ToLower(status)
+	}
+
+	return strings.ToLower(status)
 }

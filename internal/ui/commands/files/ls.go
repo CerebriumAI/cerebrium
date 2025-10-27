@@ -240,9 +240,11 @@ func (m *ListView) View() string {
 	output.WriteString(m.table.View())
 	output.WriteString("\n\n")
 
-	// Add navigation help (indented by one space to distinguish from regular output)
-	navHelp := " Use ↑/↓ or j/k to scroll • J/K to scroll to bottom/top • <esc> or q to quit"
-	output.WriteString(ui.HelpStyle.Render(navHelp))
+	if ui.TableBiggerThanView(m.table) {
+		// Add navigation help (indented by one space to distinguish from regular output)
+		navHelp := " Use ↑/↓ or j/k to scroll • J/K to scroll to bottom/top • <esc> or q to quit"
+		output.WriteString(ui.HelpStyle.Render(navHelp))
+	}
 
 	return output.String()
 }

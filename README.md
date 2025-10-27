@@ -23,7 +23,7 @@ sudo mv cerebrium /usr/local/bin/
 **Note:** Code signing and notarization are coming soon. In the meantime, if macOS blocks the binary, remove the quarantine flag:
 
 ```bash
-xattr -d com.apple.quarantine /usr/local/bin/cerebrium
+xattr -d com.apple.quarantine $(which cerebrium)
 ```
 
 Or right-click the binary in Finder → Open → confirm the security prompt.

@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"sort"
 	"strings"
 
@@ -64,35 +65,7 @@ func (m *ListView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 
 	case appsLoadedMsg:
-		m.apps = msg.apps
-		m.loading = false
-		// Sort by updated date (most recent first)
-		sort.Slice(m.apps, func(i, j int) bool {
-			return m.apps[i].UpdatedAt.After(m.apps[j].UpdatedAt)
-		})
-
-		if !m.conf.SimpleOutput() {
-			// Interactive mode: create fancy table
-			var rows []table.Row
-			for _, app := range m.apps {
-				rows = append(rows, table.Row{
-					app.ID,
-					strings.TrimSpace(ui.ColorizeStatus(app.Status)),
-					strings.TrimSpace(ui.FormatTimestamp(app.UpdatedAt)),
-				})
-			}
-			m.table = newTable(rows)
-		} else {
-			// Simple mode: print directly
-			if len(m.apps) == 0 {
-				fmt.Println("No apps found")
-			} else {
-				// Print simple table format
-				fmt.Print(m.formatAppsTable())
-			}
-		}
-
-		return m, tea.Quit // Quit immediately after fetching and displaying apps
+		return m.onLoaded(msg.apps)
 
 	case *ui.UIError:
 		msg.SilentExit = true // Will be shown in View()
@@ -106,10 +79,10 @@ func (m *ListView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 
 	case tea.KeyMsg:
-		// Only handle keyboard input in interactive mode
-		if !m.conf.SimpleOutput() && msg.String() == "ctrl+c" {
+		if msg.String() == "ctrl+c" {
 			return m, tea.Quit
 		}
+		return m.onKey(msg)
 
 	default:
 		// Update spinner only in interactive mode
@@ -145,7 +118,19 @@ func (m *ListView) View() string {
 	}
 
 	// Render the table with a title
-	return ui.TitleStyle.Render("Apps") + "\n\n" + m.table.View()
+	var output strings.Builder
+	output.WriteString(ui.TitleStyle.Render("Apps"))
+	output.WriteString("\n\n")
+	output.WriteString(m.table.View())
+	output.WriteString("\n\n")
+
+	if ui.TableBiggerThanView(m.table) {
+		// Add navigation help (indented by one space to distinguish from regular output)
+		navHelp := " j/k scroll • J/K scroll to bottom/top • ctrl+d/ctrl+u page up/down • <esc> or q to quit"
+		output.WriteString(ui.HelpStyle.Render(navHelp))
+		output.WriteString("\n")
+	}
+	return output.String()
 }
 
 // formatAppsTable formats apps for non-TTY output
@@ -183,6 +168,128 @@ func (m *ListView) fetchApps() tea.Msg {
 		return ui.NewAPIError(err)
 	}
 	return appsLoadedMsg{apps}
+}
+
+func (m *ListView) onKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.conf.SimpleOutput() {
+		return m, nil
+	}
+	slog.Debug("key pressed", "key", msg.String())
+
+	switch msg.String() {
+	case "q", "esc":
+		return m, tea.Quit
+	case "J":
+		return m.scrollToBottom()
+	case "K":
+		return m.scrollToTop()
+	case "j":
+		return m.scrollDown()
+	case "k":
+		return m.scrollUp()
+	case "ctrl+d":
+		return m.pageDown()
+	case "ctrl+u":
+		return m.pageUp()
+	}
+
+	// Let table handle navigation (j/k, arrows)
+	return m.delegateToTable(msg)
+}
+
+// scrollToBottom scrolls the table to the bottom
+func (m *ListView) scrollToBottom() (tea.Model, tea.Cmd) {
+	if !m.loading && len(m.table.Rows()) > 0 {
+		m.table.GotoBottom()
+	}
+	return m, nil
+}
+
+// scrollToTop scrolls the table to the top
+func (m *ListView) scrollToTop() (tea.Model, tea.Cmd) {
+	if !m.loading && len(m.table.Rows()) > 0 {
+		m.table.GotoTop()
+	}
+	return m, nil
+}
+
+// scrollDown scrolls the table to the bottom
+func (m *ListView) scrollDown() (tea.Model, tea.Cmd) {
+	if !m.loading && len(m.table.Rows()) > 0 {
+		m.table.MoveDown(1)
+	}
+	return m, nil
+}
+
+// scrollUp scrolls the table to the top
+func (m *ListView) scrollUp() (tea.Model, tea.Cmd) {
+	if !m.loading && len(m.table.Rows()) > 0 {
+		m.table.MoveUp(1)
+	}
+	return m, nil
+}
+
+// pageDown scrolls the table to the bottom
+func (m *ListView) pageDown() (tea.Model, tea.Cmd) {
+	if !m.loading && len(m.table.Rows()) > 0 {
+		m.table.MoveDown(10)
+	}
+	return m, nil
+}
+
+// pageUp scrolls the table to the top
+func (m *ListView) pageUp() (tea.Model, tea.Cmd) {
+	if !m.loading && len(m.table.Rows()) > 0 {
+		m.table.MoveUp(10)
+	}
+	return m, nil
+}
+
+// delegateToTable passes navigation keys to the table
+func (m *ListView) delegateToTable(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if !m.loading && len(m.table.Rows()) > 0 {
+		var cmd tea.Cmd
+		m.table, cmd = m.table.Update(msg)
+		return m, cmd
+	}
+	return m, nil
+}
+
+func (m *ListView) onLoaded(apps []api.App) (tea.Model, tea.Cmd) {
+	m.apps = apps
+	m.loading = false
+	// Sort by updated date (most recent first)
+	sort.Slice(m.apps, func(i, j int) bool {
+		return m.apps[i].UpdatedAt.After(m.apps[j].UpdatedAt)
+	})
+
+	if m.conf.SimpleOutput() {
+		// Simple mode: print directly
+		if len(m.apps) == 0 {
+			fmt.Println("No apps found")
+		} else {
+			// Print simple table format
+			fmt.Print(m.formatAppsTable())
+		}
+		return m, tea.Quit
+	}
+
+	// Interactive mode: create fancy table
+	var rows []table.Row
+	for _, app := range m.apps {
+		rows = append(rows, table.Row{
+			app.ID,
+			strings.TrimSpace(ui.ColorizeStatus(app.Status)),
+			strings.TrimSpace(ui.FormatTimestamp(app.UpdatedAt)),
+		})
+	}
+	m.table = newTable(rows)
+
+	// Auto-quit if table fits on screen (no scrolling needed)
+	if !ui.TableBiggerThanView(m.table) {
+		return m, tea.Quit
+	}
+	return m, nil
 }
 
 // Utils
@@ -225,14 +332,14 @@ func newTable(rows []table.Row) table.Model {
 		BorderBottom(true).
 		Bold(true).
 		Padding(0, 1)
-	s.Selected = lipgloss.Style{} // No 'selected' styling, it's not interactive mode
+	s.Selected = s.Selected.Bold(true)
 
 	// Create table with styling
 	t := table.New(
 		table.WithColumns(columns),
 		table.WithRows(rows),
 		table.WithHeight(min(len(rows)+1, ui.MAX_TABLE_HEIGHT)), // Include header
-		table.WithFocused(false),
+		table.WithFocused(true),
 	)
 	t.SetStyles(s)
 

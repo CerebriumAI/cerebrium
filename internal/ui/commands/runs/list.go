@@ -3,6 +3,7 @@ package runs
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"sort"
 	"strings"
 
@@ -67,39 +68,7 @@ func (m *ListView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 
 	case runsLoadedMsg:
-		m.runs = msg.runs
-		m.loading = false
-
-		// Sort by created date (most recent first)
-		sort.Slice(m.runs, func(i, j int) bool {
-			return m.runs[i].CreatedAt.After(m.runs[j].CreatedAt)
-		})
-
-		if !m.conf.SimpleOutput() {
-			// Interactive mode: create fancy table with colors and styling
-			var rows []table.Row
-			for _, run := range m.runs {
-				rows = append(rows, table.Row{
-					run.ID,
-					run.FunctionName,
-					strings.TrimSpace(m.colorizeRunStatus(run.Status)),
-					strings.TrimSpace(ui.FormatTimestamp(run.CreatedAt)),
-					m.formatAsyncStatus(run.IsAsync),
-				})
-			}
-			// Create styled table
-			m.table = newStyledTable(rows)
-		} else {
-			// Simple mode: print directly with clean formatting
-			if len(m.runs) == 0 {
-				fmt.Printf("No runs found for app: %s\n", m.conf.AppName)
-			} else {
-				// Print simple table format
-				fmt.Print(m.formatRunsTable())
-			}
-		}
-
-		return m, tea.Quit // Quit immediately after fetching and displaying runs
+		return m.onLoaded(msg.runs)
 
 	case *ui.UIError:
 		m.err = msg
@@ -114,10 +83,10 @@ func (m *ListView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 
 	case tea.KeyMsg:
-		// Only handle keyboard input in interactive mode
-		if !m.conf.SimpleOutput() && msg.String() == "ctrl+c" {
+		if msg.String() == "ctrl+c" {
 			return m, tea.Quit
 		}
+		return m.onKey(msg)
 
 	default:
 		// Update spinner only in interactive mode
@@ -168,7 +137,146 @@ func (m *ListView) View() string {
 		title += " (async only)"
 	}
 
-	return ui.TitleStyle.Render(title) + "\n\n" + m.table.View()
+	// Render the table with a title
+	var output strings.Builder
+	output.WriteString(ui.TitleStyle.Render(title))
+	output.WriteString("\n\n")
+	output.WriteString(m.table.View())
+	output.WriteString("\n\n")
+
+	if ui.TableBiggerThanView(m.table) {
+		// Add navigation help (indented by one space to distinguish from regular output)
+		navHelp := " j/k scroll • J/K scroll to bottom/top • ctrl+d/ctrl+u page up/down • <esc> or q to quit"
+		output.WriteString(ui.HelpStyle.Render(navHelp))
+		output.WriteString("\n")
+	}
+	return output.String()
+}
+
+// Commands
+
+func (m *ListView) onKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.conf.SimpleOutput() {
+		return m, nil
+	}
+	slog.Debug("key pressed", "key", msg.String())
+
+	switch msg.String() {
+	case "q", "esc":
+		return m, tea.Quit
+	case "J":
+		return m.scrollToBottom()
+	case "K":
+		return m.scrollToTop()
+	case "j":
+		return m.scrollDown()
+	case "k":
+		return m.scrollUp()
+	case "ctrl+d":
+		return m.pageDown()
+	case "ctrl+u":
+		return m.pageUp()
+	}
+
+	// Let table handle navigation (j/k, arrows)
+	return m.delegateToTable(msg)
+}
+
+// scrollToBottom scrolls the table to the bottom
+func (m *ListView) scrollToBottom() (tea.Model, tea.Cmd) {
+	if !m.loading && len(m.table.Rows()) > 0 {
+		m.table.GotoBottom()
+	}
+	return m, nil
+}
+
+// scrollToTop scrolls the table to the top
+func (m *ListView) scrollToTop() (tea.Model, tea.Cmd) {
+	if !m.loading && len(m.table.Rows()) > 0 {
+		m.table.GotoTop()
+	}
+	return m, nil
+}
+
+// scrollDown scrolls the table to the bottom
+func (m *ListView) scrollDown() (tea.Model, tea.Cmd) {
+	if !m.loading && len(m.table.Rows()) > 0 {
+		m.table.MoveDown(1)
+	}
+	return m, nil
+}
+
+// scrollUp scrolls the table to the top
+func (m *ListView) scrollUp() (tea.Model, tea.Cmd) {
+	if !m.loading && len(m.table.Rows()) > 0 {
+		m.table.MoveUp(1)
+	}
+	return m, nil
+}
+
+// pageDown scrolls the table to the bottom
+func (m *ListView) pageDown() (tea.Model, tea.Cmd) {
+	if !m.loading && len(m.table.Rows()) > 0 {
+		m.table.MoveDown(10)
+	}
+	return m, nil
+}
+
+// pageUp scrolls the table to the top
+func (m *ListView) pageUp() (tea.Model, tea.Cmd) {
+	if !m.loading && len(m.table.Rows()) > 0 {
+		m.table.MoveUp(10)
+	}
+	return m, nil
+}
+
+// delegateToTable passes navigation keys to the table
+func (m *ListView) delegateToTable(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if !m.loading && len(m.table.Rows()) > 0 {
+		var cmd tea.Cmd
+		m.table, cmd = m.table.Update(msg)
+		return m, cmd
+	}
+	return m, nil
+}
+
+func (m *ListView) onLoaded(runs []api.Run) (tea.Model, tea.Cmd) {
+	m.runs = runs
+	m.loading = false
+
+	// Sort by created date (most recent first)
+	sort.Slice(m.runs, func(i, j int) bool {
+		return m.runs[i].CreatedAt.After(m.runs[j].CreatedAt)
+	})
+
+	if m.conf.SimpleOutput() {
+		// Simple mode: print directly with clean formatting
+		if len(m.runs) == 0 {
+			fmt.Printf("No runs found for app: %s\n", m.conf.AppName)
+		} else {
+			// Print simple table format
+			fmt.Print(m.formatRunsTable())
+		}
+	}
+	// Interactive mode: create fancy table with colors and styling
+	var rows []table.Row
+	for _, run := range m.runs {
+		rows = append(rows, table.Row{
+			run.ID,
+			run.FunctionName,
+			strings.TrimSpace(m.colorizeRunStatus(run.GetDisplayStatus())),
+			strings.TrimSpace(ui.FormatTimestamp(run.CreatedAt)),
+			m.formatAsyncStatus(run.Async),
+		})
+	}
+	// Create styled table
+	m.table = newTable(rows)
+
+	// Auto-quit if table fits on screen (no scrolling needed)
+	if !ui.TableBiggerThanView(m.table) {
+		return m, tea.Quit
+	}
+	return m, nil
 }
 
 // formatRunsTable formats runs for non-TTY output
@@ -182,14 +290,14 @@ func (m *ListView) formatRunsTable() string {
 	// Runs
 	for _, run := range m.runs {
 		asyncStr := "No"
-		if run.IsAsync {
+		if run.Async {
 			asyncStr = "Yes"
 		}
 
 		output.WriteString(fmt.Sprintf("%-40s %-30s %-15s %-25s %-10s\n",
 			run.ID,
 			run.FunctionName,
-			run.Status,
+			run.GetDisplayStatus(),
 			run.CreatedAt.Format("2006-01-02 15:04:05 MST"),
 			asyncStr,
 		))
@@ -274,7 +382,7 @@ func normalizeAppID(projectID, appName string) string {
 	return fmt.Sprintf("%s-%s", projectID, appName)
 }
 
-func newStyledTable(rows []table.Row) table.Model {
+func newTable(rows []table.Row) table.Model {
 	// Calculate dynamic column widths based on content
 	// Add padding for potential ANSI codes and better spacing
 	const padding = 8
@@ -316,13 +424,13 @@ func newStyledTable(rows []table.Row) table.Model {
 		BorderBottom(true).
 		Bold(true).
 		Padding(0, 1)
-	s.Selected = lipgloss.Style{} // No 'selected' styling, it's not interactive mode
+	s.Selected = s.Selected.Bold(true)
 
 	// Create table with styling
 	t := table.New(
 		table.WithColumns(columns),
 		table.WithRows(rows),
-		table.WithHeight(min(len(rows)+1, 15)), // Include header
+		table.WithHeight(min(len(rows)+1, ui.MAX_TABLE_HEIGHT)), // Include header
 		table.WithFocused(false),
 	)
 	t.SetStyles(s)

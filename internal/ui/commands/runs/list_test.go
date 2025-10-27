@@ -53,14 +53,14 @@ func TestRunsListView(t *testing.T) {
 				FunctionName: "predict",
 				Status:       "success",
 				CreatedAt:    time.Date(2025, 1, 1, 12, 0, 0, 0, time.UTC),
-				IsAsync:      false,
+				Async:        false,
 			},
 			{
 				ID:           "run-2",
 				FunctionName: "train",
 				Status:       "running",
 				CreatedAt:    time.Date(2025, 1, 2, 12, 0, 0, 0, time.UTC),
-				IsAsync:      true,
+				Async:        true,
 			},
 		}
 
@@ -178,7 +178,7 @@ func TestRunsListView(t *testing.T) {
 				FunctionName: "async_task",
 				Status:       "success",
 				CreatedAt:    time.Date(2025, 1, 1, 12, 0, 0, 0, time.UTC),
-				IsAsync:      true,
+				Async:        true,
 			},
 		}
 
@@ -200,7 +200,7 @@ func TestRunsListView(t *testing.T) {
 					assert.False(t, m.loading)
 					assert.Nil(t, m.Error())
 					assert.Len(t, m.runs, 1)
-					assert.True(t, m.runs[0].IsAsync)
+					assert.True(t, m.runs[0].Async)
 				},
 			}).
 			Run(t)
@@ -216,35 +216,35 @@ func TestRunsListView(t *testing.T) {
 				FunctionName: "predict",
 				Status:       "success",
 				CreatedAt:    time.Date(2025, 1, 5, 12, 0, 0, 0, time.UTC),
-				IsAsync:      false,
+				Async:        false,
 			},
 			{
 				ID:           "run-failure",
 				FunctionName: "train",
 				Status:       "failure",
 				CreatedAt:    time.Date(2025, 1, 4, 12, 0, 0, 0, time.UTC),
-				IsAsync:      true,
+				Async:        true,
 			},
 			{
 				ID:           "run-running",
 				FunctionName: "inference",
 				Status:       "running",
 				CreatedAt:    time.Date(2025, 1, 3, 12, 0, 0, 0, time.UTC),
-				IsAsync:      false,
+				Async:        false,
 			},
 			{
 				ID:           "run-pending",
 				FunctionName: "process",
 				Status:       "pending",
 				CreatedAt:    time.Date(2025, 1, 2, 12, 0, 0, 0, time.UTC),
-				IsAsync:      true,
+				Async:        true,
 			},
 			{
 				ID:           "run-cancelled",
 				FunctionName: "cleanup",
 				Status:       "cancelled",
 				CreatedAt:    time.Date(2025, 1, 1, 12, 0, 0, 0, time.UTC),
-				IsAsync:      false,
+				Async:        false,
 			},
 		}
 
@@ -284,14 +284,14 @@ func TestRunsListView(t *testing.T) {
 				FunctionName: "very_long_function_name_that_might_wrap",
 				Status:       "success",
 				CreatedAt:    time.Date(2025, 1, 1, 12, 0, 0, 0, time.UTC),
-				IsAsync:      true,
+				Async:        true,
 			},
 			{
 				ID:           "short-id",
 				FunctionName: "fn",
 				Status:       "running",
 				CreatedAt:    time.Date(2025, 1, 1, 11, 0, 0, 0, time.UTC),
-				IsAsync:      false,
+				Async:        false,
 			},
 		}
 
@@ -329,7 +329,7 @@ func TestRunsListView(t *testing.T) {
 				FunctionName: "predict",
 				Status:       "success",
 				CreatedAt:    time.Date(2025, 1, 1, 12, i, 0, 0, time.UTC),
-				IsAsync:      i%2 == 0,
+				Async:        i%2 == 0,
 			}
 		}
 

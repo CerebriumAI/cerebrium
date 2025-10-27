@@ -781,8 +781,9 @@ func (c *client) GetRuns(ctx context.Context, projectID, appID string, asyncOnly
 	if err != nil {
 		return nil, err
 	}
+	slog.Debug("Runs response", "runs", string(body))
 
-	var response RunsListResponse
+	var response ListRunsResponse
 	if err := json.Unmarshal(body, &response); err != nil {
 		return nil, fmt.Errorf("failed to parse runs response: %w", err)
 	}
