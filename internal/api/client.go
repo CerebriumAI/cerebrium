@@ -72,13 +72,13 @@ func (c *client) request(ctx context.Context, method, path string, body any, req
 			reqURL := c.config.GetEnvConfig().APIV2Url + "/" + path
 
 			// Log request details
-			slog.Debug("API request",
-				"method", method,
-				"path", path,
-				"url", reqURL,
-				"requiresAuth", requiresAuth,
-				"attempt", attempt,
-			)
+			//slog.Debug("API request",
+			//	"method", method,
+			//	"path", path,
+			//	"url", reqURL,
+			//	"requiresAuth", requiresAuth,
+			//	"attempt", attempt,
+			//)
 
 			// Marshal body if present
 			var bodyReader io.Reader
@@ -111,7 +111,6 @@ func (c *client) request(ctx context.Context, method, path string, body any, req
 					return retry.Unrecoverable(err)
 				}
 				req.Header.Set("Authorization", "Bearer "+token)
-				slog.Debug("Authentication token added")
 			}
 
 			// Make request
@@ -139,22 +138,22 @@ func (c *client) request(ctx context.Context, method, path string, body any, req
 			}
 
 			// Log response
-			slog.Debug("API response",
-				"statusCode", resp.StatusCode,
-				"responseSize", len(respBody),
-				"duration", duration,
-				"method", method,
-				"path", path,
-			)
+			//slog.Debug("API response",
+			//	"statusCode", resp.StatusCode,
+			//	"responseSize", len(respBody),
+			//	"duration", duration,
+			//	"method", method,
+			//	"path", path,
+			//)
 
 			// Check status code
 			if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-				slog.Info("API request successful",
-					"method", method,
-					"path", path,
-					"statusCode", resp.StatusCode,
-					"duration", duration,
-				)
+				//slog.Info("API request successful",
+				//	"method", method,
+				//	"path", path,
+				//	"statusCode", resp.StatusCode,
+				//	"duration", duration,
+				//)
 				return nil // Success
 			}
 
@@ -342,6 +341,22 @@ func (c *client) FetchBuildLogs(ctx context.Context, projectID, appName, buildID
 	var response BuildLogsResponse
 	if err := json.Unmarshal(body, &response); err != nil {
 		return nil, fmt.Errorf("failed to parse build logs response: %w", err)
+	}
+
+	return &response, nil
+}
+
+// GetBuild retrieves the status and details of a specific build
+func (c *client) GetBuild(ctx context.Context, projectID, appID, buildID string) (*AppBuild, error) {
+	path := fmt.Sprintf("v2/projects/%s/apps/%s/builds/%s", projectID, appID, buildID)
+	body, err := c.request(ctx, "GET", path, nil, true)
+	if err != nil {
+		return nil, err
+	}
+
+	var response AppBuild
+	if err := json.Unmarshal(body, &response); err != nil {
+		return nil, fmt.Errorf("failed to parse build response: %w", err)
 	}
 
 	return &response, nil
@@ -642,7 +657,6 @@ func (c *client) RunApp(ctx context.Context, projectID, appID, region, filename 
 		"requiresAuth", true,
 		"attempt", 1,
 	)
-	slog.Debug("Authentication token added")
 
 	startTime := time.Now()
 
@@ -781,7 +795,6 @@ func (c *client) GetRuns(ctx context.Context, projectID, appID string, asyncOnly
 	if err != nil {
 		return nil, err
 	}
-	slog.Debug("Runs response", "runs", string(body))
 
 	var response ListRunsResponse
 	if err := json.Unmarshal(body, &response); err != nil {

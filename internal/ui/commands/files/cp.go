@@ -47,6 +47,7 @@ type FileUploadView struct {
 	currentFile   string
 	filesUploaded int
 	startTime     time.Time
+	uploadSpeed   float64 // Cached upload speed in bytes/sec
 	spinner       *ui.SpinnerModel
 	progressBar   progress.Model
 	err           error
@@ -106,6 +107,14 @@ func (m *FileUploadView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case progressTickMsg:
 		if m.state == StateUploadingFiles && m.atomicBytesUploaded != nil {
 			m.uploadedBytes = m.atomicBytesUploaded.Load()
+
+			// Calculate upload speed (only if we have uploaded data)
+			if !m.startTime.IsZero() && m.uploadedBytes > 0 {
+				elapsed := time.Since(m.startTime).Seconds()
+				if elapsed > 0 {
+					m.uploadSpeed = float64(m.uploadedBytes) / elapsed
+				}
+			}
 
 			// In SimpleOutput mode, print progress every 10%
 			if m.conf.SimpleOutput() && m.totalSize > 0 {
@@ -379,17 +388,14 @@ func (m *FileUploadView) View() string {
 		total := FormatBytes(m.totalSize)
 		stats = append(stats, fmt.Sprintf("%s / %s", uploaded, total))
 
-		if !m.startTime.IsZero() && m.uploadedBytes > 0 {
-			elapsed := time.Since(m.startTime).Seconds()
-			if elapsed > 0 {
-				speed := float64(m.uploadedBytes) / elapsed
-				stats = append(stats, fmt.Sprintf("%s/s", FormatBytes(int64(speed))))
+		// Use cached upload speed
+		if m.uploadSpeed > 0 {
+			stats = append(stats, fmt.Sprintf("%s/s", FormatBytes(int64(m.uploadSpeed))))
 
-				if speed > 0 && m.uploadedBytes < m.totalSize {
-					remaining := float64(m.totalSize-m.uploadedBytes) / speed
-					eta := time.Duration(remaining) * time.Second
-					stats = append(stats, fmt.Sprintf("ETA %s", eta))
-				}
+			if m.uploadedBytes < m.totalSize {
+				remaining := float64(m.totalSize-m.uploadedBytes) / m.uploadSpeed
+				eta := time.Duration(remaining) * time.Second
+				stats = append(stats, fmt.Sprintf("ETA %s", eta))
 			}
 		}
 
@@ -443,13 +449,9 @@ func (m *FileUploadView) printSimpleProgress(percent int) {
 	total := FormatBytes(m.totalSize)
 	stats := fmt.Sprintf("%d%% (%s / %s)", percent, uploaded, total)
 
-	// Add speed if we have enough data
-	if !m.startTime.IsZero() && m.uploadedBytes > 0 {
-		elapsed := time.Since(m.startTime).Seconds()
-		if elapsed > 0 {
-			speed := float64(m.uploadedBytes) / elapsed
-			stats += fmt.Sprintf(" • %s/s", FormatBytes(int64(speed)))
-		}
+	// Add speed if available (use cached speed)
+	if m.uploadSpeed > 0 {
+		stats += fmt.Sprintf(" • %s/s", FormatBytes(int64(m.uploadSpeed)))
 	}
 
 	// Add file counter

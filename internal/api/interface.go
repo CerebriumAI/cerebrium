@@ -14,6 +14,7 @@ type Client interface {
 	CreateApp(ctx context.Context, projectID string, payload map[string]any) (*CreateAppResponse, error)
 	UploadZip(ctx context.Context, uploadURL string, zipPath string) error
 	FetchBuildLogs(ctx context.Context, projectID, appName, buildID string) (*BuildLogsResponse, error)
+	GetBuild(ctx context.Context, projectID, appID, buildID string) (*AppBuild, error)
 	FetchAppLogs(ctx context.Context, projectID, appID string, opts AppLogOptions) (*AppLogsResponse, error)
 	FetchNotifications(ctx context.Context) ([]Notification, error)
 	CancelBuild(ctx context.Context, projectID, appName, buildID string) error

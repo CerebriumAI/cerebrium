@@ -7,89 +7,12 @@ import (
 	"time"
 
 	"github.com/cerebriumai/cerebrium/internal/api"
+	apimock "github.com/cerebriumai/cerebrium/internal/api/mock"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
-// mockBuildLogClient implements api.Client for testing build logs
-type mockBuildLogClient struct {
-	fetchBuildLogsFunc func(ctx context.Context, projectID, appName, buildID string) (*api.BuildLogsResponse, error)
-}
-
-func (m *mockBuildLogClient) FetchBuildLogs(ctx context.Context, projectID, appName, buildID string) (*api.BuildLogsResponse, error) {
-	if m.fetchBuildLogsFunc != nil {
-		return m.fetchBuildLogsFunc(ctx, projectID, appName, buildID)
-	}
-	return &api.BuildLogsResponse{}, nil
-}
-
-// Implement other api.Client methods as no-ops
-func (m *mockBuildLogClient) GetApps(ctx context.Context, projectID string) ([]api.App, error) {
-	return nil, nil
-}
-func (m *mockBuildLogClient) GetApp(ctx context.Context, projectID, appID string) (*api.AppDetails, error) {
-	return nil, nil
-}
-func (m *mockBuildLogClient) DeleteApp(ctx context.Context, projectID, appID string) error {
-	return nil
-}
-func (m *mockBuildLogClient) UpdateApp(ctx context.Context, projectID, appID string, updates map[string]any) error {
-	return nil
-}
-func (m *mockBuildLogClient) GetProjects(ctx context.Context) ([]api.Project, error) {
-	return nil, nil
-}
-func (m *mockBuildLogClient) GetRuns(ctx context.Context, projectID, appID string, asyncOnly bool) ([]api.Run, error) {
-	return nil, nil
-}
-func (m *mockBuildLogClient) CreateApp(ctx context.Context, projectID string, payload map[string]any) (*api.CreateAppResponse, error) {
-	return nil, nil
-}
-func (m *mockBuildLogClient) UploadZip(ctx context.Context, uploadURL string, zipPath string) error {
-	return nil
-}
-func (m *mockBuildLogClient) FetchAppLogs(ctx context.Context, projectID, appID string, opts api.AppLogOptions) (*api.AppLogsResponse, error) {
-	return nil, nil
-}
-func (m *mockBuildLogClient) FetchNotifications(ctx context.Context) ([]api.Notification, error) {
-	return nil, nil
-}
-func (m *mockBuildLogClient) CancelBuild(ctx context.Context, projectID, appName, buildID string) error {
-	return nil
-}
-func (m *mockBuildLogClient) CreateRunApp(ctx context.Context, projectID, appID, region string) error {
-	return nil
-}
-func (m *mockBuildLogClient) RunApp(ctx context.Context, projectID, appID, region, filename string, functionName *string, imageDigest *string, hardwareConfig map[string]any, tarPath string, data map[string]any) (*api.RunResponse, error) {
-	return nil, nil
-}
-func (m *mockBuildLogClient) GetRunStatus(ctx context.Context, projectID, appName, runID string) (*api.RunStatus, error) {
-	return nil, nil
-}
-func (m *mockBuildLogClient) FetchRunLogs(ctx context.Context, projectID, appName, runID, nextToken string) (*api.RunLogsResponse, error) {
-	return nil, nil
-}
-func (m *mockBuildLogClient) CreateBaseImage(ctx context.Context, projectID, region string, dependencies map[string]any) (string, error) {
-	return "", nil
-}
-func (m *mockBuildLogClient) ListFiles(ctx context.Context, projectID, path, region string) ([]api.FileInfo, error) {
-	return nil, nil
-}
-func (m *mockBuildLogClient) InitiateUpload(ctx context.Context, projectID, filePath, region string, partCount int) (*api.InitiateUploadResponse, error) {
-	return nil, nil
-}
-func (m *mockBuildLogClient) UploadPart(ctx context.Context, url string, data []byte) (string, error) {
-	return "", nil
-}
-func (m *mockBuildLogClient) CompleteUpload(ctx context.Context, projectID, filePath, uploadID, region string, parts []api.PartInfo) error {
-	return nil
-}
-func (m *mockBuildLogClient) GetDownloadURL(ctx context.Context, projectID, filePath, region string) (string, error) {
-	return "", nil
-}
-func (m *mockBuildLogClient) DeleteFile(ctx context.Context, projectID, filePath, region string) error {
-	return nil
-}
 
 func TestPollingBuildLogProvider_Collect(t *testing.T) {
 	ctx := context.Background()
@@ -242,24 +165,37 @@ func TestPollingBuildLogProvider_Collect(t *testing.T) {
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			callCount := 0
 			collectedLogs := []Log{}
 
-			mockClient := &mockBuildLogClient{
-				fetchBuildLogsFunc: func(ctx context.Context, projectID, appName, buildID string) (*api.BuildLogsResponse, error) {
-					defer func() { callCount++ }()
+			mockClient := apimock.NewMockClient(t)
 
-					if callCount < len(tc.mockErrors) && tc.mockErrors[callCount] != nil {
-						return nil, tc.mockErrors[callCount]
-					}
+			// Set up mock expectations for each call
+			for i := 0; i < len(tc.mockResponses) || i < len(tc.mockErrors); i++ {
+				var response *api.BuildLogsResponse
+				var err error
 
-					if callCount < len(tc.mockResponses) {
-						return tc.mockResponses[callCount], nil
-					}
+				if i < len(tc.mockErrors) && tc.mockErrors[i] != nil {
+					err = tc.mockErrors[i]
+				} else if i < len(tc.mockResponses) {
+					response = tc.mockResponses[i]
+				} else {
+					response = &api.BuildLogsResponse{Status: "success"}
+				}
 
-					// Shouldn't reach here in normal operation
-					return &api.BuildLogsResponse{Status: "success"}, nil
-				},
+				// Use mock.Anything for context if this is a cancellation test
+				if tc.cancelAfter > 0 {
+					mockClient.On("FetchBuildLogs", mock.Anything, "test-project", "test-app", "build-123").
+						Return(response, err).Once()
+				} else {
+					mockClient.On("FetchBuildLogs", ctx, "test-project", "test-app", "build-123").
+						Return(response, err).Once()
+				}
+			}
+
+			// Add terminal response if needed
+			if tc.cancelAfter == 0 && len(tc.mockResponses) > 0 {
+				mockClient.On("FetchBuildLogs", ctx, "test-project", "test-app", "build-123").
+					Return(&api.BuildLogsResponse{Status: "success"}, nil).Maybe()
 			}
 
 			provider := NewPollingBuildLogProvider(PollingBuildLogProviderConfig{
@@ -304,26 +240,31 @@ func TestPollingBuildLogProvider_Collect(t *testing.T) {
 func TestPollingBuildLogProvider_Deduplication(t *testing.T) {
 	ctx := context.Background()
 
-	callCount := 0
-	mockClient := &mockBuildLogClient{
-		fetchBuildLogsFunc: func(ctx context.Context, projectID, appName, buildID string) (*api.BuildLogsResponse, error) {
-			defer func() { callCount++ }()
+	mockClient := apimock.NewMockClient(t)
 
-			// Always return same logs to test deduplication
-			return &api.BuildLogsResponse{
-				Logs: []api.BuildLog{
-					{CreatedAt: "2024-01-01T10:00:00Z", Log: "Log line 1"},
-					{CreatedAt: "2024-01-01T10:00:01Z", Log: "Log line 2"},
-				},
-				Status: func() string {
-					if callCount >= 2 {
-						return "success"
-					}
-					return "building"
-				}(),
-			}, nil
+	// Set up multiple calls returning the same logs
+	sameLogsResponse := &api.BuildLogsResponse{
+		Logs: []api.BuildLog{
+			{CreatedAt: "2024-01-01T10:00:00Z", Log: "Log line 1"},
+			{CreatedAt: "2024-01-01T10:00:01Z", Log: "Log line 2"},
 		},
+		Status: "building",
 	}
+
+	// First two calls return building status
+	mockClient.On("FetchBuildLogs", ctx, "test-project", "test-app", "build-123").
+		Return(sameLogsResponse, nil).Twice()
+
+	// Third call returns success status
+	successResponse := &api.BuildLogsResponse{
+		Logs: []api.BuildLog{
+			{CreatedAt: "2024-01-01T10:00:00Z", Log: "Log line 1"},
+			{CreatedAt: "2024-01-01T10:00:01Z", Log: "Log line 2"},
+		},
+		Status: "success",
+	}
+	mockClient.On("FetchBuildLogs", ctx, "test-project", "test-app", "build-123").
+		Return(successResponse, nil).Once()
 
 	provider := NewPollingBuildLogProvider(PollingBuildLogProviderConfig{
 		Client:       mockClient,
@@ -350,16 +291,15 @@ func TestPollingBuildLogProvider_Deduplication(t *testing.T) {
 func TestPollingBuildLogProvider_CallbackError(t *testing.T) {
 	ctx := context.Background()
 
-	mockClient := &mockBuildLogClient{
-		fetchBuildLogsFunc: func(ctx context.Context, projectID, appName, buildID string) (*api.BuildLogsResponse, error) {
-			return &api.BuildLogsResponse{
-				Logs: []api.BuildLog{
-					{CreatedAt: "2024-01-01T10:00:00Z", Log: "Test log"},
-				},
-				Status: "building",
-			}, nil
-		},
-	}
+	mockClient := apimock.NewMockClient(t)
+
+	mockClient.On("FetchBuildLogs", ctx, "test-project", "test-app", "build-123").
+		Return(&api.BuildLogsResponse{
+			Logs: []api.BuildLog{
+				{CreatedAt: "2024-01-01T10:00:00Z", Log: "Test log"},
+			},
+			Status: "building",
+		}, nil).Once()
 
 	provider := NewPollingBuildLogProvider(PollingBuildLogProviderConfig{
 		Client:       mockClient,
@@ -378,28 +318,3 @@ func TestPollingBuildLogProvider_CallbackError(t *testing.T) {
 	assert.Contains(t, err.Error(), "callback error")
 }
 
-func Test_isTerminalStatus(t *testing.T) {
-	tcs := []struct {
-		status     string
-		isTerminal bool
-	}{
-		{status: "success", isTerminal: true},
-		{status: "build_failure", isTerminal: true},
-		{status: "init_failure", isTerminal: true},
-		{status: "ready", isTerminal: true},
-		{status: "failure", isTerminal: true},
-		{status: "cancelled", isTerminal: true},
-		{status: "init_timeout", isTerminal: true},
-		{status: "building", isTerminal: false},
-		{status: "pending", isTerminal: false},
-		{status: "unknown", isTerminal: false},
-		{status: "", isTerminal: false},
-	}
-
-	for _, tc := range tcs {
-		t.Run(tc.status, func(t *testing.T) {
-			result := isTerminalStatus(tc.status)
-			assert.Equal(t, tc.isTerminal, result)
-		})
-	}
-}

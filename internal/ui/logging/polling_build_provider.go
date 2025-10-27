@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/cerebriumai/cerebrium/internal/api"
+	"github.com/cerebriumai/cerebrium/internal/ui"
 )
 
 // pollingBuildLogProvider fetches build logs via HTTP polling
@@ -140,5 +141,5 @@ func (p *pollingBuildLogProvider) fetchOnce(ctx context.Context, callback func([
 	}
 
 	// Check if build is complete
-	return isTerminalStatus(resp.Status), nil
+	return ui.IsTerminalStatus(resp.Status), nil
 }

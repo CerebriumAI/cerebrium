@@ -1,11 +1,12 @@
 package logging
 
-// isTerminalStatus checks if a build status is terminal
-func isTerminalStatus(status string) bool {
-	switch status {
-	case "success", "build_failure", "init_failure", "ready", "failure", "cancelled", "init_timeout":
-		return true
-	default:
-		return false
-	}
+import (
+	"fmt"
+	"github.com/cerebriumai/cerebrium/internal/ui"
+)
+
+func formatLogEntry(log Log) string {
+	timestamp := log.Timestamp.Local().Format("15:04:05.000")
+	styledTimestamp := ui.TimestampStyle.Render(timestamp)
+	return fmt.Sprintf("%s %s", styledTimestamp, log.Content)
 }

@@ -2,9 +2,11 @@ package logging
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"github.com/cerebriumai/cerebrium/internal/ui"
-	"os"
+	"github.com/charmbracelet/lipgloss"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -17,22 +19,24 @@ type LogViewerConfig struct {
 
 	Provider     LogProvider
 	TickInterval time.Duration // UI refresh interval (default: 500ms)
+	ShowHelp     bool
 }
 
 // LogViewerModel is a reusable component for viewing logs
 type LogViewerModel struct {
-	ctx           context.Context
-	config        LogViewerConfig
-	spinner       *ui.SpinnerModel
-	logChan       chan []Log
-	doneChan      chan error
-	buildStatus   string
-	lastLogTime   time.Time
-	idleIndex     int
-	logs          []Log // Accumulated logs for display
-	isComplete    bool  // Provider has finished
-	logChanClosed bool  // Log channel has been drained
-	err           error
+	ctx    context.Context
+	config LogViewerConfig
+
+	spinner    *ui.SpinnerModel
+	logChan    chan []Log
+	doneChan   chan error
+	logs       []Log // Accumulated logs for display
+	isComplete bool
+
+	scrollOffset int
+	anchorBottom bool // Auto-scroll to show latest logs
+
+	err error
 }
 
 const (
@@ -41,15 +45,6 @@ const (
 	MaxLogsInMemory = 10_000
 )
 
-// Idle messages shown during long builds
-var idleIntervals = []time.Duration{20 * time.Second, 60 * time.Second, 120 * time.Second, 180 * time.Second}
-var idleMessages = []string{
-	"Hang in there, still building!",
-	"Still building, thanks for your patience!",
-	"Almost there, please hold on!",
-	"Thank you for waiting, we're nearly done!",
-}
-
 // NewLogViewer creates a new log viewer
 func NewLogViewer(ctx context.Context, config LogViewerConfig) *LogViewerModel {
 	if config.TickInterval == 0 {
@@ -57,37 +52,39 @@ func NewLogViewer(ctx context.Context, config LogViewerConfig) *LogViewerModel {
 	}
 
 	return &LogViewerModel{
-		ctx:         ctx,
-		config:      config,
-		spinner:     ui.NewSpinner(),
-		logChan:     make(chan []Log, 10), // Buffered to prevent blocking provider
-		doneChan:    make(chan error, 1),
-		lastLogTime: time.Now(),
-		idleIndex:   0,
+		ctx:          ctx,
+		config:       config,
+		spinner:      ui.NewSpinner(),
+		logChan:      make(chan []Log, 10), // Buffered to prevent blocking provider
+		doneChan:     make(chan error),
+		anchorBottom: true, // Auto-scroll to bottom by default
 	}
 }
 
 // Init initializes the log viewer and starts the provider
-
-// Error returns the error if any occurred during execution
-func (m *LogViewerModel) Error() error {
-	return m.err
-}
-
 func (m *LogViewerModel) Init() tea.Cmd {
 	// Start provider in background goroutine
 	go func() {
 		defer close(m.logChan)
+		seenIDs := make(map[string]bool)
+
 		err := m.config.Provider.Collect(m.ctx, func(logs []Log) error {
-			// Write logs to channel (non-blocking due to buffer)
-			select {
-			case m.logChan <- logs:
-			case <-m.ctx.Done():
+			if m.ctx.Err() != nil {
 				return m.ctx.Err()
 			}
+			var newLogs []Log
+			for _, log := range logs {
+				if !seenIDs[log.ID] {
+					newLogs = append(newLogs, log)
+					seenIDs[log.ID] = true
+				}
+			}
+
+			// Write new logs to channel (non-blocking due to buffer)
+			m.logChan <- newLogs
 			return nil
 		})
-		// Provider finished - signal completion
+		// Provider closed - signal completion
 		m.doneChan <- err
 	}()
 
@@ -99,18 +96,12 @@ func (m *LogViewerModel) Init() tea.Cmd {
 	)
 }
 
-// Update handles messages
 func (m *LogViewerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case logBatchReceivedMsg:
-		// If logs is nil, the channel was closed
-		if msg.logs == nil {
-			m.logChanClosed = true
-			return m, nil
-		}
-
+		logStr, _ := json.MarshalIndent(msg.logs, "", "  ")
+		slog.Info("DEBUG batch received", "logs", logStr)
 		// Buffer logs silently (don't trigger render for every new log)
-		hasNewLogs := len(msg.logs) > 0
 		for _, log := range msg.logs {
 			m.logs = append(m.logs, log)
 
@@ -118,23 +109,12 @@ func (m *LogViewerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.config.SimpleOutput() {
 				fmt.Println(formatLogEntry(log))
 			}
-
-			// Update build status from metadata if available
-			if status, ok := log.Metadata["buildStatus"].(string); ok {
-				m.buildStatus = status
-			}
 		}
 
 		// Enforce memory limit - evict oldest logs if needed
 		if len(m.logs) > MaxLogsInMemory {
 			numToEvict := len(m.logs) - MaxLogsInMemory
 			m.logs = m.logs[numToEvict:]
-		}
-
-		// Reset idle tracking if we got new logs
-		if hasNewLogs {
-			m.lastLogTime = time.Now()
-			m.idleIndex = 0
 		}
 
 		// Keep listening for more logs
@@ -146,32 +126,16 @@ func (m *LogViewerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tickMsg:
-		// Tick triggers render and checks idle time
-		idleTime := time.Since(m.lastLogTime)
-		for i, interval := range idleIntervals {
-			if idleTime >= interval && i >= m.idleIndex {
-				m.idleIndex = i + 1
-				break
-			}
-		}
-
-		// Only quit if both provider is complete AND log channel has been drained
-		// This ensures all logs are processed before quitting
-		if m.isComplete && m.logChanClosed {
-			return m, tea.Quit
+		// Don't schedule another tick if we're done
+		if m.isComplete && len(m.logChan) == 0 {
+			return m, nil
 		}
 
 		// Schedule next tick
 		return m, tick(m.config.TickInterval)
 
-	case ui.SignalCancelMsg:
-		// Handle cancellation signal
-		if m.config.SimpleOutput() {
-			fmt.Fprintf(os.Stderr, "\nCancelled by user\n")
-		}
-		m.err = ui.NewUserCancelledError()
-		m.isComplete = true
-		return m, tea.Quit
+	case tea.KeyMsg:
+		return m.onKey(msg)
 
 	default:
 		// Update spinner only in interactive mode
@@ -191,42 +155,139 @@ func (m *LogViewerModel) View() string {
 	if m.config.SimpleOutput() {
 		return ""
 	}
+	// Show waiting message
+	if len(m.logs) == 0 {
+		emptyContent := ui.PendingStyle.Render("Waiting for build logs...")
+		emptyBox := lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color("14")).
+			Width(100).
+			Height(3).
+			Padding(0, 1).
+			Render(emptyContent)
+		return "\n" + emptyBox + "\n"
+	}
+
+	var content strings.Builder
+
+	// Note: Auto-scroll offset is calculated in Update() to keep View() pure
+	var start, end int
+	if m.anchorBottom {
+		start = max(0, len(m.logs)-ui.MAX_LOGS_IN_VIEWER)
+		end = len(m.logs)
+	} else {
+		start = m.scrollOffset
+		end = min(len(m.logs), start+ui.MAX_LOGS_IN_VIEWER)
+	}
+
+	visibleLogs := m.logs[start:end]
+
+	// Top indicator
+	if start > 0 {
+		content.WriteString(ui.PendingStyle.Render(fmt.Sprintf("↑ %d more lines above", start)))
+		content.WriteString("\n")
+	}
+
+	// Log lines - format each log entry
+	for i, log := range visibleLogs {
+		timestamp := log.Timestamp.Local().Format("15:04:05")
+		styledTimestamp := ui.TimestampStyle.Render(timestamp)
+		content.WriteString(fmt.Sprintf("%s %s", styledTimestamp, log.Content))
+		if i < len(visibleLogs)-1 {
+			content.WriteString("\n")
+		}
+	}
+
+	// Bottom indicator
+	if end < len(m.logs) {
+		content.WriteString("\n")
+		content.WriteString(ui.PendingStyle.Render(fmt.Sprintf("↓ %d more lines below", len(m.logs)-end)))
+	}
+
+	// Dynamic height based on content (max 20 lines + indicators)
+	height := min(len(visibleLogs)+2, ui.MAX_LOGS_IN_VIEWER+2) // +2 for padding/indicators
+	if start > 0 {
+		height++ // Extra line for top indicator
+	}
+	if end < len(m.logs) {
+		height++ // Extra line for bottom indicator
+	}
+
+	// Render with border and title
+	title := ui.CyanStyle.Render(fmt.Sprintf("Build Logs (%d lines)", len(m.logs)))
+	boxContent := title + "\n" + content.String()
 
 	var output strings.Builder
 
-	// Show spinner message
-	// Idle index is updated in Update() to keep View() pure
-	spinnerText := "Building app..."
+	logBox := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("14")).
+		Width(100).
+		Height(height).
+		Padding(0, 1).
+		Render(boxContent)
+	output.WriteString("\n")
+	output.WriteString(logBox)
+	output.WriteString("\n")
 
-	// Determine spinner text based on current idle index
-	if m.idleIndex > 0 && m.idleIndex-1 < len(idleMessages) {
-		spinnerText = idleMessages[m.idleIndex-1]
-	}
-
-	if !m.isComplete {
-		output.WriteString(m.spinner.View())
-		output.WriteString(" ")
-		output.WriteString(spinnerText)
-		output.WriteString("\n\n")
-	}
-
-	// Show recent logs (last 20)
-	startIdx := 0
-	if len(m.logs) > 20 {
-		startIdx = len(m.logs) - 20
-	}
-
-	for i := startIdx; i < len(m.logs); i++ {
-		output.WriteString(formatLogEntry(m.logs[i]))
+	if len(m.logs) > ui.MAX_LOGS_IN_VIEWER {
+		output.WriteString(ui.HelpStyle.Render(" j/k: scroll | J/K: scroll to bottom/top | ctrl+u/d: page up/down"))
 		output.WriteString("\n")
 	}
 
 	return output.String()
 }
 
-// GetStatus returns the current build status
-func (m *LogViewerModel) GetStatus() string {
-	return m.buildStatus
+func (m *LogViewerModel) onKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "ctrl+c":
+		return m, tea.Quit
+
+	case "j":
+		// Scroll down one line (only when expanded and logs exist)
+		maxOffset := max(0, len(m.logs)-ui.MAX_LOGS_IN_VIEWER)
+		m.scrollOffset = min(maxOffset, m.scrollOffset+1)
+		// Always check if last log is visible
+		m.anchorBottom = m.scrollOffset+ui.MAX_LOGS_IN_VIEWER >= len(m.logs)
+
+	case "J":
+		// Scroll to bottom (Shift+J)
+		m.scrollOffset = max(0, len(m.logs)-ui.MAX_LOGS_IN_VIEWER)
+		// Always check if last log is visible
+		m.anchorBottom = m.scrollOffset+ui.MAX_LOGS_IN_VIEWER >= len(m.logs)
+
+	case "k":
+		// Scroll up one line (only when expanded)
+		m.scrollOffset = max(0, m.scrollOffset-1)
+		// Always check if last log is visible
+		m.anchorBottom = m.scrollOffset+ui.MAX_LOGS_IN_VIEWER >= len(m.logs)
+
+	case "K":
+		// Scroll to top (Shift+K)
+		m.scrollOffset = 0
+		// Always check if last log is visible
+		m.anchorBottom = m.scrollOffset+ui.MAX_LOGS_IN_VIEWER >= len(m.logs)
+
+	case "ctrl+u":
+		// Page up - scroll up 10 lines
+		m.scrollOffset = max(0, m.scrollOffset-10)
+		// Always check if last log is visible
+		m.anchorBottom = m.scrollOffset+ui.MAX_LOGS_IN_VIEWER >= len(m.logs)
+
+	case "ctrl+d":
+		// Page down - scroll down 10 lines
+		maxOffset := max(0, len(m.logs)-ui.MAX_LOGS_IN_VIEWER)
+		m.scrollOffset = min(maxOffset, m.scrollOffset+10)
+		// Always check if last log is visible
+		m.anchorBottom = m.scrollOffset+ui.MAX_LOGS_IN_VIEWER >= len(m.logs)
+	}
+
+	return m, nil
+}
+
+// Error returns the error if any occurred during execution
+func (m *LogViewerModel) Error() error {
+	return m.err
 }
 
 // GetLogs returns all accumulated logs
@@ -251,7 +312,8 @@ type logBatchReceivedMsg struct {
 }
 
 type providerDoneMsg struct {
-	err error
+	finalStatus string
+	err         error
 }
 
 type tickMsg time.Time
@@ -260,12 +322,7 @@ type tickMsg time.Time
 
 func waitForLogBatch(ch <-chan []Log) tea.Cmd {
 	return func() tea.Msg {
-		logs, ok := <-ch
-		if !ok {
-			// Channel closed - send message with nil logs to signal this
-			return logBatchReceivedMsg{logs: nil}
-		}
-		return logBatchReceivedMsg{logs: logs}
+		return logBatchReceivedMsg{logs: <-ch}
 	}
 }
 
@@ -279,12 +336,4 @@ func tick(d time.Duration) tea.Cmd {
 	return tea.Tick(d, func(t time.Time) tea.Msg {
 		return tickMsg(t)
 	})
-}
-
-// Helpers
-
-func formatLogEntry(log Log) string {
-	timestamp := log.Timestamp.Local().Format("15:04:05.000")
-	styledTimestamp := ui.TimestampStyle.Render(timestamp)
-	return fmt.Sprintf("%s %s", styledTimestamp, log.Content)
 }

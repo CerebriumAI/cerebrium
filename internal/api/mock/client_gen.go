@@ -991,6 +991,86 @@ func (_c *MockClient_GetApps_Call) RunAndReturn(run func(ctx context.Context, pr
 	return _c
 }
 
+// GetBuild provides a mock function for the type MockClient
+func (_mock *MockClient) GetBuild(ctx context.Context, projectID string, appID string, buildID string) (*api.AppBuild, error) {
+	ret := _mock.Called(ctx, projectID, appID, buildID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetBuild")
+	}
+
+	var r0 *api.AppBuild
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, string) (*api.AppBuild, error)); ok {
+		return returnFunc(ctx, projectID, appID, buildID)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, string) *api.AppBuild); ok {
+		r0 = returnFunc(ctx, projectID, appID, buildID)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*api.AppBuild)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string, string) error); ok {
+		r1 = returnFunc(ctx, projectID, appID, buildID)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockClient_GetBuild_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetBuild'
+type MockClient_GetBuild_Call struct {
+	*mock.Call
+}
+
+// GetBuild is a helper method to define mock.On call
+//   - ctx context.Context
+//   - projectID string
+//   - appID string
+//   - buildID string
+func (_e *MockClient_Expecter) GetBuild(ctx interface{}, projectID interface{}, appID interface{}, buildID interface{}) *MockClient_GetBuild_Call {
+	return &MockClient_GetBuild_Call{Call: _e.mock.On("GetBuild", ctx, projectID, appID, buildID)}
+}
+
+func (_c *MockClient_GetBuild_Call) Run(run func(ctx context.Context, projectID string, appID string, buildID string)) *MockClient_GetBuild_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
+		var arg3 string
+		if args[3] != nil {
+			arg3 = args[3].(string)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+		)
+	})
+	return _c
+}
+
+func (_c *MockClient_GetBuild_Call) Return(appBuild *api.AppBuild, err error) *MockClient_GetBuild_Call {
+	_c.Call.Return(appBuild, err)
+	return _c
+}
+
+func (_c *MockClient_GetBuild_Call) RunAndReturn(run func(ctx context.Context, projectID string, appID string, buildID string) (*api.AppBuild, error)) *MockClient_GetBuild_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // GetDownloadURL provides a mock function for the type MockClient
 func (_mock *MockClient) GetDownloadURL(ctx context.Context, projectID string, filePath string, region string) (string, error) {
 	ret := _mock.Called(ctx, projectID, filePath, region)

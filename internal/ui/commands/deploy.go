@@ -56,7 +56,8 @@ type DeployConfig struct {
 
 // DeployView is the Bubbletea model for the deployment flow
 type DeployView struct {
-	ctx context.Context
+	ctx       context.Context
+	ctxCancel context.CancelFunc
 
 	state DeployState
 
@@ -67,22 +68,19 @@ type DeployView struct {
 	buildID     string
 	appResponse *api.CreateAppResponse
 	logViewer   *logging.LogViewerModel
+	idleMsgIdx  int
 	buildStatus string
 	spinner     *ui.SpinnerModel
-	err         *ui.UIError
 	message     string
+	err         *ui.UIError
 
 	// Upload progress tracking
 	progressBar         progress.Model
 	uploadedBytes       int64
 	atomicBytesUploaded *atomic.Int64
 	uploadStartTime     time.Time
-	lastPrintedPercent  int // Track last printed percentage for SimpleOutput
-
-	// Log viewer state
-	logViewerExpanded bool
-	logScrollOffset   int
-	anchorBottom      bool // Auto-scroll to show latest logs
+	uploadSpeed         float64 // Cached upload speed in bytes/sec
+	lastPrintedPercent  int     // Track last printed percentage for SimpleOutput
 
 	conf DeployConfig
 }
@@ -99,9 +97,11 @@ func NewDeployView(ctx context.Context, conf DeployConfig) *DeployView {
 		progress.WithWidth(50),
 		progress.WithoutPercentage(),
 	)
+	ctx, cancel := context.WithCancel(ctx)
 
 	return &DeployView{
 		ctx:                 ctx,
+		ctxCancel:           cancel,
 		state:               initialState,
 		spinner:             ui.NewSpinner(),
 		progressBar:         prog,
@@ -138,6 +138,9 @@ func (m *DeployView) Init() tea.Cmd {
 // Update handles messages
 func (m *DeployView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		return m.onKey(msg)
+
 	case ui.SignalCancelMsg:
 		// Handle termination signal (SIGINT, SIGTERM)
 		// This is especially important for non-TTY environments
@@ -150,10 +153,6 @@ func (m *DeployView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.state = StateCancelling
 
 			// Keep log viewer expanded when cancelled (in interactive mode)
-			if !m.conf.SimpleOutput() {
-				m.logViewerExpanded = true
-			}
-
 			err := m.conf.Client.CancelBuild(
 				m.ctx,
 				m.conf.ProjectID,
@@ -174,125 +173,8 @@ func (m *DeployView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// Exit after cancellation
 		m.err = ui.NewUserCancelledError()
+		m.ctxCancel() // Stop all subprocesses
 		return m, tea.Quit
-
-	case tea.KeyMsg:
-		// Handle confirmation state first
-		if m.state == StateConfirmation {
-			switch msg.String() {
-			case "y", "Y":
-				// User confirmed deployment
-				m.state = StateLoadingFiles
-				return m, tea.Batch(
-					m.spinner.Init(),
-					m.loadFiles,
-				)
-
-			case "n", "N", "esc", "ctrl+c", "q":
-				// User cancelled deployment
-				m.err = ui.NewUserCancelledError()
-				return m, tea.Quit
-			}
-			return m, nil
-		}
-
-		// Only handle keyboard input in interactive mode
-		if m.conf.SimpleOutput() {
-			return m, nil
-		}
-
-		switch msg.String() {
-		case "ctrl+c", "q":
-			// User cancelled - clean up if build is in progress
-			if m.state >= StateBuildingApp && m.buildID != "" {
-				m.state = StateCancelling
-				m.logViewerExpanded = true // Keep logs visible when cancelled
-				return m, m.cancelBuild
-			}
-
-			// No cleanup needed, just exit silently
-			m.err = ui.NewUserCancelledError()
-			return m, tea.Quit
-
-		case "ctrl+l":
-			// Toggle log viewer (only when we have a build ID)
-			if m.state >= StateCreatingApp {
-				m.logViewerExpanded = !m.logViewerExpanded
-				// Reset scroll and anchor to bottom when opening
-				if m.logViewerExpanded {
-					m.logScrollOffset = 0
-					m.anchorBottom = true
-				}
-			}
-
-		case "j":
-			// Scroll down one line (only when expanded and logs exist)
-			if m.logViewerExpanded && m.logViewer != nil {
-				totalLogs := len(m.logViewer.GetLogs())
-				maxVisible := 20
-				maxOffset := max(0, totalLogs-maxVisible)
-				m.logScrollOffset = min(maxOffset, m.logScrollOffset+1)
-				// Always check if last log is visible
-				m.anchorBottom = m.logScrollOffset+maxVisible >= totalLogs
-			}
-
-		case "J":
-			// Scroll to bottom (Shift+J)
-			if m.logViewerExpanded && m.logViewer != nil {
-				totalLogs := len(m.logViewer.GetLogs())
-				maxVisible := 20
-				m.logScrollOffset = max(0, totalLogs-maxVisible)
-				// Always check if last log is visible
-				m.anchorBottom = m.logScrollOffset+maxVisible >= totalLogs
-			}
-
-		case "k":
-			// Scroll up one line (only when expanded)
-			if m.logViewerExpanded {
-				m.logScrollOffset = max(0, m.logScrollOffset-1)
-				// Always check if last log is visible
-				if m.logViewer != nil {
-					totalLogs := len(m.logViewer.GetLogs())
-					maxVisible := 20
-					m.anchorBottom = m.logScrollOffset+maxVisible >= totalLogs
-				}
-			}
-
-		case "K":
-			// Scroll to top (Shift+K)
-			if m.logViewerExpanded {
-				m.logScrollOffset = 0
-				// Always check if last log is visible
-				if m.logViewer != nil {
-					totalLogs := len(m.logViewer.GetLogs())
-					maxVisible := 20
-					m.anchorBottom = m.logScrollOffset+maxVisible >= totalLogs
-				}
-			}
-
-		case "ctrl+u":
-			// Page up - scroll up 10 lines
-			if m.logViewerExpanded {
-				m.logScrollOffset = max(0, m.logScrollOffset-10)
-				// Always check if last log is visible
-				if m.logViewer != nil {
-					totalLogs := len(m.logViewer.GetLogs())
-					maxVisible := 20
-					m.anchorBottom = m.logScrollOffset+maxVisible >= totalLogs
-				}
-			}
-
-		case "ctrl+d":
-			// Page down - scroll down 10 lines
-			if m.logViewerExpanded && m.logViewer != nil {
-				totalLogs := len(m.logViewer.GetLogs())
-				maxVisible := 20
-				maxOffset := max(0, totalLogs-maxVisible)
-				m.logScrollOffset = min(maxOffset, m.logScrollOffset+10)
-				// Always check if last log is visible
-				m.anchorBottom = m.logScrollOffset+maxVisible >= totalLogs
-			}
-		}
 
 	case filesLoadedMsg:
 		m.fileList = msg.fileList
@@ -311,7 +193,7 @@ func (m *DeployView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.state = StateCreatingApp
 
 		if m.conf.SimpleOutput() {
-			fmt.Printf("✓ Created zip (%s)\n", formatSize(msg.zipSize))
+			fmt.Printf("✓ Created zip (%s)\n", ui.FormatSize(msg.zipSize))
 		}
 
 		return m, m.createApp
@@ -326,7 +208,7 @@ func (m *DeployView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		if m.conf.SimpleOutput() {
 			fmt.Printf("✓ Created app (Build ID: %s)\n", msg.response.BuildID)
-			fmt.Printf("Uploading to Cerebrium (%s)...\n", formatSize(m.zipSize))
+			fmt.Printf("Uploading to Cerebrium (%s)...\n", ui.FormatSize(m.zipSize))
 		}
 
 		return m, tea.Batch(
@@ -337,6 +219,14 @@ func (m *DeployView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case uploadProgressTickMsg:
 		if m.state == StateUploadingZip && m.atomicBytesUploaded != nil {
 			m.uploadedBytes = m.atomicBytesUploaded.Load()
+
+			// Calculate upload speed (only if we have uploaded data)
+			if !m.uploadStartTime.IsZero() && m.uploadedBytes > 0 {
+				elapsed := time.Since(m.uploadStartTime).Seconds()
+				if elapsed > 0 {
+					m.uploadSpeed = float64(m.uploadedBytes) / elapsed
+				}
+			}
 
 			// In SimpleOutput mode, print progress every 10%
 			if m.conf.SimpleOutput() && m.zipSize > 0 {
@@ -368,52 +258,65 @@ func (m *DeployView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			fmt.Println("Building app...")
 		}
 
-		// Only use log viewer in interactive mode
-		if !m.conf.SimpleOutput() {
-			m.logViewerExpanded = true // Auto-expand when building starts
-			m.logScrollOffset = 0
-			m.anchorBottom = true // Auto-scroll to show latest logs
-		}
 		// Initialize log viewer with polling provider
-		provider := logging.NewPollingBuildLogProvider(logging.PollingBuildLogProviderConfig{
-			Client:    m.conf.Client,
-			ProjectID: m.conf.ProjectID,
-			AppName:   m.conf.Config.Deployment.Name,
-			BuildID:   m.buildID,
+		provider := logging.NewPollingBuildLogProviderV2(logging.PollingBuildLogProviderConfigV2{
+			Client:       m.conf.Client,
+			ProjectID:    m.conf.ProjectID,
+			AppName:      m.conf.Config.Deployment.Name,
+			BuildID:      m.buildID,
+			PollInterval: ui.LOG_POLL_INTERVAL,
 		})
-		// Use context.Background() if no context provided (e.g., in tests)
-		ctx := m.ctx
-		if ctx == nil {
-			ctx = context.Background()
-		}
-		logViewer := logging.NewLogViewer(ctx, logging.LogViewerConfig{
+
+		m.logViewer = logging.NewLogViewer(m.ctx, logging.LogViewerConfig{
 			DisplayConfig: m.conf.DisplayConfig,
 			Provider:      provider,
+			TickInterval:  200 * time.Millisecond,
+			ShowHelp:      true,
 		})
-		m.logViewer = logViewer
-		return m, m.logViewer.Init()
+
+		// Start polling build status in parallel with log collection
+		return m, tea.Batch(
+			m.logViewer.Init(),
+			m.pollBuildStatus,
+		)
+
+	case buildStatusUpdateMsg:
+		// Build status update from polling
+		slog.Debug("Build status update", "status", msg.status, "buildId", msg.buildID)
+		m.buildStatus = msg.status
+
+		// Check if status is terminal
+		if ui.IsTerminalStatus(msg.status) {
+			// Terminal status detected, trigger completion
+			return m, func() tea.Msg {
+				return buildCompleteMsg{status: msg.status}
+			}
+		}
+
+		// Continue polling if not terminal - schedule next poll
+		return m, m.scheduleNextBuildPoll()
+
+	case buildStatusPollErrorMsg:
+		// Failed to fetch build status, retry after delay
+		return m, m.scheduleNextBuildPoll()
 
 	case buildCompleteMsg:
+		m.ctxCancel() // Stop all subprocesses
 		m.buildStatus = msg.status
 		if msg.status == "success" || msg.status == "ready" {
 			m.state = StateDeploySuccess
-			m.message = m.formatSuccessMessage()
-
-			// Keep log viewer expanded on success (in interactive mode)
-			if !m.conf.SimpleOutput() {
-				m.logViewerExpanded = true
-			}
 
 			if m.conf.SimpleOutput() {
 				fmt.Println("✓ Build complete!")
 				fmt.Println()
-				fmt.Println(m.message)
+				fmt.Println(fmt.Sprintf("✓ %s is now live!", m.conf.Config.Deployment.Name))
+				fmt.Println()
+				fmt.Println(fmt.Sprintf("App Dashboard: %s", m.appResponse.DashboardURL))
+				fmt.Println("\nEndpoint:")
+				fmt.Println(fmt.Sprintf("POST %s/{function_name}", m.appResponse.InternalEndpoint))
 			}
 		} else {
 			m.state = StateDeployError
-			if !m.conf.SimpleOutput() {
-				m.logViewerExpanded = true // Keep expanded on failure (interactive mode)
-			}
 			err := ui.NewAPIError(fmt.Errorf("build failed with status: %s", msg.status))
 			err.SilentExit = true // Will be shown in View()
 			m.err = err
@@ -439,6 +342,7 @@ func (m *DeployView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case buildCancelledMsg:
 		// Build cancellation completed (from keyboard shortcut in interactive mode)
+		m.ctxCancel() // Stop all subprocesses
 		m.state = StateCancelled
 		if msg.cancelErr != nil {
 			// Show warning but still exit silently
@@ -457,6 +361,7 @@ func (m *DeployView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case *ui.UIError:
 		// Structured error from async operations
+		m.ctxCancel()         // Stop all subprocesses
 		msg.SilentExit = true // Will be shown in View()
 		m.err = msg
 		m.state = StateDeployError
@@ -483,32 +388,11 @@ func (m *DeployView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			updated, logCmd := m.logViewer.Update(msg)
 			m.logViewer = updated.(*logging.LogViewerModel) //nolint:errcheck // Type assertion guaranteed by LogViewerModel structure
 
-			// Auto-scroll to bottom if anchored (keep View() pure)
-			if m.anchorBottom {
-				totalLogs := len(m.logViewer.GetLogs())
-				maxVisible := 20
-				maxOffset := max(0, totalLogs-maxVisible)
-				m.logScrollOffset = maxOffset
-			}
-
-			// Check if log viewer is complete
-			if m.logViewer.IsComplete() {
-				status := m.logViewer.GetStatus()
-				if status == "" {
-					status = "unknown" // Fallback if status not available
-				}
-				return m, func() tea.Msg {
-					return buildCompleteMsg{status: status}
-				}
-			}
-
 			cmds = append(cmds, logCmd)
 		}
 
 		return m, tea.Batch(cmds...)
 	}
-
-	return m, nil
 }
 
 // View renders the output
@@ -541,7 +425,7 @@ func (m *DeployView) View() string {
 	case m.state > StateLoadingFiles:
 		output.WriteString(formatStateLine("✓", fmt.Sprintf("Loaded %d files", len(m.fileList)), ui.SuccessStyle.Render))
 	default:
-		output.WriteString(formatStateLine("-", "Loading files", ui.PendingStyle.Render))
+		output.WriteString(formatStateLine("-", "Load files", ui.PendingStyle.Render))
 	}
 	output.WriteString("\n")
 
@@ -550,9 +434,9 @@ func (m *DeployView) View() string {
 	case m.state == StateZippingFiles:
 		output.WriteString(formatStateLine(m.spinner.View(), "Zipping files...", ui.ActiveStyle.Render))
 	case m.state > StateZippingFiles:
-		output.WriteString(formatStateLine("✓", fmt.Sprintf("Zipped files (%s)", formatSize(m.zipSize)), ui.SuccessStyle.Render))
+		output.WriteString(formatStateLine("✓", fmt.Sprintf("Zipped files (%s)", ui.FormatSize(m.zipSize)), ui.SuccessStyle.Render))
 	default:
-		output.WriteString(formatStateLine("-", "Zipping files", ui.PendingStyle.Render))
+		output.WriteString(formatStateLine("-", "Zip files", ui.PendingStyle.Render))
 	}
 	output.WriteString("\n")
 
@@ -563,7 +447,7 @@ func (m *DeployView) View() string {
 	case m.state > StateCreatingApp:
 		output.WriteString(formatStateLine("✓", fmt.Sprintf("Created app (Build ID: %s)", m.buildID), ui.SuccessStyle.Render))
 	default:
-		output.WriteString(formatStateLine("-", "Creating app", ui.PendingStyle.Render))
+		output.WriteString(formatStateLine("-", "Create app", ui.PendingStyle.Render))
 	}
 	output.WriteString("\n")
 
@@ -577,6 +461,7 @@ func (m *DeployView) View() string {
 	case m.state > StateUploadingZip:
 		output.WriteString(formatStateLine("✓", "Uploaded to Cerebrium", ui.SuccessStyle.Render))
 		output.WriteString("\n")
+		output.WriteString(m.renderUploadProgress())
 	default:
 		output.WriteString(formatStateLine("-", "Uploading to Cerebrium", ui.PendingStyle.Render))
 		output.WriteString("\n")
@@ -585,7 +470,13 @@ func (m *DeployView) View() string {
 	// State 5: Building app
 	switch {
 	case m.state == StateBuildingApp:
-		output.WriteString(formatStateLine(m.spinner.View(), "Building app...", ui.ActiveStyle.Render))
+		// Show spinner message
+		// Idle index is updated in Update() to keep View() pure
+		spinnerText := "Building app..."
+		if m.idleMsgIdx > 0 && m.idleMsgIdx-1 < len(idleMessages) {
+			spinnerText = idleMessages[m.idleMsgIdx-1]
+		}
+		output.WriteString(formatStateLine(m.spinner.View(), spinnerText, ui.ActiveStyle.Render))
 	case m.state == StateCancelling:
 		output.WriteString(formatStateLine(m.spinner.View(), "Cancelling build...", ui.YellowStyle.Render))
 	case m.state == StateCancelled:
@@ -593,22 +484,23 @@ func (m *DeployView) View() string {
 	case m.state > StateBuildingApp && m.state != StateCancelling && m.state != StateCancelled:
 		output.WriteString(formatStateLine("✓", "Built app", ui.SuccessStyle.Render))
 	default:
-		output.WriteString(formatStateLine("-", "Building app", ui.PendingStyle.Render))
+		output.WriteString(formatStateLine("-", "Build app", ui.PendingStyle.Render))
 	}
 	output.WriteString("\n")
 
-	// Show log viewer if expanded (during building, cancelling, cancelled, after error, or after success)
-	if m.state == StateBuildingApp || m.state == StateCancelling ||
-		(m.state == StateCancelled && m.logViewerExpanded) ||
-		(m.state == StateDeployError && m.logViewerExpanded) ||
-		(m.state == StateDeploySuccess && m.logViewerExpanded) {
-		output.WriteString(m.renderLogViewer())
+	// Show log viewer if initialized
+	if m.logViewer != nil {
+		output.WriteString(m.logViewer.View())
 	}
 
 	// Show success message
-	if m.state == StateDeploySuccess && m.message != "" {
+	if m.state == StateDeploySuccess {
 		output.WriteString("\n")
-		output.WriteString(m.message)
+		output.WriteString(ui.GreenStyle.Render(fmt.Sprintf("✓ %s is now live!", m.conf.Config.Deployment.Name)))
+		output.WriteString("\n\n")
+		output.WriteString(fmt.Sprintf("App Dashboard: %s\n", m.appResponse.DashboardURL))
+		output.WriteString("\nEndpoint:\n")
+		output.WriteString(ui.CyanStyle.Render("POST") + " " + m.appResponse.InternalEndpoint + "/{function_name}")
 		output.WriteString("\n")
 	}
 
@@ -625,9 +517,57 @@ func (m *DeployView) View() string {
 	}
 
 	// Show help text
-	output.WriteString(m.renderHelpText())
+	if m.state >= StateCreatingApp && m.state <= StateCancelling {
+		output.WriteString(m.renderHelpText())
+	}
 
 	return output.String()
+}
+
+// Update helpers
+
+func (m *DeployView) onKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// Handle confirmation state first
+	if m.state == StateConfirmation {
+		switch msg.String() {
+		case "y", "Y":
+			// User confirmed deployment
+			m.state = StateLoadingFiles
+			return m, tea.Batch(
+				m.spinner.Init(),
+				m.loadFiles,
+			)
+
+		case "n", "N", "esc", "ctrl+c":
+			m.ctxCancel() // Stop all subprocesses
+			// User cancelled deployment
+			m.err = ui.NewUserCancelledError()
+			return m, tea.Quit
+		}
+		return m, nil
+	}
+
+	if msg.String() == tea.KeyCtrlC.String() {
+		// User cancelled - clean up if build is in progress
+		if m.state >= StateBuildingApp && m.buildID != "" {
+			m.state = StateCancelling
+			return m, m.cancelBuild
+		}
+
+		// No cleanup needed, just exit silently
+		m.err = ui.NewUserCancelledError()
+		return m, tea.Quit
+	}
+
+	// Only handle keyboard input in interactive mode
+	if m.conf.SimpleOutput() || m.logViewer == nil {
+		return m, nil
+	}
+
+	// Otherwise hand off to the log viewer and update it
+	updatedViewer, cmd := m.logViewer.Update(msg)
+	m.logViewer = updatedViewer.(*logging.LogViewerModel)
+	return m, cmd
 }
 
 // Messages
@@ -646,6 +586,15 @@ type appCreatedMsg struct {
 }
 
 type zipUploadedMsg struct{}
+
+type buildStatusUpdateMsg struct {
+	buildID string
+	status  string
+}
+
+type buildStatusPollErrorMsg struct {
+	err error
+}
 
 type buildCompleteMsg struct {
 	status string
@@ -701,7 +650,6 @@ func (m *DeployView) zipFiles() tea.Msg {
 		return ui.NewFileSystemError(err)
 	}
 	if warning != "" {
-		// TODO: Show warning (for now just continue)
 		slog.Warn(warning)
 	}
 
@@ -823,17 +771,13 @@ func (m *DeployView) printSimpleProgress(percent int) {
 	bar.WriteString("]")
 
 	// Add stats
-	uploaded := formatSize(m.uploadedBytes)
-	total := formatSize(m.zipSize)
+	uploaded := ui.FormatSize(m.uploadedBytes)
+	total := ui.FormatSize(m.zipSize)
 	stats := fmt.Sprintf("%d%% (%s / %s)", percent, uploaded, total)
 
-	// Add speed if we have enough data
-	if !m.uploadStartTime.IsZero() && m.uploadedBytes > 0 {
-		elapsed := time.Since(m.uploadStartTime).Seconds()
-		if elapsed > 0 {
-			speed := float64(m.uploadedBytes) / elapsed
-			stats += fmt.Sprintf(" • %s/s", formatSize(int64(speed)))
-		}
+	// Add speed if available (use cached speed)
+	if m.uploadSpeed > 0 {
+		stats += fmt.Sprintf(" • %s/s", ui.FormatSize(int64(m.uploadSpeed)))
 	}
 
 	fmt.Printf("%s %s\n", bar.String(), stats)
@@ -849,6 +793,39 @@ func (m *DeployView) cancelBuild() tea.Msg {
 	)
 
 	return buildCancelledMsg{cancelErr: err}
+}
+
+func (m *DeployView) pollBuildStatus() tea.Msg {
+	// Check context first
+	if m.ctx.Err() != nil {
+		slog.Debug("Build status polling cancelled", "error", m.ctx.Err())
+		return nil
+	}
+
+	// Fetch build status
+	appID := fmt.Sprintf("%s-%s", m.conf.ProjectID, m.conf.Config.Deployment.Name)
+	build, err := m.conf.Client.GetBuild(m.ctx, m.conf.ProjectID, appID, m.buildID)
+	if err != nil {
+		// Log error but don't fail - we'll keep trying
+		slog.Warn("Failed to fetch build status", "error", err, "buildId", m.buildID)
+
+		// Schedule retry after 1 second
+		return buildStatusPollErrorMsg{err: err}
+	}
+
+	slog.Debug("Fetched build status", "status", build.Status, "buildId", build.Id)
+
+	// Return status update message
+	return buildStatusUpdateMsg{
+		buildID: build.Id,
+		status:  build.Status,
+	}
+}
+
+func (m *DeployView) scheduleNextBuildPoll() tea.Cmd {
+	return tea.Tick(1*time.Second, func(t time.Time) tea.Msg {
+		return m.pollBuildStatus()
+	})
 }
 
 func (m *DeployView) renderUploadProgress() string {
@@ -873,21 +850,18 @@ func (m *DeployView) renderUploadProgress() string {
 	statsStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
 	var stats []string
 
-	uploaded := formatSize(m.uploadedBytes)
-	total := formatSize(m.zipSize)
+	uploaded := ui.FormatSize(m.uploadedBytes)
+	total := ui.FormatSize(m.zipSize)
 	stats = append(stats, fmt.Sprintf("%s / %s", uploaded, total))
 
-	if !m.uploadStartTime.IsZero() && m.uploadedBytes > 0 {
-		elapsed := time.Since(m.uploadStartTime).Seconds()
-		if elapsed > 0 {
-			speed := float64(m.uploadedBytes) / elapsed
-			stats = append(stats, fmt.Sprintf("%s/s", formatSize(int64(speed))))
+	// Use cached upload speed
+	if m.uploadSpeed > 0 {
+		stats = append(stats, fmt.Sprintf("%s/s", ui.FormatSize(int64(m.uploadSpeed))))
 
-			if speed > 0 && m.uploadedBytes < m.zipSize {
-				remaining := float64(m.zipSize-m.uploadedBytes) / speed
-				eta := time.Duration(remaining) * time.Second
-				stats = append(stats, fmt.Sprintf("ETA %s", eta.Round(time.Second)))
-			}
+		if m.uploadedBytes < m.zipSize {
+			remaining := float64(m.zipSize-m.uploadedBytes) / m.uploadSpeed
+			eta := time.Duration(remaining) * time.Second
+			stats = append(stats, fmt.Sprintf("ETA %s", eta.Round(time.Second)))
 		}
 	}
 
@@ -896,146 +870,27 @@ func (m *DeployView) renderUploadProgress() string {
 	return output.String()
 }
 
-func (m *DeployView) renderLogViewer() string {
-	if !m.logViewerExpanded || m.logViewer == nil {
-		return ""
-	}
-
-	allLogs := m.logViewer.GetLogs()
-	totalLogs := len(allLogs)
-
-	if totalLogs == 0 {
-		// Show waiting message
-		emptyContent := ui.PendingStyle.Render("Waiting for build logs...")
-		emptyBox := lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("14")).
-			Width(100).
-			Height(3).
-			Padding(0, 1).
-			Render(emptyContent)
-		return "\n" + emptyBox + "\n"
-	}
-
-	// Calculate visible window (max 20 lines)
-	maxVisible := 20
-
-	// Note: Auto-scroll offset is calculated in Update() to keep View() pure
-	start := m.logScrollOffset
-	end := min(start+maxVisible, totalLogs)
-	visibleLogs := allLogs[start:end]
-
-	// Build log content with scroll indicators
-	var content strings.Builder
-
-	// Top indicator
-	if start > 0 {
-		content.WriteString(ui.PendingStyle.Render(fmt.Sprintf("↑ %d more lines above", start)))
-		content.WriteString("\n")
-	}
-
-	// Log lines - format each log entry
-	for i, log := range visibleLogs {
-		timestamp := log.Timestamp.Local().Format("15:04:05")
-		styledTimestamp := ui.TimestampStyle.Render(timestamp)
-		content.WriteString(fmt.Sprintf("%s %s", styledTimestamp, log.Content))
-		if i < len(visibleLogs)-1 {
-			content.WriteString("\n")
-		}
-	}
-
-	// Bottom indicator
-	if end < totalLogs {
-		content.WriteString("\n")
-		content.WriteString(ui.PendingStyle.Render(fmt.Sprintf("↓ %d more lines below", totalLogs-end)))
-	}
-
-	// Dynamic height based on content (max 20 lines + indicators)
-	height := min(len(visibleLogs)+2, 22) // +2 for padding/indicators
-	if start > 0 {
-		height++ // Extra line for top indicator
-	}
-	if end < totalLogs {
-		height++ // Extra line for bottom indicator
-	}
-
-	// Render with border and title
-	title := ui.CyanStyle.Render(fmt.Sprintf("Build Logs (%d lines)", totalLogs))
-	boxContent := title + "\n" + content.String()
-
-	logBox := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("14")).
-		Width(100).
-		Height(height).
-		Padding(0, 1).
-		Render(boxContent)
-
-	return "\n" + logBox + "\n"
+// Idle messages shown during long builds
+var idleIntervals = []time.Duration{20 * time.Second, 60 * time.Second, 120 * time.Second, 180 * time.Second}
+var idleMessages = []string{
+	"Hang in there, still building!",
+	"Still building, thanks for your patience!",
+	"Almost there, please hold on!",
+	"Thank you for waiting, we're nearly done!",
 }
 
 func (m *DeployView) renderHelpText() string {
-	if m.state < StateCreatingApp {
-		return "" // No help until we have build ID
-	}
-
 	var hints []string
 
-	hints = append(hints, "ctrl+c: cancel build")
-
-	if m.logViewerExpanded {
-		hints = append(hints, "ctrl+l: hide logs")
-		if m.logViewer != nil && len(m.logViewer.GetLogs()) > 20 {
-			hints = append(hints, "j/k: scroll", "J/K: scroll to bottom/top", "ctrl+u/d: page up/down")
-		}
-	} else {
-		hints = append(hints, "ctrl+l: view logs")
-	}
+	hints = append(hints, "esc or ctrl+c: cancel build")
 
 	helpText := strings.Join(hints, " | ")
 	return ui.HelpStyle.Render(helpText)
 }
 
-func (m *DeployView) formatSuccessMessage() string {
-	var output strings.Builder
-
-	// Simple mode: no color styling
-	if m.conf.SimpleOutput() {
-		output.WriteString(fmt.Sprintf("✓ %s is now live!", m.conf.Config.Deployment.Name))
-		output.WriteString("\n\n")
-		output.WriteString(fmt.Sprintf("App Dashboard: %s\n", m.appResponse.DashboardURL))
-		output.WriteString("\nEndpoint:\n")
-		output.WriteString(fmt.Sprintf("POST %s/{function_name}", m.appResponse.InternalEndpoint))
-	} else {
-		// Interactive mode: with colors
-		output.WriteString(ui.GreenStyle.Render(fmt.Sprintf("✓ %s is now live!", m.conf.Config.Deployment.Name)))
-		output.WriteString("\n\n")
-		output.WriteString(fmt.Sprintf("App Dashboard: %s\n", m.appResponse.DashboardURL))
-		output.WriteString("\nEndpoint:\n")
-		output.WriteString(ui.CyanStyle.Render("POST") + " " + m.appResponse.InternalEndpoint + "/{function_name}")
-	}
-
-	return output.String()
-}
-
 // GetError returns any error that occurred during deployment
 func (m *DeployView) GetError() *ui.UIError {
 	return m.err
-}
-
-// Helpers
-
-func formatSize(bytes int64) string {
-	const unit = 1024
-	if bytes < unit {
-		return fmt.Sprintf("%d B", bytes)
-	}
-	div, exp := int64(unit), 0
-	for n := bytes / unit; n >= unit; n /= unit {
-		div *= unit
-		exp++
-	}
-	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
 }
 
 // showDeploymentSummary prints the deployment configuration for non-TTY mode

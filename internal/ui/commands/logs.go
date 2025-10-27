@@ -294,7 +294,7 @@ func (m *LogsView) renderLogViewer() string {
 		return "\n" + emptyBox + "\n" + m.renderHelpText()
 	}
 
-	// Show 40 logs (increased from 20)
+	// Show 40 logs
 	maxVisible := 40
 	start := m.logScrollOffset
 	end := min(start+maxVisible, totalLogs)

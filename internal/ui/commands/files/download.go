@@ -57,6 +57,7 @@ type FileDownloadView struct {
 	currentFile     string
 	filesDownloaded int
 	startTime       time.Time
+	downloadSpeed   float64 // Cached download speed in bytes/sec
 
 	atomicBytesDownloaded *atomic.Int64
 
@@ -119,6 +120,15 @@ func (m *FileDownloadView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case downloadProgressTickMsg:
 		if m.state == DownloadStateDownloadingFiles && m.atomicBytesDownloaded != nil {
 			m.downloadedBytes = m.atomicBytesDownloaded.Load()
+
+			// Calculate download speed (only if we have downloaded data)
+			if !m.startTime.IsZero() && m.downloadedBytes > 0 {
+				elapsed := time.Since(m.startTime).Seconds()
+				if elapsed > 0 {
+					m.downloadSpeed = float64(m.downloadedBytes) / elapsed
+				}
+			}
+
 			return m, m.tickProgress()
 		}
 		return m, nil
@@ -326,17 +336,14 @@ func (m *FileDownloadView) View() string {
 		total := FormatBytes(m.totalSize)
 		stats = append(stats, fmt.Sprintf("%s / %s", downloaded, total))
 
-		if !m.startTime.IsZero() && m.downloadedBytes > 0 {
-			elapsed := time.Since(m.startTime).Seconds()
-			if elapsed > 0 {
-				speed := float64(m.downloadedBytes) / elapsed
-				stats = append(stats, fmt.Sprintf("%s/s", FormatBytes(int64(speed))))
+		// Use cached download speed
+		if m.downloadSpeed > 0 {
+			stats = append(stats, fmt.Sprintf("%s/s", FormatBytes(int64(m.downloadSpeed))))
 
-				if speed > 0 && m.downloadedBytes < m.totalSize {
-					remaining := float64(m.totalSize-m.downloadedBytes) / speed
-					eta := time.Duration(remaining) * time.Second
-					stats = append(stats, fmt.Sprintf("ETA %s", eta))
-				}
+			if m.downloadedBytes < m.totalSize {
+				remaining := float64(m.totalSize-m.downloadedBytes) / m.downloadSpeed
+				eta := time.Duration(remaining) * time.Second
+				stats = append(stats, fmt.Sprintf("ETA %s", eta))
 			}
 		}
 

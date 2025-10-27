@@ -42,8 +42,6 @@ const (
 	maxTarSize = 4 * 1024 * 1024
 	// maxDepsSize is the maximum allowed dependencies size (380KB)
 	maxDepsSize = 380 * 1024
-	// logPollInterval is the interval between log polls
-	logPollInterval = 500 * time.Millisecond
 	// finalLogPollAttempts is the number of times to poll for final logs
 	finalLogPollAttempts = 10
 	// maxLogsToDisplay is the maximum number of logs to display in the UI
@@ -328,7 +326,7 @@ func (m *RunView) handleFinalLogs() (tea.Model, tea.Cmd) {
 	// Poll multiple times like Python CLI
 	for range finalLogPollAttempts {
 		cmds = append(cmds, m.pollLogs())
-		cmds = append(cmds, tea.Tick(logPollInterval, func(t time.Time) tea.Msg {
+		cmds = append(cmds, tea.Tick(ui.LOG_POLL_INTERVAL, func(t time.Time) tea.Msg {
 			return pollFinalLogsMsg{}
 		}))
 	}

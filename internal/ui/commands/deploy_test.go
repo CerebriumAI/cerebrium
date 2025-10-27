@@ -414,9 +414,7 @@ func TestDeployView(t *testing.T) {
 				ViewGolden: "deploy_zip_uploaded",
 				ModelAssert: func(t *testing.T, m *DeployView) {
 					assert.Equal(t, StateBuildingApp, m.state)
-					assert.True(t, m.logViewerExpanded)
-					assert.True(t, m.anchorBottom)
-					assert.Equal(t, 0, m.logScrollOffset)
+					assert.NotNil(t, m.logViewer, "LogViewer should be initialized")
 				},
 			}).
 			Run(t)
@@ -459,8 +457,6 @@ func TestDeployView(t *testing.T) {
 				ModelAssert: func(t *testing.T, m *DeployView) {
 					assert.Equal(t, StateDeploySuccess, m.state)
 					assert.Equal(t, "success", m.buildStatus)
-					assert.NotEmpty(t, m.message)
-					assert.True(t, m.logViewerExpanded)
 				},
 			}).
 			Run(t)
@@ -538,7 +534,6 @@ func TestDeployView(t *testing.T) {
 					assert.Equal(t, StateDeployError, m.state)
 					assert.NotNil(t, m.err)
 					assert.Equal(t, "failed", m.buildStatus)
-					assert.True(t, m.logViewerExpanded)
 				},
 			}).
 			Run(t)
@@ -764,7 +759,6 @@ func TestDeployView(t *testing.T) {
 				},
 				ModelAssert: func(t *testing.T, m *DeployView) {
 					assert.Equal(t, StateDeploySuccess, m.state)
-					assert.NotEmpty(t, m.message)
 				},
 			}).
 			Run(t)
@@ -803,142 +797,6 @@ func TestDeployView(t *testing.T) {
 				},
 			}).
 			Run(t)
-	})
-}
-
-func TestDeployView_KeyboardNavigation(t *testing.T) {
-	mockClient := apimock.NewMockClient(t)
-
-	config := &projectconfig.ProjectConfig{
-		Deployment: projectconfig.DeploymentConfig{
-			Name: "keyboard-test",
-		},
-	}
-
-	t.Run("ctrl+l toggles log viewer", func(t *testing.T) {
-		model := NewDeployView(t.Context(), DeployConfig{
-			DisplayConfig: ui.DisplayConfig{
-				IsInteractive:    true,
-				DisableAnimation: false,
-			},
-			Config:    config,
-			ProjectID: "test-project",
-			Client:    mockClient,
-		})
-
-		// Set state to building so logs are available
-		model.state = StateBuildingApp
-		model.buildID = "build-123"
-		model.logViewerExpanded = false
-
-		// Send ctrl+l (Ctrl is a modifier, not a rune)
-		updatedModel, _ := model.Update(tea.KeyMsg{Type: tea.KeyCtrlL})
-		m := updatedModel.(*DeployView)
-
-		// Should toggle log viewer
-		assert.True(t, m.logViewerExpanded, "ctrl+l should toggle log viewer")
-		assert.True(t, m.anchorBottom, "should anchor to bottom when opening")
-		assert.Equal(t, 0, m.logScrollOffset, "should reset scroll when opening")
-
-		// Toggle again
-		updatedModel2, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlL})
-		m2 := updatedModel2.(*DeployView)
-
-		assert.False(t, m2.logViewerExpanded, "ctrl+l should toggle log viewer closed")
-	})
-
-	t.Run("ctrl+l does nothing before app created", func(t *testing.T) {
-		model := NewDeployView(t.Context(), DeployConfig{
-			DisplayConfig: ui.DisplayConfig{
-				IsInteractive:    true,
-				DisableAnimation: false,
-			},
-			Config:    config,
-			ProjectID: "test-project",
-			Client:    mockClient,
-		})
-
-		model.state = StateZippingFiles
-		model.logViewerExpanded = false
-
-		// Try ctrl+l before build starts
-		updatedModel, _ := model.Update(tea.KeyMsg{Type: tea.KeyCtrlL})
-		m := updatedModel.(*DeployView)
-
-		// Should not change
-		assert.False(t, m.logViewerExpanded, "ctrl+l should not work before app created")
-	})
-
-	t.Run("k scrolls up", func(t *testing.T) {
-		model := NewDeployView(t.Context(), DeployConfig{
-			DisplayConfig: ui.DisplayConfig{
-				IsInteractive:    true,
-				DisableAnimation: false,
-			},
-			Config:    config,
-			ProjectID: "test-project",
-			Client:    mockClient,
-		})
-
-		model.state = StateBuildingApp
-		model.logViewerExpanded = true
-		model.logScrollOffset = 5
-		model.anchorBottom = true
-
-		// Scroll up
-		updatedModel, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
-		m := updatedModel.(*DeployView)
-
-		assert.Equal(t, 4, m.logScrollOffset)
-		// Note: anchorBottom only updates when logViewer is not nil
-		// Since we haven't initialized a log viewer in this test, anchorBottom stays true
-	})
-
-	t.Run("K scrolls to top", func(t *testing.T) {
-		model := NewDeployView(t.Context(), DeployConfig{
-			DisplayConfig: ui.DisplayConfig{
-				IsInteractive:    true,
-				DisableAnimation: false,
-			},
-			Config:    config,
-			ProjectID: "test-project",
-			Client:    mockClient,
-		})
-
-		model.state = StateBuildingApp
-		model.logViewerExpanded = true
-		model.logScrollOffset = 10
-		model.anchorBottom = true
-
-		// Scroll to top
-		updatedModel, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'K'}})
-		m := updatedModel.(*DeployView)
-
-		assert.Equal(t, 0, m.logScrollOffset)
-		// Note: anchorBottom only updates when logViewer is not nil
-		// Since we haven't initialized a log viewer in this test, anchorBottom stays true
-	})
-
-	t.Run("keyboard input ignored in simple mode", func(t *testing.T) {
-		model := NewDeployView(t.Context(), DeployConfig{
-			DisplayConfig: ui.DisplayConfig{
-				IsInteractive:    false,
-				DisableAnimation: true,
-			},
-			Config:    config,
-			ProjectID: "test-project",
-			Client:    mockClient,
-		})
-
-		model.state = StateBuildingApp
-		model.logViewerExpanded = true
-		initialOffset := model.logScrollOffset
-
-		// Try to scroll - should be ignored
-		updatedModel, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
-		m := updatedModel.(*DeployView)
-
-		assert.Equal(t, initialOffset, m.logScrollOffset, "keyboard input should be ignored in simple mode")
 	})
 }
 
@@ -1076,29 +934,6 @@ func TestDeployView_View(t *testing.T) {
 		assert.Contains(t, view, "Building")
 	})
 
-	t.Run("view on success", func(t *testing.T) {
-		model := NewDeployView(t.Context(), DeployConfig{
-			DisplayConfig: ui.DisplayConfig{
-				IsInteractive:    true,
-				DisableAnimation: false,
-			},
-			Config:    config,
-			ProjectID: "test-project",
-			Client:    mockClient,
-		})
-
-		model.state = StateDeploySuccess
-		model.appResponse = &api.CreateAppResponse{
-			BuildID:      "build-success",
-			Status:       "success",
-			DashboardURL: "https://dashboard.cerebrium.ai/app/test",
-		}
-		model.message = "Deployment successful!"
-
-		view := model.View()
-		assert.Contains(t, view, "Deployment successful")
-	})
-
 	t.Run("view on error", func(t *testing.T) {
 		model := NewDeployView(t.Context(), DeployConfig{
 			DisplayConfig: ui.DisplayConfig{
@@ -1170,55 +1005,4 @@ func TestDeployView_View(t *testing.T) {
 		// When cancelled without error, view shows "Deployment cancelled"
 		assert.Contains(t, view, "cancelled")
 	})
-}
-
-func Test_formatSize(t *testing.T) {
-	tcs := []struct {
-		name     string
-		bytes    int64
-		expected string
-	}{
-		{
-			name:     "bytes",
-			bytes:    512,
-			expected: "512 B",
-		},
-		{
-			name:     "kilobytes",
-			bytes:    1024,
-			expected: "1.0 KB",
-		},
-		{
-			name:     "megabytes",
-			bytes:    1048576,
-			expected: "1.0 MB",
-		},
-		{
-			name:     "gigabytes",
-			bytes:    1073741824,
-			expected: "1.0 GB",
-		},
-		{
-			name:     "decimal KB",
-			bytes:    1536, // 1.5 KB
-			expected: "1.5 KB",
-		},
-		{
-			name:     "decimal MB",
-			bytes:    2621440, // 2.5 MB
-			expected: "2.5 MB",
-		},
-		{
-			name:     "zero",
-			bytes:    0,
-			expected: "0 B",
-		},
-	}
-
-	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result := formatSize(tc.bytes)
-			assert.Equal(t, tc.expected, result)
-		})
-	}
 }

@@ -171,6 +171,7 @@ type CreateAppResponse struct {
 
 // BuildLog represents a single log entry
 type BuildLog struct {
+	ID        string `json:"id,omitempty"`
 	CreatedAt string `json:"createdAt"`
 	Log       string `json:"log"`
 }
@@ -347,4 +348,12 @@ func (r *Run) GetDisplayStatus() string {
 	}
 
 	return strings.ToLower(status)
+}
+
+// AppBuild represents a build for a Cerebrium application
+type AppBuild struct {
+	Id        string `json:"id"`
+	Status    string `json:"status"`
+	CreatedAt string `json:"createdAt"`
+	UpdatedAt string `json:"updatedAt"`
 }
