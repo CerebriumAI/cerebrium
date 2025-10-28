@@ -160,7 +160,7 @@ func (p *pollingAppLogProvider) fetchOnce(ctx context.Context, callback func([]L
 	// If seenIDs map grows too large (2x the log limit), clear it
 	// This is safe because we use timestamp-based filtering (afterDate) for the API
 	// The seenIDs map is just for additional deduplication within recent logs
-	if len(p.seenIDs) > MaxLogsInMemory*2 {
+	if len(p.seenIDs) > maxLogsInMemory*2 {
 		// Keep only the most recently added IDs
 		newSeenIDs := make(map[string]bool, len(logIDsToAdd))
 		for _, id := range logIDsToAdd {

@@ -1,8 +1,8 @@
 package commands
 
 import (
-	"context"
 	"errors"
+	"github.com/stretchr/testify/mock"
 	"testing"
 
 	"github.com/cerebriumai/cerebrium/internal/api"
@@ -688,7 +688,7 @@ func TestLoginView_WithClient(t *testing.T) {
 
 		// Mock GetProjects to return test projects including the existing one
 		mockClient.EXPECT().
-			GetProjects(context.Background()).
+			GetProjects(mock.Anything).
 			Return([]api.Project{
 				{ID: "existing-project", Name: "Existing Project"},
 				{ID: "project-123", Name: "Test Project"},
@@ -749,16 +749,17 @@ func TestLoginView_WithClient(t *testing.T) {
 	})
 
 	t.Run("handles GetProjects error gracefully", func(t *testing.T) {
+		ctx := t.Context()
 		cfg := &config.Config{}
 		mockClient := apimock.NewMockClient(t)
 
 		// Mock GetProjects to return error
 		mockClient.EXPECT().
-			GetProjects(context.Background()).
+			GetProjects(mock.Anything).
 			Return(nil, errors.New("network error")).
 			Once()
 
-		model := NewLoginView(t.Context(), LoginConfig{
+		model := NewLoginView(ctx, LoginConfig{
 			Config: cfg,
 			Client: mockClient,
 			DisplayConfig: ui.DisplayConfig{

@@ -438,12 +438,11 @@ func Test_formatAppsTable(t *testing.T) {
 }
 
 func TestAppsListView_View(t *testing.T) {
-	ctx := t.Context()
 	baseTime := time.Date(2024, 1, 15, 10, 30, 0, 0, time.UTC)
 
 	t.Run("view during loading", func(t *testing.T) {
 		model := ListView{
-			ctx:     ctx,
+			ctx:     t.Context(),
 			loading: true,
 			spinner: ui.NewSpinner(),
 			conf: ListConfig{
@@ -461,7 +460,7 @@ func TestAppsListView_View(t *testing.T) {
 
 	t.Run("view with apps", func(t *testing.T) {
 		model := ListView{
-			ctx:     ctx,
+			ctx:     t.Context(),
 			loading: false,
 			apps: []api.App{
 				{
@@ -492,7 +491,7 @@ func TestAppsListView_View(t *testing.T) {
 
 	t.Run("view with empty list", func(t *testing.T) {
 		model := ListView{
-			ctx:  ctx,
+			ctx:  t.Context(),
 			apps: []api.App{},
 			conf: ListConfig{
 				ProjectID: "test-project",
@@ -509,7 +508,7 @@ func TestAppsListView_View(t *testing.T) {
 
 	t.Run("view with error", func(t *testing.T) {
 		model := ListView{
-			ctx: ctx,
+			ctx: t.Context(),
 			err: ui.NewAPIError(errors.New("test error")),
 			conf: ListConfig{
 				ProjectID: "test-project",
@@ -526,7 +525,7 @@ func TestAppsListView_View(t *testing.T) {
 
 	t.Run("view in simple mode", func(t *testing.T) {
 		model := ListView{
-			ctx:     ctx,
+			ctx:     t.Context(),
 			loading: true,
 			conf: ListConfig{
 				ProjectID: "test-project",

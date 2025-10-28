@@ -17,11 +17,9 @@ import (
 //go:generate go test -v -run TestRunsListView -update
 
 func TestRunsListView(t *testing.T) {
-	ctx := t.Context()
-
 	t.Run("initial_state", func(t *testing.T) {
 		mockClient := apimock.NewMockClient(t)
-		model := NewListView(ctx, ListConfig{
+		model := NewListView(t.Context(), ListConfig{
 			DisplayConfig: ui.DisplayConfig{IsInteractive: true},
 			Client:        mockClient,
 			ProjectID:     "test-project",
@@ -64,7 +62,7 @@ func TestRunsListView(t *testing.T) {
 			},
 		}
 
-		model := NewListView(ctx, ListConfig{
+		model := NewListView(t.Context(), ListConfig{
 			DisplayConfig: ui.DisplayConfig{IsInteractive: true},
 			Client:        mockClient,
 			ProjectID:     "test-project",
@@ -95,7 +93,7 @@ func TestRunsListView(t *testing.T) {
 
 		apiError := errors.New("API request failed")
 
-		model := NewListView(ctx, ListConfig{
+		model := NewListView(t.Context(), ListConfig{
 			DisplayConfig: ui.DisplayConfig{IsInteractive: true},
 			Client:        mockClient,
 			ProjectID:     "test-project",
@@ -121,7 +119,7 @@ func TestRunsListView(t *testing.T) {
 	t.Run("handles_empty_runs_list", func(t *testing.T) {
 		mockClient := apimock.NewMockClient(t)
 
-		model := NewListView(ctx, ListConfig{
+		model := NewListView(t.Context(), ListConfig{
 			DisplayConfig: ui.DisplayConfig{IsInteractive: true},
 			Client:        mockClient,
 			ProjectID:     "test-project",
@@ -147,7 +145,7 @@ func TestRunsListView(t *testing.T) {
 	t.Run("handles_ctrl_c", func(t *testing.T) {
 		mockClient := apimock.NewMockClient(t)
 
-		model := NewListView(ctx, ListConfig{
+		model := NewListView(t.Context(), ListConfig{
 			DisplayConfig: ui.DisplayConfig{IsInteractive: true},
 			Client:        mockClient,
 			ProjectID:     "test-project",
@@ -182,7 +180,7 @@ func TestRunsListView(t *testing.T) {
 			},
 		}
 
-		model := NewListView(ctx, ListConfig{
+		model := NewListView(t.Context(), ListConfig{
 			DisplayConfig: ui.DisplayConfig{IsInteractive: true},
 			Client:        mockClient,
 			ProjectID:     "test-project",
@@ -248,7 +246,7 @@ func TestRunsListView(t *testing.T) {
 			},
 		}
 
-		model := NewListView(ctx, ListConfig{
+		model := NewListView(t.Context(), ListConfig{
 			DisplayConfig: ui.DisplayConfig{IsInteractive: true},
 			Client:        mockClient,
 			ProjectID:     "test-project",
@@ -295,7 +293,7 @@ func TestRunsListView(t *testing.T) {
 			},
 		}
 
-		model := NewListView(ctx, ListConfig{
+		model := NewListView(t.Context(), ListConfig{
 			DisplayConfig: ui.DisplayConfig{IsInteractive: true},
 			Client:        mockClient,
 			ProjectID:     "test-project",
@@ -333,7 +331,7 @@ func TestRunsListView(t *testing.T) {
 			}
 		}
 
-		model := NewListView(ctx, ListConfig{
+		model := NewListView(t.Context(), ListConfig{
 			DisplayConfig: ui.DisplayConfig{IsInteractive: true},
 			Client:        mockClient,
 			ProjectID:     "test-project",

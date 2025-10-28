@@ -72,13 +72,13 @@ func (c *client) request(ctx context.Context, method, path string, body any, req
 			reqURL := c.config.GetEnvConfig().APIV2Url + "/" + path
 
 			// Log request details
-			//slog.Debug("API request",
-			//	"method", method,
-			//	"path", path,
-			//	"url", reqURL,
-			//	"requiresAuth", requiresAuth,
-			//	"attempt", attempt,
-			//)
+			slog.Debug("API request",
+				"method", method,
+				"path", path,
+				"url", reqURL,
+				"requiresAuth", requiresAuth,
+				"attempt", attempt,
+			)
 
 			// Marshal body if present
 			var bodyReader io.Reader
@@ -130,30 +130,26 @@ func (c *client) request(ctx context.Context, method, path string, body any, req
 			}
 			defer resp.Body.Close() //nolint:errcheck // Deferred close, error not actionable
 
-			// Read response body
 			respBody, err = io.ReadAll(resp.Body)
 			if err != nil {
 				slog.Error("Failed to read response body", "error", err, "statusCode", resp.StatusCode)
 				return fmt.Errorf("failed to read response: %w", err)
 			}
 
-			// Log response
-			//slog.Debug("API response",
-			//	"statusCode", resp.StatusCode,
-			//	"responseSize", len(respBody),
-			//	"duration", duration,
-			//	"method", method,
-			//	"path", path,
-			//)
-
-			// Check status code
+			slog.Debug("API response",
+				"statusCode", resp.StatusCode,
+				"responseSize", len(respBody),
+				"duration", duration,
+				"method", method,
+				"path", path,
+			)
 			if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-				//slog.Info("API request successful",
-				//	"method", method,
-				//	"path", path,
-				//	"statusCode", resp.StatusCode,
-				//	"duration", duration,
-				//)
+				slog.Info("API request successful",
+					"method", method,
+					"path", path,
+					"statusCode", resp.StatusCode,
+					"duration", duration,
+				)
 				return nil // Success
 			}
 

@@ -277,11 +277,9 @@ func TestAppDeleteView(t *testing.T) {
 }
 
 func TestAppDeleteView_View(t *testing.T) {
-	ctx := t.Context()
-
 	t.Run("view during deletion", func(t *testing.T) {
 		model := &DeleteView{
-			ctx:     ctx,
+			ctx:     t.Context(),
 			status:  DeleteStateAppDeleting,
 			spinner: ui.NewSpinner(),
 			conf: DeleteConfig{
@@ -300,7 +298,7 @@ func TestAppDeleteView_View(t *testing.T) {
 
 	t.Run("view after success", func(t *testing.T) {
 		model := &DeleteView{
-			ctx:    ctx,
+			ctx:    t.Context(),
 			status: DeleteStateAppDeleted,
 			conf: DeleteConfig{
 				DisplayConfig: ui.DisplayConfig{
@@ -319,7 +317,7 @@ func TestAppDeleteView_View(t *testing.T) {
 
 	t.Run("view after error", func(t *testing.T) {
 		model := &DeleteView{
-			ctx:    ctx,
+			ctx:    t.Context(),
 			status: DeleteStateAppDeleteError,
 			err:    ui.NewAPIError(errors.New("test error")),
 			conf: DeleteConfig{
@@ -339,7 +337,7 @@ func TestAppDeleteView_View(t *testing.T) {
 
 	t.Run("view in simple mode", func(t *testing.T) {
 		model := &DeleteView{
-			ctx:    ctx,
+			ctx:    t.Context(),
 			status: DeleteStateAppDeleting,
 			conf: DeleteConfig{
 				DisplayConfig: ui.DisplayConfig{

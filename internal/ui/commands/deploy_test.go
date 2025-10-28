@@ -801,8 +801,6 @@ func TestDeployView(t *testing.T) {
 }
 
 func TestDeployView_GetError(t *testing.T) {
-	mockClient := apimock.NewMockClient(t)
-
 	config := &projectconfig.ProjectConfig{
 		Deployment: projectconfig.DeploymentConfig{
 			Name: "error-test",
@@ -814,7 +812,7 @@ func TestDeployView_GetError(t *testing.T) {
 			DisplayConfig: ui.DisplayConfig{IsInteractive: true},
 			Config:        config,
 			ProjectID:     "test-project",
-			Client:        mockClient,
+			Client:        apimock.NewMockClient(t),
 		})
 
 		assert.Nil(t, model.GetError())
@@ -825,7 +823,7 @@ func TestDeployView_GetError(t *testing.T) {
 			DisplayConfig: ui.DisplayConfig{IsInteractive: true},
 			Config:        config,
 			ProjectID:     "test-project",
-			Client:        mockClient,
+			Client:        apimock.NewMockClient(t),
 		})
 
 		testErr := ui.NewAPIError(errors.New("test error"))
@@ -836,7 +834,6 @@ func TestDeployView_GetError(t *testing.T) {
 }
 
 func TestDeployView_View(t *testing.T) {
-	mockClient := apimock.NewMockClient(t)
 
 	config := &projectconfig.ProjectConfig{
 		Deployment: projectconfig.DeploymentConfig{
@@ -852,7 +849,7 @@ func TestDeployView_View(t *testing.T) {
 			},
 			Config:    config,
 			ProjectID: "test-project",
-			Client:    mockClient,
+			Client:    apimock.NewMockClient(t),
 		})
 
 		model.state = StateLoadingFiles
@@ -869,7 +866,7 @@ func TestDeployView_View(t *testing.T) {
 			},
 			Config:    config,
 			ProjectID: "test-project",
-			Client:    mockClient,
+			Client:    apimock.NewMockClient(t),
 		})
 
 		model.state = StateZippingFiles
@@ -888,7 +885,7 @@ func TestDeployView_View(t *testing.T) {
 			},
 			Config:    config,
 			ProjectID: "test-project",
-			Client:    mockClient,
+			Client:    apimock.NewMockClient(t),
 		})
 
 		model.state = StateCreatingApp
@@ -906,7 +903,7 @@ func TestDeployView_View(t *testing.T) {
 			},
 			Config:    config,
 			ProjectID: "test-project",
-			Client:    mockClient,
+			Client:    apimock.NewMockClient(t),
 		})
 
 		model.state = StateUploadingZip
@@ -924,7 +921,7 @@ func TestDeployView_View(t *testing.T) {
 			},
 			Config:    config,
 			ProjectID: "test-project",
-			Client:    mockClient,
+			Client:    apimock.NewMockClient(t),
 		})
 
 		model.state = StateBuildingApp
@@ -942,7 +939,7 @@ func TestDeployView_View(t *testing.T) {
 			},
 			Config:    config,
 			ProjectID: "test-project",
-			Client:    mockClient,
+			Client:    apimock.NewMockClient(t),
 		})
 
 		model.state = StateDeployError
@@ -960,7 +957,7 @@ func TestDeployView_View(t *testing.T) {
 			},
 			Config:    config,
 			ProjectID: "test-project",
-			Client:    mockClient,
+			Client:    apimock.NewMockClient(t),
 		})
 
 		model.state = StateZippingFiles
@@ -977,7 +974,7 @@ func TestDeployView_View(t *testing.T) {
 			},
 			Config:    config,
 			ProjectID: "test-project",
-			Client:    mockClient,
+			Client:    apimock.NewMockClient(t),
 		})
 
 		model.state = StateCancelling
@@ -995,7 +992,7 @@ func TestDeployView_View(t *testing.T) {
 			},
 			Config:    config,
 			ProjectID: "test-project",
-			Client:    mockClient,
+			Client:    apimock.NewMockClient(t),
 		})
 
 		model.state = StateCancelled

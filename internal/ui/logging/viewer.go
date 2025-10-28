@@ -2,15 +2,22 @@ package logging
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"github.com/cerebriumai/cerebrium/internal/ui"
 	"github.com/charmbracelet/lipgloss"
-	"log/slog"
+	"sort"
 	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+)
+
+type viewerState int
+
+const (
+	viewerStateInitialising viewerState = iota
+	viewerStateRunning
+	viewerStateFinished
 )
 
 // LogViewerConfig contains configuration for the log viewer
@@ -20,6 +27,7 @@ type LogViewerConfig struct {
 	Provider     LogProvider
 	TickInterval time.Duration // UI refresh interval (default: 500ms)
 	ShowHelp     bool
+	ViewSize     int
 }
 
 // LogViewerModel is a reusable component for viewing logs
@@ -27,11 +35,11 @@ type LogViewerModel struct {
 	ctx    context.Context
 	config LogViewerConfig
 
-	spinner    *ui.SpinnerModel
-	logChan    chan []Log
-	doneChan   chan error
-	logs       []Log // Accumulated logs for display
-	isComplete bool
+	state    viewerState
+	spinner  *ui.SpinnerModel
+	logChan  chan []Log
+	doneChan chan error
+	logs     []Log // Accumulated logs for display
 
 	scrollOffset int
 	anchorBottom bool // Auto-scroll to show latest logs
@@ -40,9 +48,9 @@ type LogViewerModel struct {
 }
 
 const (
-	// MaxLogsInMemory is the hard limit for logs stored in memory
+	// maxLogsInMemory is the hard limit for logs stored in memory
 	// When exceeded, oldest logs are evicted
-	MaxLogsInMemory = 10_000
+	maxLogsInMemory = 10_000
 )
 
 // NewLogViewer creates a new log viewer
@@ -50,10 +58,15 @@ func NewLogViewer(ctx context.Context, config LogViewerConfig) *LogViewerModel {
 	if config.TickInterval == 0 {
 		config.TickInterval = 500 * time.Millisecond
 	}
+	if config.ViewSize == 0 {
+		config.ViewSize = ui.MAX_LOGS_IN_VIEWER
+	}
+	// TODO: Allow 'infinite' size for --no-follow
 
 	return &LogViewerModel{
 		ctx:          ctx,
 		config:       config,
+		state:        viewerStateInitialising,
 		spinner:      ui.NewSpinner(),
 		logChan:      make(chan []Log, 10), // Buffered to prevent blocking provider
 		doneChan:     make(chan error),
@@ -66,27 +79,21 @@ func (m *LogViewerModel) Init() tea.Cmd {
 	// Start provider in background goroutine
 	go func() {
 		defer close(m.logChan)
-		seenIDs := make(map[string]bool)
 
 		err := m.config.Provider.Collect(m.ctx, func(logs []Log) error {
 			if m.ctx.Err() != nil {
 				return m.ctx.Err()
 			}
-			var newLogs []Log
-			for _, log := range logs {
-				if !seenIDs[log.ID] {
-					newLogs = append(newLogs, log)
-					seenIDs[log.ID] = true
-				}
-			}
 
 			// Write new logs to channel (non-blocking due to buffer)
-			m.logChan <- newLogs
+			m.logChan <- logs
 			return nil
 		})
 		// Provider closed - signal completion
 		m.doneChan <- err
 	}()
+
+	m.state = viewerStateRunning
 
 	return tea.Batch(
 		m.spinner.Init(),
@@ -99,8 +106,6 @@ func (m *LogViewerModel) Init() tea.Cmd {
 func (m *LogViewerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case logBatchReceivedMsg:
-		logStr, _ := json.MarshalIndent(msg.logs, "", "  ")
-		slog.Info("DEBUG batch received", "logs", logStr)
 		// Buffer logs silently (don't trigger render for every new log)
 		for _, log := range msg.logs {
 			m.logs = append(m.logs, log)
@@ -112,22 +117,31 @@ func (m *LogViewerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		// Enforce memory limit - evict oldest logs if needed
-		if len(m.logs) > MaxLogsInMemory {
-			numToEvict := len(m.logs) - MaxLogsInMemory
+		if len(m.logs) > maxLogsInMemory {
+			numToEvict := len(m.logs) - maxLogsInMemory
 			m.logs = m.logs[numToEvict:]
+			m.scrollOffset -= numToEvict
 		}
+
+		if m.anchorBottom {
+			m.scrollOffset = max(0, len(m.logs)-m.config.ViewSize)
+		}
+
+		sort.Slice(m.logs, func(i, j int) bool {
+			return m.logs[i].Timestamp.Before(m.logs[j].Timestamp)
+		})
 
 		// Keep listening for more logs
 		return m, waitForLogBatch(m.logChan)
 
 	case providerDoneMsg:
-		m.isComplete = true
+		m.state = viewerStateFinished
 		m.err = msg.err
 		return m, nil
 
 	case tickMsg:
 		// Don't schedule another tick if we're done
-		if m.isComplete && len(m.logChan) == 0 {
+		if m.state == viewerStateFinished && len(m.logChan) == 0 {
 			return m, nil
 		}
 
@@ -136,6 +150,10 @@ func (m *LogViewerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyMsg:
 		return m.onKey(msg)
+
+	case ui.SignalCancelMsg:
+		m.state = viewerStateFinished
+		return m, tea.Quit
 
 	default:
 		// Update spinner only in interactive mode
@@ -156,8 +174,8 @@ func (m *LogViewerModel) View() string {
 		return ""
 	}
 	// Show waiting message
-	if len(m.logs) == 0 {
-		emptyContent := ui.PendingStyle.Render("Waiting for build logs...")
+	if len(m.logs) == 0 || m.state == viewerStateInitialising {
+		emptyContent := ui.PendingStyle.Render("Waiting for logs...")
 		emptyBox := lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(lipgloss.Color("14")).
@@ -173,11 +191,11 @@ func (m *LogViewerModel) View() string {
 	// Note: Auto-scroll offset is calculated in Update() to keep View() pure
 	var start, end int
 	if m.anchorBottom {
-		start = max(0, len(m.logs)-ui.MAX_LOGS_IN_VIEWER)
+		start = max(0, len(m.logs)-m.config.ViewSize)
 		end = len(m.logs)
 	} else {
 		start = m.scrollOffset
-		end = min(len(m.logs), start+ui.MAX_LOGS_IN_VIEWER)
+		end = min(len(m.logs), start+m.config.ViewSize)
 	}
 
 	visibleLogs := m.logs[start:end]
@@ -205,7 +223,7 @@ func (m *LogViewerModel) View() string {
 	}
 
 	// Dynamic height based on content (max 20 lines + indicators)
-	height := min(len(visibleLogs)+2, ui.MAX_LOGS_IN_VIEWER+2) // +2 for padding/indicators
+	height := min(len(visibleLogs)+2, m.config.ViewSize+2) // +2 for padding/indicators
 	if start > 0 {
 		height++ // Extra line for top indicator
 	}
@@ -214,7 +232,7 @@ func (m *LogViewerModel) View() string {
 	}
 
 	// Render with border and title
-	title := ui.CyanStyle.Render(fmt.Sprintf("Build Logs (%d lines)", len(m.logs)))
+	title := ui.CyanStyle.Render(fmt.Sprintf("Logs (%d lines) offset %d", len(m.logs), m.scrollOffset))
 	boxContent := title + "\n" + content.String()
 
 	var output strings.Builder
@@ -230,7 +248,7 @@ func (m *LogViewerModel) View() string {
 	output.WriteString(logBox)
 	output.WriteString("\n")
 
-	if len(m.logs) > ui.MAX_LOGS_IN_VIEWER {
+	if len(m.logs) > m.config.ViewSize {
 		output.WriteString(ui.HelpStyle.Render(" j/k: scroll | J/K: scroll to bottom/top | ctrl+u/d: page up/down"))
 		output.WriteString("\n")
 	}
@@ -240,46 +258,47 @@ func (m *LogViewerModel) View() string {
 
 func (m *LogViewerModel) onKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
-	case "ctrl+c":
+	case "ctrl+c", "q":
+		m.state = viewerStateFinished
 		return m, tea.Quit
 
 	case "j":
 		// Scroll down one line (only when expanded and logs exist)
-		maxOffset := max(0, len(m.logs)-ui.MAX_LOGS_IN_VIEWER)
+		maxOffset := max(0, len(m.logs)-m.config.ViewSize)
 		m.scrollOffset = min(maxOffset, m.scrollOffset+1)
 		// Always check if last log is visible
-		m.anchorBottom = m.scrollOffset+ui.MAX_LOGS_IN_VIEWER >= len(m.logs)
+		m.anchorBottom = m.scrollOffset+m.config.ViewSize >= len(m.logs)
 
 	case "J":
 		// Scroll to bottom (Shift+J)
-		m.scrollOffset = max(0, len(m.logs)-ui.MAX_LOGS_IN_VIEWER)
+		m.scrollOffset = max(0, len(m.logs)-m.config.ViewSize)
 		// Always check if last log is visible
-		m.anchorBottom = m.scrollOffset+ui.MAX_LOGS_IN_VIEWER >= len(m.logs)
+		m.anchorBottom = m.scrollOffset+m.config.ViewSize >= len(m.logs)
 
 	case "k":
 		// Scroll up one line (only when expanded)
 		m.scrollOffset = max(0, m.scrollOffset-1)
 		// Always check if last log is visible
-		m.anchorBottom = m.scrollOffset+ui.MAX_LOGS_IN_VIEWER >= len(m.logs)
+		m.anchorBottom = m.scrollOffset+m.config.ViewSize >= len(m.logs)
 
 	case "K":
 		// Scroll to top (Shift+K)
 		m.scrollOffset = 0
 		// Always check if last log is visible
-		m.anchorBottom = m.scrollOffset+ui.MAX_LOGS_IN_VIEWER >= len(m.logs)
+		m.anchorBottom = m.scrollOffset+m.config.ViewSize >= len(m.logs)
 
 	case "ctrl+u":
 		// Page up - scroll up 10 lines
 		m.scrollOffset = max(0, m.scrollOffset-10)
 		// Always check if last log is visible
-		m.anchorBottom = m.scrollOffset+ui.MAX_LOGS_IN_VIEWER >= len(m.logs)
+		m.anchorBottom = m.scrollOffset+m.config.ViewSize >= len(m.logs)
 
 	case "ctrl+d":
 		// Page down - scroll down 10 lines
-		maxOffset := max(0, len(m.logs)-ui.MAX_LOGS_IN_VIEWER)
+		maxOffset := max(0, len(m.logs)-m.config.ViewSize)
 		m.scrollOffset = min(maxOffset, m.scrollOffset+10)
 		// Always check if last log is visible
-		m.anchorBottom = m.scrollOffset+ui.MAX_LOGS_IN_VIEWER >= len(m.logs)
+		m.anchorBottom = m.scrollOffset+m.config.ViewSize >= len(m.logs)
 	}
 
 	return m, nil
@@ -302,7 +321,7 @@ func (m *LogViewerModel) GetError() error {
 
 // IsComplete returns true if log collection has finished
 func (m *LogViewerModel) IsComplete() bool {
-	return m.isComplete
+	return m.state == viewerStateFinished
 }
 
 // Messages
@@ -311,6 +330,8 @@ type logBatchReceivedMsg struct {
 	logs []Log
 }
 
+// providerDoneMsg signals that the log provider has finished collecting logs
+// This is exported so tests can reference it when using Finally() in test harness
 type providerDoneMsg struct {
 	finalStatus string
 	err         error

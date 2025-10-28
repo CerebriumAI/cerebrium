@@ -2,6 +2,7 @@ package commands
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -10,7 +11,6 @@ import (
 	"github.com/cerebriumai/cerebrium/internal/ui"
 	"github.com/cerebriumai/cerebrium/internal/ui/logging"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 )
 
 // LogsStatus represents the current state of the logs command
@@ -37,12 +37,10 @@ type LogsConfig struct {
 
 // LogsView is the Bubbletea model for the logs command
 type LogsView struct {
-	ctx             context.Context
-	state           LogsStatus
-	viewer          *logging.LogViewerModel
-	err             *ui.UIError
-	logScrollOffset int  // Current scroll position
-	anchorBottom    bool // Auto-scroll to show latest logs
+	ctx       context.Context
+	state     LogsStatus
+	logViewer *logging.LogViewerModel
+	err       *ui.UIError
 
 	conf LogsConfig
 }
@@ -50,10 +48,9 @@ type LogsView struct {
 // NewLogsView creates a new logs view
 func NewLogsView(ctx context.Context, conf LogsConfig) *LogsView {
 	return &LogsView{
-		ctx:          ctx,
-		state:        LogsStatusLoading,
-		anchorBottom: true, // Start anchored to bottom for latest logs
-		conf:         conf,
+		ctx:   ctx,
+		state: LogsStatusLoading,
+		conf:  conf,
 	}
 }
 
@@ -83,11 +80,13 @@ func (m *LogsView) Init() tea.Cmd {
 	viewer := logging.NewLogViewer(ctx, logging.LogViewerConfig{
 		DisplayConfig: m.conf.DisplayConfig,
 		Provider:      provider,
+		ShowHelp:      m.conf.Follow,
+		ViewSize:      40,
 	})
-	m.viewer = viewer
+	m.logViewer = viewer
 	m.state = LogsStatusStreaming
 
-	return m.viewer.Init()
+	return m.logViewer.Init()
 }
 
 // Update handles messages
@@ -98,132 +97,28 @@ func (m *LogsView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.conf.SimpleOutput() {
 			fmt.Fprintf(os.Stderr, "\nStopped watching logs\n")
 		}
+		_, _ = m.logViewer.Update(msg)
 		m.err = ui.NewUserCancelledError()
 		m.state = LogsStatusComplete
 		return m, tea.Quit
 
 	case tea.KeyMsg:
-		// Only handle keyboard in interactive mode
-		if m.conf.SimpleOutput() {
-			return m, nil
-		}
-
-		switch msg.String() {
-		case "ctrl+c":
-			if m.conf.SimpleOutput() {
-				fmt.Fprintf(os.Stderr, "\nStopped watching logs\n")
-			}
-			m.err = ui.NewUserCancelledError()
-			m.state = LogsStatusComplete
-			return m, tea.Quit
-
-		case "j":
-			// Scroll down one line
-			if m.viewer != nil {
-				totalLogs := len(m.viewer.GetLogs())
-				maxVisible := 40
-				maxOffset := max(0, totalLogs-maxVisible)
-				m.logScrollOffset = min(maxOffset, m.logScrollOffset+1)
-				// Always check if last log is visible
-				m.anchorBottom = (m.logScrollOffset+maxVisible >= totalLogs)
-			}
-
-		case "J":
-			// Scroll to bottom (Shift+J)
-			if m.viewer != nil {
-				totalLogs := len(m.viewer.GetLogs())
-				maxVisible := 40
-				m.logScrollOffset = max(0, totalLogs-maxVisible)
-				// Always check if last log is visible
-				m.anchorBottom = (m.logScrollOffset+maxVisible >= totalLogs)
-			}
-
-		case "k":
-			// Scroll up one line
-			m.logScrollOffset = max(0, m.logScrollOffset-1)
-			// Always check if last log is visible
-			if m.viewer != nil {
-				totalLogs := len(m.viewer.GetLogs())
-				maxVisible := 40
-				m.anchorBottom = (m.logScrollOffset+maxVisible >= totalLogs)
-			}
-
-		case "K":
-			// Scroll to top (Shift+K)
-			m.logScrollOffset = 0
-			// Always check if last log is visible (it won't be if we're at top)
-			if m.viewer != nil {
-				totalLogs := len(m.viewer.GetLogs())
-				maxVisible := 40
-				m.anchorBottom = (m.logScrollOffset+maxVisible >= totalLogs)
-			}
-
-		case "ctrl+u":
-			// Page up - scroll up 10 lines
-			m.logScrollOffset = max(0, m.logScrollOffset-10)
-			// Always check if last log is visible
-			if m.viewer != nil {
-				totalLogs := len(m.viewer.GetLogs())
-				maxVisible := 40
-				m.anchorBottom = (m.logScrollOffset+maxVisible >= totalLogs)
-			}
-
-		case "ctrl+d":
-			// Page down - scroll down 10 lines
-			if m.viewer != nil {
-				totalLogs := len(m.viewer.GetLogs())
-				maxVisible := 40
-				maxOffset := max(0, totalLogs-maxVisible)
-				m.logScrollOffset = min(maxOffset, m.logScrollOffset+10)
-				// Always check if last log is visible
-				m.anchorBottom = (m.logScrollOffset+maxVisible >= totalLogs)
-			}
-		}
+		return m.onKey(msg)
 
 	default:
 		// Delegate to log viewer
-		if m.viewer != nil {
-			updated, cmd := m.viewer.Update(msg)
-			m.viewer = updated.(*logging.LogViewerModel) //nolint:errcheck // Type assertion guaranteed by LogViewerModel structure
-
-			totalLogs := len(m.viewer.GetLogs())
-			maxVisible := 40
-
-			// Check if the last log is currently visible
-			lastLogVisible := m.logScrollOffset+maxVisible >= totalLogs
-
-			// If last log is visible OR we're anchored to bottom, keep scrolling to show new logs
-			if lastLogVisible || m.anchorBottom {
-				maxOffset := max(0, totalLogs-maxVisible)
-				m.logScrollOffset = maxOffset
-				m.anchorBottom = true // Keep anchored if last log is visible
-			}
+		if m.logViewer != nil {
+			updated, cmd := m.logViewer.Update(msg)
+			m.logViewer = updated.(*logging.LogViewerModel) //nolint:errcheck // Type assertion guaranteed by LogViewerModel structure
 
 			// Check if log viewer is complete AND all logs have been processed
 			// We need both conditions to avoid race condition where we quit before
 			// all logs in the channel buffer have been displayed
-			if m.viewer.IsComplete() {
+			if m.logViewer.IsComplete() {
 				m.state = LogsStatusComplete
-				if err := m.viewer.GetError(); err != nil {
+				if err := m.logViewer.GetError(); err != nil {
 					m.err = ui.NewAPIError(err)
-					return m, tea.Quit
 				}
-
-				// In simple mode (--no-color or piped), quit when complete
-				// But the LogViewerModel will handle draining all logs first
-				if m.conf.SimpleOutput() {
-					// Don't quit yet - let the viewer's tickMsg handle it
-					// This ensures all buffered logs are printed
-					return m, cmd
-				}
-
-				// In interactive mode with no-follow, stay on final view
-				// This allows user to review logs and scroll
-				if !m.conf.Follow {
-					return m, nil // Stay on final view
-				}
-
-				// Follow mode completed (shouldn't normally reach here)
 				return m, tea.Quit
 			}
 
@@ -241,112 +136,43 @@ func (m *LogsView) View() string {
 		return ""
 	}
 
+	var output strings.Builder
+
+	if m.logViewer != nil {
+		output.WriteString(m.logViewer.View())
+	}
+
 	// Interactive mode: render based on state
 	switch m.state {
 	case LogsStatusLoading:
-		return fmt.Sprintf("%s Loading logs...", m.viewer.View())
+		return fmt.Sprintf("Loading logs...") // TODO: Use spinner
 
 	case LogsStatusStreaming:
-		if m.viewer != nil {
-			return m.renderLogViewer()
-		}
-		return "Streaming logs..."
+		// Fall through, we just want to display the log viewer
+		break
 
 	case LogsStatusError:
 		if m.err != nil {
-			return ui.FormatError(m.err)
+			output.WriteString("\n")
+			output.WriteString(ui.FormatError(m.err))
+			output.WriteString("\n")
+		} else {
+			output.WriteString("\n")
+			output.WriteString(ui.FormatError(errors.New("An unknown error occurred")))
+			output.WriteString("\n")
 		}
-		return "An error occurred"
 
 	case LogsStatusComplete:
 		if m.err != nil && !m.err.SilentExit {
-			return ui.FormatError(m.err)
-		}
-		// Show final logs if we have any
-		if m.viewer != nil && len(m.viewer.GetLogs()) > 0 {
-			return m.renderLogViewer()
-		}
-		return "" // Silent exit or normal completion
-	}
-
-	return ""
-}
-
-// renderLogViewer renders logs in a bordered box with title
-func (m *LogsView) renderLogViewer() string {
-	if m.viewer == nil {
-		return ""
-	}
-
-	allLogs := m.viewer.GetLogs()
-	totalLogs := len(allLogs)
-
-	if totalLogs == 0 {
-		// Show waiting message
-		emptyContent := ui.PendingStyle.Render("Waiting for logs...")
-		emptyBox := lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("14")).
-			Width(100).
-			Height(3).
-			Padding(0, 1).
-			Render(emptyContent)
-		return "\n" + emptyBox + "\n" + m.renderHelpText()
-	}
-
-	// Show 40 logs
-	maxVisible := 40
-	start := m.logScrollOffset
-	end := min(start+maxVisible, totalLogs)
-	visibleLogs := allLogs[start:end]
-
-	// Build log content with scroll indicators
-	var content strings.Builder
-
-	// Top indicator
-	if start > 0 {
-		content.WriteString(ui.PendingStyle.Render(fmt.Sprintf("↑ %d more lines above", start)))
-		content.WriteString("\n")
-	}
-
-	// Log lines - format each log entry with milliseconds
-	for i, log := range visibleLogs {
-		timestamp := log.Timestamp.Local().Format("15:04:05.000")
-		styledTimestamp := ui.TimestampStyle.Render(timestamp)
-		content.WriteString(fmt.Sprintf("%s %s", styledTimestamp, log.Content))
-		if i < len(visibleLogs)-1 {
-			content.WriteString("\n")
+			output.WriteString("\n")
+			output.WriteString(ui.FormatError(m.err))
+			output.WriteString("\n")
 		}
 	}
 
-	// Bottom indicator
-	if end < totalLogs {
-		content.WriteString("\n")
-		content.WriteString(ui.PendingStyle.Render(fmt.Sprintf("↓ %d more lines below", totalLogs-end)))
-	}
+	output.WriteString(m.renderHelpText())
 
-	// Dynamic height based on content (max 40 lines + indicators)
-	height := min(len(visibleLogs)+2, 42) // +2 for padding/indicators
-	if start > 0 {
-		height++ // Extra line for top indicator
-	}
-	if end < totalLogs {
-		height++ // Extra line for bottom indicator
-	}
-
-	// Render with border and title
-	title := ui.CyanStyle.Render(fmt.Sprintf("App Logs (%d lines) - %s", totalLogs, m.conf.AppName))
-	boxContent := title + "\n" + content.String()
-
-	logBox := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("14")).
-		Width(100).
-		Height(height).
-		Padding(0, 1).
-		Render(boxContent)
-
-	return "\n" + logBox + "\n" + m.renderHelpText()
+	return output.String()
 }
 
 // renderHelpText shows keyboard shortcuts
@@ -357,10 +183,6 @@ func (m *LogsView) renderHelpText() string {
 		hints = append(hints, "ctrl+c: stop streaming")
 	} else {
 		hints = append(hints, "ctrl+c: exit")
-	}
-
-	if m.viewer != nil && len(m.viewer.GetLogs()) > 40 {
-		hints = append(hints, "j/k: scroll", "J/K: scroll to bottom/top", "ctrl+u/d: page up/down")
 	}
 
 	if len(hints) == 0 {
@@ -374,4 +196,23 @@ func (m *LogsView) renderHelpText() string {
 // GetError returns any error that occurred
 func (m *LogsView) GetError() *ui.UIError {
 	return m.err
+}
+
+func (m *LogsView) onKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if msg.String() == tea.KeyCtrlC.String() {
+		// No cleanup needed, just exit silently
+		m.err = ui.NewUserCancelledError()
+		m.state = LogsStatusComplete
+		return m, tea.Quit
+	}
+
+	// Only handle keyboard in interactive mode
+	if m.conf.SimpleOutput() {
+		return m, nil
+	}
+
+	// Otherwise hand off to the log viewer and update it
+	updatedViewer, cmd := m.logViewer.Update(msg)
+	m.logViewer = updatedViewer.(*logging.LogViewerModel)
+	return m, cmd
 }

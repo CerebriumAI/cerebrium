@@ -409,11 +409,9 @@ func TestAppScaleView(t *testing.T) {
 }
 
 func Test_formatUpdates(t *testing.T) {
-	ctx := t.Context()
-
 	t.Run("all parameters", func(t *testing.T) {
 		model := ScaleView{
-			ctx: ctx,
+			ctx: t.Context(),
 			conf: ScaleConfig{
 				Updates: map[string]any{
 					"cooldownPeriodSeconds":      120,
@@ -434,7 +432,7 @@ func Test_formatUpdates(t *testing.T) {
 
 	t.Run("partial parameters", func(t *testing.T) {
 		model := ScaleView{
-			ctx: ctx,
+			ctx: t.Context(),
 			conf: ScaleConfig{
 				Updates: map[string]any{
 					"minReplicaCount": 1,
@@ -453,7 +451,7 @@ func Test_formatUpdates(t *testing.T) {
 
 	t.Run("empty updates", func(t *testing.T) {
 		model := ScaleView{
-			ctx: ctx,
+			ctx: t.Context(),
 			conf: ScaleConfig{
 				Updates: map[string]any{},
 			},
@@ -466,7 +464,6 @@ func Test_formatUpdates(t *testing.T) {
 }
 
 func TestAppScaleView_View(t *testing.T) {
-	ctx := t.Context()
 	updates := map[string]any{
 		"cooldownPeriodSeconds": 60,
 		"minReplicaCount":       1,
@@ -475,7 +472,7 @@ func TestAppScaleView_View(t *testing.T) {
 
 	t.Run("view during scaling", func(t *testing.T) {
 		model := ScaleView{
-			ctx:     ctx,
+			ctx:     t.Context(),
 			scaling: true,
 			spinner: ui.NewSpinner(),
 			conf: ScaleConfig{
@@ -498,7 +495,7 @@ func TestAppScaleView_View(t *testing.T) {
 
 	t.Run("view after success", func(t *testing.T) {
 		model := ScaleView{
-			ctx:     ctx,
+			ctx:     t.Context(),
 			scaling: false,
 			scaled:  true,
 			conf: ScaleConfig{
@@ -520,7 +517,7 @@ func TestAppScaleView_View(t *testing.T) {
 
 	t.Run("view after error", func(t *testing.T) {
 		model := ScaleView{
-			ctx:     ctx,
+			ctx:     t.Context(),
 			scaling: false,
 			err:     ui.NewAPIError(errors.New("test error")),
 			conf: ScaleConfig{
@@ -540,7 +537,7 @@ func TestAppScaleView_View(t *testing.T) {
 
 	t.Run("view in simple mode", func(t *testing.T) {
 		model := ScaleView{
-			ctx:     ctx,
+			ctx:     t.Context(),
 			scaling: true,
 			conf: ScaleConfig{
 				DisplayConfig: ui.DisplayConfig{

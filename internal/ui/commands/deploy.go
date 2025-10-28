@@ -259,7 +259,7 @@ func (m *DeployView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		// Initialize log viewer with polling provider
-		provider := logging.NewPollingBuildLogProviderV2(logging.PollingBuildLogProviderConfigV2{
+		provider := logging.NewPollingBuildLogProvider(logging.PollingBuildLogProviderConfig{
 			Client:       m.conf.Client,
 			ProjectID:    m.conf.ProjectID,
 			AppName:      m.conf.Config.Deployment.Name,

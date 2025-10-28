@@ -1,7 +1,6 @@
 package commands
 
 import (
-	"context"
 	"errors"
 	"testing"
 
@@ -48,8 +47,7 @@ func TestLogsView(t *testing.T) {
 				ModelAssert: func(t *testing.T, m *LogsView) {
 					// After Init(), state should be LogsStatusStreaming
 					assert.Equal(t, LogsStatusStreaming, m.state)
-					assert.True(t, m.anchorBottom)
-					assert.NotNil(t, m.viewer)
+					assert.NotNil(t, m.logViewer)
 				},
 			}).
 			Run(t)
@@ -225,26 +223,6 @@ func TestLogsView(t *testing.T) {
 		assert.Empty(t, view, "View should return empty string in simple mode")
 	})
 
-	t.Run("anchor bottom - starts anchored", func(t *testing.T) {
-		ctx := t.Context()
-		mockClient := apimock.NewMockClient(t)
-
-		model := NewLogsView(ctx, LogsConfig{
-			DisplayConfig: ui.DisplayConfig{
-				IsInteractive:    true,
-				DisableAnimation: false,
-			},
-			Client:    mockClient,
-			ProjectID: "test-project",
-			AppID:     "test-app",
-			AppName:   "test-app",
-			Follow:    true,
-		})
-
-		// Should start anchored to bottom for latest logs
-		assert.True(t, model.anchorBottom)
-	})
-
 	t.Run("GetError returns error", func(t *testing.T) {
 		ctx := t.Context()
 		mockClient := apimock.NewMockClient(t)
@@ -298,7 +276,7 @@ func TestLogsView_Init(t *testing.T) {
 		cmd := model.Init()
 
 		// Should create viewer and set state to streaming
-		assert.NotNil(t, model.viewer)
+		assert.NotNil(t, model.logViewer)
 		assert.Equal(t, LogsStatusStreaming, model.state)
 		assert.NotNil(t, cmd)
 	})
@@ -326,22 +304,19 @@ func TestLogsView_Init(t *testing.T) {
 		cmd := model.Init()
 
 		// Should handle nil context gracefully
-		assert.NotNil(t, model.viewer)
+		assert.NotNil(t, model.logViewer)
 		assert.NotNil(t, cmd)
 	})
 }
 
 func TestLogsView_RenderHelpText(t *testing.T) {
-	ctx := context.Background()
-	mockClient := apimock.NewMockClient(t)
-
 	t.Run("follow mode - shows stop streaming hint", func(t *testing.T) {
-		model := NewLogsView(ctx, LogsConfig{
+		model := NewLogsView(t.Context(), LogsConfig{
 			DisplayConfig: ui.DisplayConfig{
 				IsInteractive:    true,
 				DisableAnimation: false,
 			},
-			Client:    mockClient,
+			Client:    apimock.NewMockClient(t),
 			ProjectID: "test-project",
 			AppID:     "test-app",
 			AppName:   "test-app",
@@ -353,12 +328,12 @@ func TestLogsView_RenderHelpText(t *testing.T) {
 	})
 
 	t.Run("no follow mode - shows exit hint", func(t *testing.T) {
-		model := NewLogsView(ctx, LogsConfig{
+		model := NewLogsView(t.Context(), LogsConfig{
 			DisplayConfig: ui.DisplayConfig{
 				IsInteractive:    true,
 				DisableAnimation: false,
 			},
-			Client:    mockClient,
+			Client:    apimock.NewMockClient(t),
 			ProjectID: "test-project",
 			AppID:     "test-app",
 			AppName:   "test-app",
@@ -370,12 +345,12 @@ func TestLogsView_RenderHelpText(t *testing.T) {
 	})
 
 	t.Run("no logs - no scroll hints", func(t *testing.T) {
-		model := NewLogsView(ctx, LogsConfig{
+		model := NewLogsView(t.Context(), LogsConfig{
 			DisplayConfig: ui.DisplayConfig{
 				IsInteractive:    true,
 				DisableAnimation: false,
 			},
-			Client:    mockClient,
+			Client:    apimock.NewMockClient(t),
 			ProjectID: "test-project",
 			AppID:     "test-app",
 			AppName:   "test-app",
