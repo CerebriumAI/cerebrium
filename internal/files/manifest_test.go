@@ -17,13 +17,13 @@ func TestBuildManifest(t *testing.T) {
 
 	// Create test file structure
 	testFiles := map[string]string{
-		"main.py":                "print('hello')",
-		"requirements.txt":       "numpy==1.21.0",
-		"data/model.pkl":         "model data",
-		".git/config":            "git config",
-		".cerebrium/cache":       "cache data",
+		"main.py":                   "print('hello')",
+		"requirements.txt":          "numpy==1.21.0",
+		"data/model.pkl":            "model data",
+		".git/config":               "git config",
+		".cerebrium/cache":          "cache data",
 		"node_modules/package.json": "package",
-		"__pycache__/cache.pyc":  "cache",
+		"__pycache__/cache.pyc":     "cache",
 	}
 
 	for path, content := range testFiles {
