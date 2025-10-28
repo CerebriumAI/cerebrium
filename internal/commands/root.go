@@ -30,7 +30,6 @@ func NewRootCmd() *cobra.Command {
 		SilenceErrors: true,
 		// Load config once and store in context for all subcommands
 		PersistentPreRun: func(cmd *cobra.Command, args []string) {
-			// Setup logger first (before anything else)
 			verbose, _ := cmd.Flags().GetBool("verbose")
 
 			// Get display options for logger setup
@@ -40,9 +39,20 @@ func NewRootCmd() *cobra.Command {
 				os.Exit(1)
 			}
 
+			// Load config first (needed to get configured log level)
+			cfg, err := config.Load()
+			if err != nil {
+				// Config loading failed - print error and exit
+				// This is critical, we can't proceed without config
+				fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
+				os.Exit(1)
+			}
+
+			// Setup logger with configured log level
 			if verbose {
-				// Setup global logger with debug level
-				logFile, err := logrium.Setup(displayOpts.IsInteractive, slog.LevelDebug)
+				// Use configured log level (defaults to info if not set)
+				logLevel := cfg.GetLogLevel()
+				logFile, err := logrium.Setup(displayOpts.IsInteractive, logLevel)
 				if err != nil {
 					fmt.Fprintf(os.Stderr, "Error setting up logger: %v\n", err)
 					os.Exit(1)
@@ -55,16 +65,6 @@ func NewRootCmd() *cobra.Command {
 			} else {
 				// Disable logging entirely when --verbose is not set
 				logrium.Disable()
-			}
-
-			// Load config once
-			cfg, err := config.Load()
-			if err != nil {
-				// Config loading failed - print error and exit
-				// This is critical, we can't proceed without config
-				slog.Error("Failed to load config", "error", err)
-				fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
-				os.Exit(1)
 			}
 
 			slog.Debug("Config loaded successfully")

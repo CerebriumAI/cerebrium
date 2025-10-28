@@ -57,6 +57,13 @@ func runList(cmd *cobra.Command, args []string) error {
 				value         any
 			}{"skip-version-check", key, val})
 		}
+		if key == "loglevel" {
+			displayKeys = append(displayKeys, struct {
+				userFacingKey string
+				actualKey     string
+				value         any
+			}{"log-level", key, val})
+		}
 	}
 
 	// Environment-specific keys

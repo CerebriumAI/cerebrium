@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -24,6 +25,7 @@ type Config struct {
 	RefreshToken     string
 	DefaultRegion    string
 	SkipVersionCheck bool
+	LogLevel         string
 }
 
 // ValidUserFacingConfigKeys lists config keys that users should interact with
@@ -31,6 +33,7 @@ type Config struct {
 var ValidUserFacingConfigKeys = map[string]bool{
 	// Global settings
 	"skipversioncheck": true,
+	"loglevel":         true,
 
 	// Environment-specific settings (user doesn't need to know about env prefixes)
 	"defaultregion": true,
@@ -46,6 +49,7 @@ func IsValidUserFacingKey(key string) bool {
 func GetConfigKeyDescription(key string) string {
 	descriptions := map[string]string{
 		"skipversioncheck": "Disable automatic version update checks (true/false)",
+		"loglevel":         "Logging level (debug/info/warn/error, default: info)",
 		"defaultregion":    "Default region for deployments (e.g., us-east-1, us-west-2)",
 		"project":          "Current project ID",
 		"accesstoken":      "OAuth access token (managed by 'cerebrium login')",
@@ -61,6 +65,7 @@ func GetEnvironmentPrefixedKey(key string, env Environment) string {
 	// Global keys (not environment-specific)
 	globalKeys := map[string]bool{
 		"skipversioncheck": true,
+		"loglevel":         true,
 	}
 
 	if globalKeys[key] {
@@ -76,6 +81,7 @@ func GetEnvironmentPrefixedKey(key string, env Environment) string {
 func GetUserFacingKeys() []string {
 	return []string{
 		"skip-version-check",
+		"log-level",
 		"default-region",
 		"project",
 	}
@@ -120,6 +126,7 @@ func Load() (*Config, error) {
 		RefreshToken:     viper.GetString(prefix + "refreshtoken"),
 		DefaultRegion:    viper.GetString(prefix + "defaultregion"),
 		SkipVersionCheck: viper.GetBool("skipversioncheck"), // Global setting (not env-specific)
+		LogLevel:         viper.GetString("loglevel"),        // Global setting (not env-specific)
 	}
 
 	return config, nil
@@ -134,6 +141,7 @@ func Save(config *Config) error {
 	viper.Set(prefix+"refreshtoken", config.RefreshToken)
 	viper.Set(prefix+"defaultregion", config.DefaultRegion)
 	viper.Set("skipversioncheck", config.SkipVersionCheck) // Global setting
+	viper.Set("loglevel", config.LogLevel)                 // Global setting
 
 	if err := viper.WriteConfig(); err != nil {
 		return fmt.Errorf("failed to write config: %w", err)
@@ -245,4 +253,25 @@ func getKeyPrefix(env Environment) string {
 // GetEnvConfig returns the environment configuration
 func (c *Config) GetEnvConfig() *EnvConfig {
 	return c.envConfig
+}
+
+// GetLogLevel returns the configured log level as slog.Level
+// Defaults to Info if not set or invalid
+func (c *Config) GetLogLevel() slog.Level {
+	if c.LogLevel == "" {
+		return slog.LevelInfo
+	}
+
+	switch strings.ToLower(c.LogLevel) {
+	case "debug":
+		return slog.LevelDebug
+	case "info":
+		return slog.LevelInfo
+	case "warn", "warning":
+		return slog.LevelWarn
+	case "error":
+		return slog.LevelError
+	default:
+		return slog.LevelInfo
+	}
 }
