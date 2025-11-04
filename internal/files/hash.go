@@ -1,7 +1,7 @@
 package files
 
 import (
-	"crypto/md5"
+	"crypto/md5" //nolint:gosec // MD5 is required for S3 ETag compatibility, not used for security
 	"encoding/hex"
 	"fmt"
 	"io"
@@ -16,7 +16,7 @@ func HashFile(filepath string) (string, error) {
 	}
 	defer file.Close()
 
-	hash := md5.New()
+	hash := md5.New() //nolint:gosec // MD5 required for S3 ETag compatibility
 	if _, err := io.Copy(hash, file); err != nil {
 		return "", fmt.Errorf("failed to compute hash: %w", err)
 	}
@@ -26,7 +26,7 @@ func HashFile(filepath string) (string, error) {
 
 // HashBytes computes the MD5 hash of byte data
 func HashBytes(data []byte) string {
-	hash := md5.New()
+	hash := md5.New() //nolint:gosec // MD5 required for S3 ETag compatibility
 	hash.Write(data)
 	return hex.EncodeToString(hash.Sum(nil))
 }
