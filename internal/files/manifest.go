@@ -72,7 +72,6 @@ func BuildManifest(rootDir string, ignorePatterns []string) (*FileManifest, erro
 
 		return nil
 	})
-
 	if err != nil {
 		return nil, fmt.Errorf("failed to build manifest: %w", err)
 	}
