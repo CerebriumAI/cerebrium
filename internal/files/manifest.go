@@ -46,14 +46,22 @@ func BuildManifest(rootDir string, ignorePatterns []string) (*FileManifest, erro
 
 		// Skip directories
 		if info.IsDir() {
-			if matcher.shouldIgnore(relPath + "/") {
+			shouldIgnore, err := matcher.shouldIgnore(relPath + "/")
+			if err != nil {
+				return fmt.Errorf("failed to check ignore pattern: %w", err)
+			}
+			if shouldIgnore {
 				return filepath.SkipDir
 			}
 			return nil
 		}
 
 		// Skip files that should be ignored
-		if matcher.shouldIgnore(relPath) {
+		shouldIgnore, err := matcher.shouldIgnore(relPath)
+		if err != nil {
+			return fmt.Errorf("failed to check ignore pattern: %w", err)
+		}
+		if shouldIgnore {
 			return nil
 		}
 
@@ -142,37 +150,45 @@ func newIgnoreMatcher(patterns []string) ignoreMatcher {
 }
 
 // shouldIgnore checks if a path should be ignored
-func (m ignoreMatcher) shouldIgnore(path string) bool {
+func (m ignoreMatcher) shouldIgnore(path string) (bool, error) {
 	// Always ignore .git directory
 	if strings.HasPrefix(path, ".git/") || path == ".git" {
-		return true
+		return true, nil
 	}
 
 	// Always ignore .cerebrium directory
 	if strings.HasPrefix(path, ".cerebrium/") || path == ".cerebrium" {
-		return true
+		return true, nil
 	}
 
 	// Check against patterns
 	for _, pattern := range m.patterns {
 		// Simple pattern matching (can be enhanced with glob patterns)
-		if matched, _ := filepath.Match(pattern, path); matched {
-			return true
+		matched, err := filepath.Match(pattern, path)
+		if err != nil {
+			return false, fmt.Errorf("invalid pattern %q: %w", pattern, err)
+		}
+		if matched {
+			return true, nil
 		}
 
 		// Check if path starts with pattern (for directories)
 		if strings.HasPrefix(path, pattern) {
-			return true
+			return true, nil
 		}
 
 		// Check if any part of the path matches
 		parts := strings.Split(path, string(filepath.Separator))
 		for _, part := range parts {
-			if matched, _ := filepath.Match(pattern, part); matched {
-				return true
+			matched, err := filepath.Match(pattern, part)
+			if err != nil {
+				return false, fmt.Errorf("invalid pattern %q: %w", pattern, err)
+			}
+			if matched {
+				return true, nil
 			}
 		}
 	}
 
-	return false
+	return false, nil
 }

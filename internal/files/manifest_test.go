@@ -129,17 +129,18 @@ func TestCompareManifests(t *testing.T) {
 }
 
 func TestIgnoreMatcher(t *testing.T) {
-	patterns := []string{
-		"*.pyc",
-		"__pycache__",
-		"node_modules",
-		"*.log",
-		"temp/",
-	}
+	t.Run("valid patterns", func(t *testing.T) {
+		patterns := []string{
+			"*.pyc",
+			"__pycache__",
+			"node_modules",
+			"*.log",
+			"temp/",
+		}
 
-	matcher := newIgnoreMatcher(patterns)
+		matcher := newIgnoreMatcher(patterns)
 
-	testCases := []struct {
+		testCases := []struct {
 		path     string
 		expected bool
 	}{
@@ -162,8 +163,21 @@ func TestIgnoreMatcher(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.path, func(t *testing.T) {
-			result := matcher.shouldIgnore(tc.path)
+			result, err := matcher.shouldIgnore(tc.path)
+			require.NoError(t, err)
 			assert.Equal(t, tc.expected, result, "path: %s", tc.path)
 		})
 	}
+	})
+
+	t.Run("invalid pattern", func(t *testing.T) {
+		patterns := []string{
+			"[invalid", // Invalid pattern - unclosed bracket
+		}
+		matcher := newIgnoreMatcher(patterns)
+
+		_, err := matcher.shouldIgnore("test.txt")
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid pattern")
+	})
 }
