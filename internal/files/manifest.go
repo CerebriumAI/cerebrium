@@ -96,11 +96,11 @@ func BuildManifest(rootDir string, ignorePatterns []string) (*FileManifest, erro
 // computeFileMD5 computes the MD5 hash of a file and returns it as a hex-encoded string
 // This format matches S3 ETag format for single-part uploads
 func computeFileMD5(filepath string) (string, error) {
-	file, err := os.Open(filepath)
+	file, err := os.Open(filepath) //nolint:gosec // Path is provided by trusted source (BuildManifest)
 	if err != nil {
 		return "", err
 	}
-	defer file.Close()
+	defer file.Close() //nolint:errcheck // Deferred close error is non-critical for read operation
 
 	hash := md5.New() //nolint:gosec // MD5 required for S3 ETag compatibility
 	if _, err := io.Copy(hash, file); err != nil {
