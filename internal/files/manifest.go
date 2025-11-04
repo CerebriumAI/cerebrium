@@ -172,9 +172,20 @@ func (m ignoreMatcher) shouldIgnore(path string) (bool, error) {
 			return true, nil
 		}
 
-		// Check if path starts with pattern (for directories)
-		if strings.HasPrefix(path, pattern) {
-			return true, nil
+		// Check if pattern represents a directory that contains the path
+		// Handle directory patterns (ending with /)
+		if strings.HasSuffix(pattern, "/") {
+			if strings.HasPrefix(path, pattern) {
+				return true, nil
+			}
+		} else {
+			// For non-directory patterns, only match exact path or as parent directory
+			if path == pattern {
+				return true, nil
+			}
+			if strings.HasPrefix(path, pattern+"/") {
+				return true, nil
+			}
 		}
 
 		// Check if any part of the path matches

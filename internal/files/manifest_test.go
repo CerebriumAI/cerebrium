@@ -141,33 +141,33 @@ func TestIgnoreMatcher(t *testing.T) {
 		matcher := newIgnoreMatcher(patterns)
 
 		testCases := []struct {
-		path     string
-		expected bool
-	}{
-		// Should ignore
-		{".git/config", true},
-		{".git/", true},
-		{".cerebrium/cache", true},
-		{"file.pyc", true},
-		{"__pycache__/cache.pyc", true},
-		{"node_modules/package.json", true},
-		{"debug.log", true},
-		{"temp/file.txt", true},
+			path     string
+			expected bool
+		}{
+			// Should ignore
+			{".git/config", true},
+			{".git/", true},
+			{".cerebrium/cache", true},
+			{"file.pyc", true},
+			{"__pycache__/cache.pyc", true},
+			{"node_modules/package.json", true},
+			{"debug.log", true},
+			{"temp/file.txt", true},
 
-		// Should not ignore
-		{"main.py", false},
-		{"requirements.txt", false},
-		{"data/model.pkl", false},
-		{"src/app.js", false},
-	}
+			// Should not ignore
+			{"main.py", false},
+			{"requirements.txt", false},
+			{"data/model.pkl", false},
+			{"src/app.js", false},
+		}
 
-	for _, tc := range testCases {
-		t.Run(tc.path, func(t *testing.T) {
-			result, err := matcher.shouldIgnore(tc.path)
-			require.NoError(t, err)
-			assert.Equal(t, tc.expected, result, "path: %s", tc.path)
-		})
-	}
+		for _, tc := range testCases {
+			t.Run(tc.path, func(t *testing.T) {
+				result, err := matcher.shouldIgnore(tc.path)
+				require.NoError(t, err)
+				assert.Equal(t, tc.expected, result, "path: %s", tc.path)
+			})
+		}
 	})
 
 	t.Run("invalid pattern", func(t *testing.T) {
@@ -179,5 +179,40 @@ func TestIgnoreMatcher(t *testing.T) {
 		_, err := matcher.shouldIgnore("test.txt")
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "invalid pattern")
+	})
+
+	t.Run("no false prefix matches", func(t *testing.T) {
+		patterns := []string{
+			"a/b/my_file",
+			"src/test",
+		}
+		matcher := newIgnoreMatcher(patterns)
+
+		testCases := []struct {
+			path     string
+			expected bool
+		}{
+			// Should match - exact matches
+			{"a/b/my_file", true},
+			{"src/test", true},
+
+			// Should NOT match - partial prefix matches
+			{"a/b/my_file_hello", false},
+			{"a/b/my_file.txt", false},
+			{"src/test_utils", false},
+			{"src/testing", false},
+
+			// Should match - directory patterns
+			{"src/test/file.go", true},     // This should match because test is a directory
+			{"a/b/my_file/data.txt", true}, // This should match because my_file is a directory
+		}
+
+		for _, tc := range testCases {
+			t.Run(tc.path, func(t *testing.T) {
+				result, err := matcher.shouldIgnore(tc.path)
+				require.NoError(t, err)
+				assert.Equal(t, tc.expected, result, "path: %s", tc.path)
+			})
+		}
 	})
 }
