@@ -38,26 +38,21 @@ func BuildManifest(rootDir string, ignorePatterns []string) (*FileManifest, erro
 			return err
 		}
 
-		// Skip directories
-		if info.IsDir() {
-			// Check if directory should be ignored
-			relPath, err := filepath.Rel(rootDir, path)
-			if err != nil {
-				return err
-			}
-			if ignoreMatcher.ShouldIgnore(relPath + "/") {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-
 		// Get relative path
 		relPath, err := filepath.Rel(rootDir, path)
 		if err != nil {
 			return err
 		}
 
-		// Check if file should be ignored
+		// Skip directories
+		if info.IsDir() {
+			if ignoreMatcher.ShouldIgnore(relPath + "/") {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+
+		// Skip files that should be ignored
 		if ignoreMatcher.ShouldIgnore(relPath) {
 			return nil
 		}
