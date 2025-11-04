@@ -31,7 +31,7 @@ func BuildManifest(rootDir string, ignorePatterns []string) (*FileManifest, erro
 	}
 
 	// Create ignore matcher
-	ignoreMatcher := NewIgnoreMatcher(ignorePatterns)
+	matcher := newIgnoreMatcher(ignorePatterns)
 
 	err := filepath.Walk(rootDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -46,14 +46,14 @@ func BuildManifest(rootDir string, ignorePatterns []string) (*FileManifest, erro
 
 		// Skip directories
 		if info.IsDir() {
-			if ignoreMatcher.ShouldIgnore(relPath + "/") {
+			if matcher.shouldIgnore(relPath + "/") {
 				return filepath.SkipDir
 			}
 			return nil
 		}
 
 		// Skip files that should be ignored
-		if ignoreMatcher.ShouldIgnore(relPath) {
+		if matcher.shouldIgnore(relPath) {
 			return nil
 		}
 
@@ -129,20 +129,20 @@ func CompareManifests(current, previous FileManifest) (added, modified, deleted 
 	return added, modified, deleted
 }
 
-// IgnoreMatcher handles file ignore patterns
-type IgnoreMatcher struct {
+// ignoreMatcher handles file ignore patterns
+type ignoreMatcher struct {
 	patterns []string
 }
 
-// NewIgnoreMatcher creates a new ignore matcher
-func NewIgnoreMatcher(patterns []string) *IgnoreMatcher {
-	return &IgnoreMatcher{
+// newIgnoreMatcher creates a new ignore matcher
+func newIgnoreMatcher(patterns []string) *ignoreMatcher {
+	return &ignoreMatcher{
 		patterns: patterns,
 	}
 }
 
-// ShouldIgnore checks if a path should be ignored
-func (m *IgnoreMatcher) ShouldIgnore(path string) bool {
+// shouldIgnore checks if a path should be ignored
+func (m *ignoreMatcher) shouldIgnore(path string) bool {
 	// Always ignore .git directory
 	if strings.HasPrefix(path, ".git/") || path == ".git" {
 		return true

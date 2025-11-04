@@ -137,7 +137,7 @@ func TestIgnoreMatcher(t *testing.T) {
 		"temp/",
 	}
 
-	matcher := NewIgnoreMatcher(patterns)
+	matcher := newIgnoreMatcher(patterns)
 
 	testCases := []struct {
 		path     string
@@ -162,7 +162,7 @@ func TestIgnoreMatcher(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.path, func(t *testing.T) {
-			result := matcher.ShouldIgnore(tc.path)
+			result := matcher.shouldIgnore(tc.path)
 			assert.Equal(t, tc.expected, result, "path: %s", tc.path)
 		})
 	}
