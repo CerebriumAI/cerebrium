@@ -13,7 +13,9 @@ func TestBuildManifest(t *testing.T) {
 	// Create a temporary directory with test files
 	tmpDir, err := os.MkdirTemp("", "manifest-test-*")
 	require.NoError(t, err)
-	defer os.RemoveAll(tmpDir)
+	t.Cleanup(func() {
+		os.RemoveAll(tmpDir)
+	})
 
 	// Create test file structure
 	testFiles := map[string]string{
@@ -89,7 +91,9 @@ func TestBuildManifest(t *testing.T) {
 	t.Run("handles empty directory", func(t *testing.T) {
 		emptyDir, err := os.MkdirTemp("", "empty-manifest-test-*")
 		require.NoError(t, err)
-		defer os.RemoveAll(emptyDir)
+		t.Cleanup(func() {
+			os.RemoveAll(emptyDir)
+		})
 
 		manifest, err := BuildManifest(emptyDir, nil)
 		require.NoError(t, err)

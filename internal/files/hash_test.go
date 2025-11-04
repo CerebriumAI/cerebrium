@@ -13,7 +13,9 @@ func TestHashFile(t *testing.T) {
 	// Create a temporary file
 	tmpDir, err := os.MkdirTemp("", "hash-test-*")
 	require.NoError(t, err)
-	defer os.RemoveAll(tmpDir)
+	t.Cleanup(func() {
+		os.RemoveAll(tmpDir)
+	})
 
 	testFile := filepath.Join(tmpDir, "test.txt")
 	testContent := "Hello, World!"
@@ -106,7 +108,9 @@ func TestVerifyFileHash(t *testing.T) {
 	// Create a temporary file
 	tmpDir, err := os.MkdirTemp("", "verify-hash-test-*")
 	require.NoError(t, err)
-	defer os.RemoveAll(tmpDir)
+	t.Cleanup(func() {
+		os.RemoveAll(tmpDir)
+	})
 
 	testFile := filepath.Join(tmpDir, "test.txt")
 	testContent := "Hello, World!"
