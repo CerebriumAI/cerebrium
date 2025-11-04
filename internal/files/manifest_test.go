@@ -38,8 +38,8 @@ func TestBuildManifest(t *testing.T) {
 
 	t.Run("builds manifest with ignore patterns", func(t *testing.T) {
 		ignorePatterns := []string{
-			"node_modules",
-			"__pycache__",
+			"node_modules/",
+			"__pycache__/",
 			"*.pyc",
 		}
 
@@ -133,7 +133,7 @@ func TestIgnoreMatcher(t *testing.T) {
 		patterns := []string{
 			"*.pyc",
 			"__pycache__",
-			"node_modules",
+			"node_modules/",
 			"*.log",
 			"temp/",
 		}
