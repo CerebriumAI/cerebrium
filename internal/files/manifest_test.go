@@ -103,7 +103,7 @@ func TestBuildManifest(t *testing.T) {
 }
 
 func TestCompareManifests(t *testing.T) {
-	current := &FileManifest{
+	current := FileManifest{
 		Version: "1.0",
 		Files: []FileEntry{
 			{Path: "main.py", Hash: "abc123", Size: 100},
@@ -112,7 +112,7 @@ func TestCompareManifests(t *testing.T) {
 		},
 	}
 
-	previous := &FileManifest{
+	previous := FileManifest{
 		Version: "1.0",
 		Files: []FileEntry{
 			{Path: "main.py", Hash: "abc123", Size: 100},

@@ -97,7 +97,7 @@ func computeFileMD5(filepath string) (string, error) {
 }
 
 // CompareManifests compares two manifests and returns what changed
-func CompareManifests(current, previous *FileManifest) (added, modified, deleted []string) {
+func CompareManifests(current, previous FileManifest) (added, modified, deleted []string) {
 	// Create maps for efficient comparison
 	currentFiles := make(map[string]FileEntry)
 	for _, file := range current.Files {
