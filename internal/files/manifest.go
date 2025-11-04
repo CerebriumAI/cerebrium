@@ -24,6 +24,12 @@ type FileEntry struct {
 }
 
 // BuildManifest creates a manifest of all files in the directory
+//
+// Pattern matching behavior:
+//   - Patterns ending with "/" match directories only from root (e.g., "build/" matches "build/file" but not "src/build/file")
+//   - Wildcard patterns (e.g., "*.pyc") match anywhere in the tree
+//   - This is more restrictive than .gitignore (which matches anywhere without leading slash)
+//   - To match a directory anywhere, use a wildcard pattern like "*/build/"
 func BuildManifest(rootDir string, ignorePatterns []string) (*FileManifest, error) {
 	manifest := &FileManifest{
 		Version: "1.0",

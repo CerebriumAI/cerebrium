@@ -181,6 +181,52 @@ func TestIgnoreMatcher(t *testing.T) {
 		assert.Contains(t, err.Error(), "invalid pattern")
 	})
 
+	t.Run("directory pattern matching from root", func(t *testing.T) {
+		// Test that directory patterns only match from root, not nested
+		// NOTE: This differs from .gitignore behavior where patterns without
+		// leading slash match anywhere. Our implementation is more restrictive:
+		// all directory patterns match only from root for simplicity.
+		patterns := []string{
+			"build/", // Matches only build/ at root (not src/build/)
+			"test/",  // Matches only test/ at root (not app/test/)
+			"*.pyc",  // Wildcard patterns DO match anywhere
+			"b/",     // Test the specific case from coworker's comment
+		}
+		matcher := newIgnoreMatcher(patterns)
+
+		testCases := []struct {
+			path     string
+			expected bool
+			reason   string
+		}{
+			// Directory patterns should match from root
+			{"build/output.txt", true, "build/ at root should match"},
+			{"test/file.go", true, "test/ at root should match"},
+
+			// Directory patterns should NOT match nested directories
+			{"src/build/output.txt", false, "build/ should not match when nested"},
+			{"app/test/file.go", false, "test/ should not match when nested"},
+			{"a/b/build/file.txt", false, "build/ should not match deeply nested"},
+
+			// Wildcard patterns should match anywhere
+			{"file.pyc", true, "*.pyc should match at root"},
+			{"src/file.pyc", true, "*.pyc should match nested"},
+			{"a/b/c/file.pyc", true, "*.pyc should match deeply nested"},
+
+			// Test the specific case from coworker's comment
+			{"b/file.go", true, "b/ at root should match"},
+			{"a/b/file.go", false, "b/ should NOT match when nested in a/"},
+		}
+
+		for _, tc := range testCases {
+			t.Run(tc.path, func(t *testing.T) {
+				result, err := matcher.shouldIgnore(tc.path)
+				require.NoError(t, err)
+				assert.Equal(t, tc.expected, result, "path: %s - %s", tc.path, tc.reason)
+			})
+		}
+	})
+
 	t.Run("no false prefix matches", func(t *testing.T) {
 		patterns := []string{
 			"a/b/my_file",
