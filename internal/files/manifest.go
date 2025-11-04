@@ -85,7 +85,8 @@ func BuildManifest(rootDir string, ignorePatterns []string) (*FileManifest, erro
 	return manifest, nil
 }
 
-// computeFileMD5 computes the MD5 hash of a file
+// computeFileMD5 computes the MD5 hash of a file and returns it as a hex-encoded string
+// This format matches S3 ETag format for single-part uploads
 func computeFileMD5(filepath string) (string, error) {
 	file, err := os.Open(filepath)
 	if err != nil {

@@ -8,7 +8,8 @@ import (
 	"os"
 )
 
-// HashFile computes the MD5 hash of a file (matches S3 ETag format)
+// HashFile computes the MD5 hash of a file and returns it as a hex-encoded string
+// This format matches S3 ETag format for single-part uploads
 func HashFile(filepath string) (string, error) {
 	file, err := os.Open(filepath)
 	if err != nil {
@@ -24,19 +25,20 @@ func HashFile(filepath string) (string, error) {
 	return hex.EncodeToString(hash.Sum(nil)), nil
 }
 
-// HashBytes computes the MD5 hash of byte data
+// HashBytes computes the MD5 hash of byte data and returns it as a hex-encoded string
 func HashBytes(data []byte) string {
 	hash := md5.New() //nolint:gosec // MD5 required for S3 ETag compatibility
 	hash.Write(data)
 	return hex.EncodeToString(hash.Sum(nil))
 }
 
-// HashString computes the MD5 hash of a string
+// HashString computes the MD5 hash of a string and returns it as a hex-encoded string
 func HashString(s string) string {
 	return HashBytes([]byte(s))
 }
 
-// VerifyFileHash checks if a file matches the expected hash
+// VerifyFileHash checks if a file matches the expected MD5 hash (hex-encoded)
+// Returns an error if the hashes don't match or if the file cannot be read
 func VerifyFileHash(filepath string, expectedHash string) error {
 	actualHash, err := HashFile(filepath)
 	if err != nil {
