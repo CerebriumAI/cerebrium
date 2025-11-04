@@ -135,14 +135,14 @@ type ignoreMatcher struct {
 }
 
 // newIgnoreMatcher creates a new ignore matcher
-func newIgnoreMatcher(patterns []string) *ignoreMatcher {
-	return &ignoreMatcher{
+func newIgnoreMatcher(patterns []string) ignoreMatcher {
+	return ignoreMatcher{
 		patterns: patterns,
 	}
 }
 
 // shouldIgnore checks if a path should be ignored
-func (m *ignoreMatcher) shouldIgnore(path string) bool {
+func (m ignoreMatcher) shouldIgnore(path string) bool {
 	// Always ignore .git directory
 	if strings.HasPrefix(path, ".git/") || path == ".git" {
 		return true
