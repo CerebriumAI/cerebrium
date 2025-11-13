@@ -34,9 +34,11 @@ func GetDockerAuth() (string, error) {
 	}
 
 	// Read the config file
-	configBytes, err := os.ReadFile(configPath)
+	configBytes, err := os.ReadFile(filepath.Clean(configPath)) // #nosec G304 - path is constructed safely from home directory
 	if err != nil {
 		// If we can't read it, return empty string (not an error)
+		// We treat this as non-fatal since Docker auth is optional
+		//nolint:nilerr // Intentionally returning nil - Docker auth is optional
 		return "", nil
 	}
 
@@ -44,6 +46,8 @@ func GetDockerAuth() (string, error) {
 	var configMap map[string]interface{}
 	if err := json.Unmarshal(configBytes, &configMap); err != nil {
 		// Invalid JSON, return empty string
+		// We treat this as non-fatal since Docker auth is optional
+		//nolint:nilerr // Intentionally returning nil - Docker auth is optional
 		return "", nil
 	}
 
