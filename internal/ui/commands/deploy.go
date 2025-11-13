@@ -3,7 +3,6 @@ package commands
 import (
 	"context"
 	"fmt"
-	"github.com/cerebriumai/cerebrium/internal/version"
 	"io"
 	"log/slog"
 	"net/http"
@@ -14,7 +13,10 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cerebriumai/cerebrium/internal/version"
+
 	"github.com/cerebriumai/cerebrium/internal/api"
+	"github.com/cerebriumai/cerebrium/internal/auth"
 	"github.com/cerebriumai/cerebrium/internal/files"
 	"github.com/cerebriumai/cerebrium/internal/ui"
 	"github.com/cerebriumai/cerebrium/internal/ui/logging"
@@ -661,6 +663,14 @@ func (m *DeployView) createApp() tea.Msg {
 	payload["logLevel"] = m.conf.LogLevel
 	payload["disableBuildLogs"] = m.conf.DisableBuildLogs
 	payload["cliVersion"] = version.Version
+
+	// Include Docker auth if available for private registry support
+	dockerAuth, err := auth.GetDockerAuth()
+	if err != nil {
+		slog.Warn("Failed to read Docker auth", "error", err)
+	} else if dockerAuth != "" {
+		payload["dockerAuth"] = dockerAuth
+	}
 
 	response, err := m.conf.Client.CreateApp(m.ctx, m.conf.ProjectID, payload)
 	if err != nil {
