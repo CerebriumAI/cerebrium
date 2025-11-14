@@ -39,8 +39,6 @@ func LoadFromPath(configPath string) (*Config, error) {
 	}
 
 	// Read the config file directly
-	// Note: We can't use viper here because Docker registry URLs contain dots
-	// which viper interprets as nested keys, breaking the parsing
 	configBytes, err := os.ReadFile(filepath.Clean(configPath)) // #nosec G304 - path is constructed from home directory
 	if err != nil {
 		return nil, fmt.Errorf("failed to read Docker config: %w", err)
