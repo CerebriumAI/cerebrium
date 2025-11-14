@@ -5,20 +5,18 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-
-	"github.com/spf13/viper"
 )
 
 // Config represents the Docker config.json structure
 type Config struct {
-	Auths       map[string]Auth   `json:"auths" mapstructure:"auths"`
-	CredStore   string            `json:"credStore,omitempty" mapstructure:"credStore"`
-	CredHelpers map[string]string `json:"credHelpers,omitempty" mapstructure:"credHelpers"`
+	Auths       map[string]Auth   `json:"auths"`
+	CredStore   string            `json:"credStore,omitempty"`
+	CredHelpers map[string]string `json:"credHelpers,omitempty"`
 }
 
 // Auth represents auth for a single registry
 type Auth struct {
-	Auth string `json:"auth,omitempty" mapstructure:"auth"`
+	Auth string `json:"auth,omitempty"`
 }
 
 // Load reads the Docker config from the default location (~/.docker/config.json)
@@ -40,19 +38,17 @@ func LoadFromPath(configPath string) (*Config, error) {
 		return nil, nil
 	}
 
-	// Set up viper to read Docker config
-	v := viper.New()
-	v.SetConfigFile(configPath)
-	v.SetConfigType("json")
-
-	// Read the config file
-	if err := v.ReadInConfig(); err != nil {
+	// Read the config file directly
+	// Note: We can't use viper here because Docker registry URLs contain dots
+	// which viper interprets as nested keys, breaking the parsing
+	configBytes, err := os.ReadFile(filepath.Clean(configPath)) // #nosec G304 - path is constructed from home directory
+	if err != nil {
 		return nil, fmt.Errorf("failed to read Docker config: %w", err)
 	}
 
-	// Unmarshal into our struct
+	// Parse the JSON
 	var config Config
-	if err := v.Unmarshal(&config); err != nil {
+	if err := json.Unmarshal(configBytes, &config); err != nil {
 		return nil, fmt.Errorf("failed to parse Docker config: %w", err)
 	}
 
