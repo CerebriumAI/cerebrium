@@ -63,38 +63,6 @@ func GetDockerAuth() (string, error) {
 	return string(configBytes), nil
 }
 
-// GetDockerAuthForRegistry extracts auth for a specific registry from Docker config
-func GetDockerAuthForRegistry(registryURL string) (string, error) {
-	configStr, err := GetDockerAuth()
-	if err != nil {
-		return "", err
-	}
-
-	if configStr == "" {
-		return "", nil
-	}
-
-	var config DockerConfig
-	if err := json.Unmarshal([]byte(configStr), &config); err != nil {
-		return "", fmt.Errorf("failed to parse Docker config: %w", err)
-	}
-
-	// Check if auth exists for the specific registry
-	if auth, exists := config.Auths[registryURL]; exists {
-		authJSON, err := json.Marshal(map[string]map[string]DockerAuth{
-			"auths": {
-				registryURL: auth,
-			},
-		})
-		if err != nil {
-			return "", fmt.Errorf("failed to marshal auth: %w", err)
-		}
-		return string(authJSON), nil
-	}
-
-	return "", nil // No auth found for this registry
-}
-
 // HasDockerAuth checks if Docker authentication is available
 func HasDockerAuth() bool {
 	auth, _ := GetDockerAuth()
