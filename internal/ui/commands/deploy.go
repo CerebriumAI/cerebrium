@@ -669,7 +669,10 @@ func (m *DeployView) createApp() tea.Msg {
 	if err != nil {
 		slog.Warn("Failed to read Docker auth", "error", err)
 	} else if dockerAuth != "" {
+		slog.Info("Docker auth detected", "length", len(dockerAuth))
 		payload["dockerAuth"] = dockerAuth
+	} else {
+		slog.Info("No Docker auth available")
 	}
 
 	response, err := m.conf.Client.CreateApp(m.ctx, m.conf.ProjectID, payload)
