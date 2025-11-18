@@ -43,7 +43,7 @@ const (
 	// maxDepsSize is the maximum allowed dependencies size (380KB)
 	maxDepsSize = 380 * 1024
 	// finalLogPollAttempts is the number of times to poll for final logs
-	finalLogPollAttempts = 10
+	finalLogPollAttempts = 20
 	// maxLogsToDisplay is the maximum number of logs to display in the UI
 	maxLogsToDisplay = 20
 )
