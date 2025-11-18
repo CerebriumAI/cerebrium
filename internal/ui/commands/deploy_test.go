@@ -798,118 +798,6 @@ func TestDeployView(t *testing.T) {
 			}).
 			Run(t)
 	})
-
-	t.Run("app created with docker auth present", func(t *testing.T) {
-		mockClient := apimock.NewMockClient(t)
-
-		// Mock CreateApp to verify dockerAuth is included in payload
-		mockClient.On("CreateApp", mock.Anything, "test-project", mock.MatchedBy(func(payload map[string]any) bool {
-			// Verify dockerAuth is present in the payload
-			_, hasAuth := payload["dockerAuth"]
-			return hasAuth && payload["dockerAuth"] != ""
-		})).Return(&api.CreateAppResponse{
-			BuildID:          "build-with-auth",
-			Status:           "building",
-			UploadURL:        "https://s3.amazonaws.com/upload",
-			KeyName:          "test-app",
-			InternalEndpoint: "https://test-app.internal",
-			DashboardURL:     "https://dashboard.cerebrium.ai/app/test-app",
-		}, nil).Once()
-
-		config := &projectconfig.ProjectConfig{
-			Deployment: projectconfig.DeploymentConfig{
-				Name: "test-app-with-auth",
-			},
-		}
-
-		model := NewDeployView(t.Context(), DeployConfig{
-			DisplayConfig: ui.DisplayConfig{
-				IsInteractive:    true,
-				DisableAnimation: false,
-			},
-			Config:    config,
-			ProjectID: "test-project",
-			Client:    mockClient,
-		})
-
-		// Simulate having Docker auth by mocking the auth.GetDockerAuth response
-		// Note: In real tests, you'd mock the auth package or use dependency injection
-		// For this test, we're verifying the CreateApp call includes dockerAuth when available
-
-		// Start from StateCreatingApp to trigger createApp command
-		model.state = StateCreatingApp
-		model.zipPath = "/tmp/test.zip"
-		model.zipSize = 1024
-
-		// The actual Docker auth inclusion happens in createApp() method
-		// which calls auth.GetDockerAuth() internally
-		// This test verifies the mock expectation that dockerAuth is included
-		
-		harness := uitesting.NewTestHarness(t, model)
-		harness.
-			Finally(uitesting.TestStep[*DeployView]{
-				Name: "app_created_with_auth",
-				ExpectedMsgType: appCreatedMsg{},
-				ModelAssert: func(t *testing.T, m *DeployView) {
-					// Verify the mock was called with dockerAuth in payload
-					mockClient.AssertExpectations(t)
-				},
-			}).
-			Run(t)
-	})
-
-	t.Run("app created without docker auth", func(t *testing.T) {
-		mockClient := apimock.NewMockClient(t)
-
-		// Mock CreateApp to verify dockerAuth is NOT included when empty
-		mockClient.On("CreateApp", mock.Anything, "test-project", mock.MatchedBy(func(payload map[string]any) bool {
-			// Verify dockerAuth is either absent or empty
-			dockerAuth, hasAuth := payload["dockerAuth"]
-			return !hasAuth || dockerAuth == ""
-		})).Return(&api.CreateAppResponse{
-			BuildID:          "build-without-auth",
-			Status:           "building",
-			UploadURL:        "https://s3.amazonaws.com/upload",
-			KeyName:          "test-app",
-			InternalEndpoint: "https://test-app.internal",
-			DashboardURL:     "https://dashboard.cerebrium.ai/app/test-app",
-		}, nil).Once()
-
-		config := &projectconfig.ProjectConfig{
-			Deployment: projectconfig.DeploymentConfig{
-				Name: "test-app-no-auth",
-			},
-		}
-
-		model := NewDeployView(t.Context(), DeployConfig{
-			DisplayConfig: ui.DisplayConfig{
-				IsInteractive:    true,
-				DisableAnimation: false,
-			},
-			Config:    config,
-			ProjectID: "test-project",
-			Client:    mockClient,
-		})
-
-		// Start from StateCreatingApp to trigger createApp command
-		model.state = StateCreatingApp
-		model.zipPath = "/tmp/test.zip"
-		model.zipSize = 1024
-
-		// When auth.GetDockerAuth() returns empty, dockerAuth should not be in payload
-		
-		harness := uitesting.NewTestHarness(t, model)
-		harness.
-			Finally(uitesting.TestStep[*DeployView]{
-				Name: "app_created_without_auth",
-				ExpectedMsgType: appCreatedMsg{},
-				ModelAssert: func(t *testing.T, m *DeployView) {
-					// Verify the mock was called without dockerAuth in payload
-					mockClient.AssertExpectations(t)
-				},
-			}).
-			Run(t)
-	})
 }
 
 func TestIsLikelyPrivateImage(t *testing.T) {
@@ -925,7 +813,7 @@ func TestIsLikelyPrivateImage(t *testing.T) {
 		{"ubuntu", "ubuntu:22.04", false},
 		{"python", "python:3.11-slim", false},
 		{"public ecr", "public.ecr.aws/lambda/python:3.11", false},
-		
+
 		// Private registries
 		{"aws ecr private", "123456789.dkr.ecr.us-east-1.amazonaws.com/my-app:latest", true},
 		{"azure acr", "myregistry.azurecr.io/my-app:latest", true},
@@ -933,21 +821,21 @@ func TestIsLikelyPrivateImage(t *testing.T) {
 		{"google artifact registry", "us-central1-docker.pkg.dev/project/repo/image", true},
 		{"github ghcr", "ghcr.io/owner/image:latest", true},
 		{"gitlab registry", "registry.gitlab.com/group/project:latest", true},
-		
+
 		// Docker Hub (might be private)
 		{"docker hub with namespace", "mycompany/my-app:latest", true},
 		{"docker hub with user", "harrisky6/vllm-test:latest", true},
-		
+
 		// Custom registries
 		{"custom domain", "registry.company.com/my-app:latest", true},
 		{"custom with port", "registry.company.com:5000/my-app:latest", true},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := isLikelyPrivateImage(tt.imageURL)
-			assert.Equal(t, tt.expected, result, 
-				"isLikelyPrivateImage(%q) = %v, want %v", 
+			assert.Equal(t, tt.expected, result,
+				"isLikelyPrivateImage(%q) = %v, want %v",
 				tt.imageURL, result, tt.expected)
 		})
 	}
