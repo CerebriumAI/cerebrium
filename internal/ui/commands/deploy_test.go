@@ -912,6 +912,47 @@ func TestDeployView(t *testing.T) {
 	})
 }
 
+func TestIsLikelyPrivateImage(t *testing.T) {
+	tests := []struct {
+		name     string
+		imageURL string
+		expected bool
+	}{
+		// Public images
+		{"empty string", "", false},
+		{"nvidia cuda", "nvidia/cuda:12.0.0-base-ubuntu22.04", false},
+		{"debian", "debian:bookworm-slim", false},
+		{"ubuntu", "ubuntu:22.04", false},
+		{"python", "python:3.11-slim", false},
+		{"public ecr", "public.ecr.aws/lambda/python:3.11", false},
+		
+		// Private registries
+		{"aws ecr private", "123456789.dkr.ecr.us-east-1.amazonaws.com/my-app:latest", true},
+		{"azure acr", "myregistry.azurecr.io/my-app:latest", true},
+		{"google gcr", "gcr.io/my-project/my-app:latest", true},
+		{"google artifact registry", "us-central1-docker.pkg.dev/project/repo/image", true},
+		{"github ghcr", "ghcr.io/owner/image:latest", true},
+		{"gitlab registry", "registry.gitlab.com/group/project:latest", true},
+		
+		// Docker Hub (might be private)
+		{"docker hub with namespace", "mycompany/my-app:latest", true},
+		{"docker hub with user", "harrisky6/vllm-test:latest", true},
+		
+		// Custom registries
+		{"custom domain", "registry.company.com/my-app:latest", true},
+		{"custom with port", "registry.company.com:5000/my-app:latest", true},
+	}
+	
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := isLikelyPrivateImage(tt.imageURL)
+			assert.Equal(t, tt.expected, result, 
+				"isLikelyPrivateImage(%q) = %v, want %v", 
+				tt.imageURL, result, tt.expected)
+		})
+	}
+}
+
 func TestDeployView_GetError(t *testing.T) {
 	config := &projectconfig.ProjectConfig{
 		Deployment: projectconfig.DeploymentConfig{
