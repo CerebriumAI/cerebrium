@@ -9,8 +9,18 @@ import (
 
 // Config represents the Docker config.json structure
 type Config struct {
-	Auths       map[string]Auth   `json:"auths"`
-	CredStore   string            `json:"credStore,omitempty"`
+	// Auths contains base64-encoded credentials for each registry
+	// Example: {"docker.io": {"auth": "base64(username:password)"}}
+	Auths map[string]Auth `json:"auths"`
+
+	// CredStore specifies an external program to manage ALL registry credentials
+	// Example: "osxkeychain" on macOS, "wincred" on Windows, "secretservice" on Linux
+	// When set, credentials are stored in the OS credential store instead of this file
+	CredStore string `json:"credStore,omitempty"`
+
+	// CredHelpers specifies external programs for specific registries only
+	// Example: {"gcr.io": "gcloud", "123456.dkr.ecr.us-east-1.amazonaws.com": "ecr-login"}
+	// Takes precedence over CredStore for specified registries
 	CredHelpers map[string]string `json:"credHelpers,omitempty"`
 }
 

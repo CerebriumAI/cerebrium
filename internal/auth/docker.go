@@ -37,9 +37,3 @@ func GetDockerAuth() (string, error) {
 
 	return jsonStr, nil
 }
-
-// HasDockerAuth checks if Docker authentication is available
-func HasDockerAuth() bool {
-	auth, _ := GetDockerAuth()
-	return auth != ""
-}
