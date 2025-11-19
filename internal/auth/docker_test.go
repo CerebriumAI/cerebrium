@@ -42,14 +42,14 @@ func TestGetDockerAuth(t *testing.T) {
 				}
 			}
 		}`
-		
+
 		err = os.WriteFile(configPath, []byte(configData), 0600)
 		require.NoError(t, err)
 
 		auth, err := GetDockerAuth()
 		assert.NoError(t, err)
 		assert.NotEmpty(t, auth)
-		
+
 		// Verify it contains the expected registries
 		assert.Contains(t, auth, "docker.io")
 		assert.Contains(t, auth, "gcr.io")
@@ -57,7 +57,7 @@ func TestGetDockerAuth(t *testing.T) {
 		assert.Contains(t, auth, "anNvbl9rZXk=")
 	})
 
-	t.Run("returns empty when using credential helpers", func(t *testing.T) {
+	t.Run("returns empty when no auth entries", func(t *testing.T) {
 		tmpHome := t.TempDir()
 		t.Setenv("HOME", tmpHome)
 		t.Setenv("USERPROFILE", tmpHome) // For Windows
@@ -67,10 +67,9 @@ func TestGetDockerAuth(t *testing.T) {
 		require.NoError(t, err)
 
 		configPath := filepath.Join(dockerDir, "config.json")
-		// Config with credStore - credentials are external
+		// Config with empty auths
 		configData := `{
-			"auths": {},
-			"credStore": "osxkeychain"
+			"auths": {}
 		}`
 		
 		err = os.WriteFile(configPath, []byte(configData), 0600)
@@ -78,7 +77,7 @@ func TestGetDockerAuth(t *testing.T) {
 
 		auth, err := GetDockerAuth()
 		assert.NoError(t, err)
-		assert.Empty(t, auth, "Should return empty when using credential helpers")
+		assert.Empty(t, auth, "Should return empty when no auth entries")
 	})
 
 	t.Run("returns empty on config read error", func(t *testing.T) {
@@ -100,35 +99,4 @@ func TestGetDockerAuth(t *testing.T) {
 		assert.Empty(t, auth)
 	})
 
-	t.Run("handles config with both auth and credHelpers", func(t *testing.T) {
-		tmpHome := t.TempDir()
-		t.Setenv("HOME", tmpHome)
-		t.Setenv("USERPROFILE", tmpHome) // For Windows
-
-		dockerDir := filepath.Join(tmpHome, ".docker")
-		err := os.MkdirAll(dockerDir, 0700)
-		require.NoError(t, err)
-
-		configPath := filepath.Join(dockerDir, "config.json")
-		// Mixed config - has some auth but also uses credHelpers
-		configData := `{
-			"auths": {
-				"docker.io": {
-					"auth": "dXNlcjpwYXNz"
-				}
-			},
-			"credHelpers": {
-				"gcr.io": "gcloud"
-			}
-		}`
-		
-		err = os.WriteFile(configPath, []byte(configData), 0600)
-		require.NoError(t, err)
-
-		auth, err := GetDockerAuth()
-		assert.NoError(t, err)
-		// Should return empty because credHelpers are present
-		// (we can't access credentials stored externally)
-		assert.Empty(t, auth)
-	})
 }

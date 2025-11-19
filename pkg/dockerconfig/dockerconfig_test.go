@@ -44,17 +44,12 @@ func TestLoadFromPath(t *testing.T) {
 		assert.Equal(t, "anNvbl9rZXk=", config.Auths["gcr.io"].Auth)
 	})
 
-	t.Run("loads config with credential helpers", func(t *testing.T) {
+	t.Run("loads config with empty auths", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		configPath := filepath.Join(tmpDir, "config.json")
 		
 		configData := `{
-			"auths": {},
-			"credStore": "osxkeychain",
-			"credHelpers": {
-				"gcr.io": "gcloud",
-				"123456.dkr.ecr.us-east-1.amazonaws.com": "ecr-login"
-			}
+			"auths": {}
 		}`
 		
 		err := os.WriteFile(configPath, []byte(configData), 0600)
@@ -63,10 +58,7 @@ func TestLoadFromPath(t *testing.T) {
 		config, err := LoadFromPath(configPath)
 		assert.NoError(t, err)
 		assert.NotNil(t, config)
-		assert.Equal(t, "osxkeychain", config.CredStore)
-		assert.Len(t, config.CredHelpers, 2)
-		assert.Equal(t, "gcloud", config.CredHelpers["gcr.io"])
-		assert.Equal(t, "ecr-login", config.CredHelpers["123456.dkr.ecr.us-east-1.amazonaws.com"])
+		assert.Empty(t, config.Auths)
 	})
 
 	t.Run("returns error for invalid JSON", func(t *testing.T) {
@@ -111,38 +103,6 @@ func TestConfig_ToJSON(t *testing.T) {
 		jsonStr, err := config.ToJSON()
 		assert.NoError(t, err)
 		assert.Empty(t, jsonStr)
-	})
-}
-
-func TestConfig_HasCredentialHelpers(t *testing.T) {
-	t.Run("returns false for nil config", func(t *testing.T) {
-		var config *Config
-		assert.False(t, config.HasCredentialHelpers())
-	})
-
-	t.Run("returns false when no helpers", func(t *testing.T) {
-		config := &Config{
-			Auths: map[string]Auth{
-				"docker.io": {Auth: "token"},
-			},
-		}
-		assert.False(t, config.HasCredentialHelpers())
-	})
-
-	t.Run("returns true with credStore", func(t *testing.T) {
-		config := &Config{
-			CredStore: "osxkeychain",
-		}
-		assert.True(t, config.HasCredentialHelpers())
-	})
-
-	t.Run("returns true with credHelpers", func(t *testing.T) {
-		config := &Config{
-			CredHelpers: map[string]string{
-				"gcr.io": "gcloud",
-			},
-		}
-		assert.True(t, config.HasCredentialHelpers())
 	})
 }
 

@@ -15,14 +15,8 @@ func GetDockerAuth() (string, error) {
 		return "", nil
 	}
 
-	// No config found
-	if config == nil {
-		return "", nil
-	}
-
-	// If using credential helpers, credentials are stored externally
-	// and we can't access them directly
-	if config.HasCredentialHelpers() {
+	// No config found or no auth entries
+	if config == nil || !config.HasAuth() {
 		return "", nil
 	}
 
