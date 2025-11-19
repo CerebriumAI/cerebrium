@@ -25,21 +25,45 @@ builds:
       - -X github.com/cerebriumai/cerebrium/internal/version.Commit={{.Commit}}
       - -X github.com/cerebriumai/cerebrium/internal/version.BuildDate={{.Date}}
 
-# Sign and notarize macOS binaries
-#notarize:
-#  macos:
-#    - enabled: '{{ isEnvSet "MACOS_SIGN_P12" }}'
-#      ids:
-#        - cerebrium
-#      sign:
-#        certificate: "{{.Env.MACOS_SIGN_P12}}"
-#        password: "{{.Env.MACOS_SIGN_PASSWORD}}"
-#      notarize:
-#        issuer_id: "{{.Env.MACOS_NOTARY_ISSUER_ID}}"
-#        key_id: "{{.Env.MACOS_NOTARY_KEY_ID}}"
-#        key: "{{.Env.MACOS_NOTARY_KEY}}"
-#        wait: true
-#        timeout: 20m
+# macOS Code Signing and Notarization
+# This uses GoReleaser's cross-platform notarization with anchore/quill
+# Prerequisites: Apple Developer account and certificates (see docs/SIGNING_SETUP.md)
+notarize:
+  macos:
+    - # Only notarize if credentials are present (allows builds without signing in forks/local)
+      enabled: '{{ isEnvSet "MACOS_CERTIFICATE_P12" }}'
+
+      # IDs of binaries to sign and notarize (must match build id)
+      ids:
+        - cerebrium
+
+      # Sign the binary with Developer ID certificate
+      sign:
+        # Base64-encoded P12 certificate
+        certificate: "{{.Env.MACOS_CERTIFICATE_P12}}"
+
+        # Password for the P12 certificate
+        password: "{{.Env.MACOS_CERTIFICATE_PASSWORD}}"
+
+        # Entitlements file (optional, defaults to none)
+        # entitlements: ./entitlements.plist
+
+      # Notarize using App Store Connect API
+      notarize:
+        # App Store Connect API Issuer ID
+        issuer_id: "{{.Env.MACOS_NOTARIZATION_ISSUER_ID}}"
+
+        # App Store Connect API Key ID
+        key_id: "{{.Env.MACOS_NOTARIZATION_KEY_ID}}"
+
+        # Base64-encoded .p8 API key
+        key: "{{.Env.MACOS_NOTARIZATION_KEY}}"
+
+        # Wait for notarization to complete
+        wait: true
+
+        # Timeout for notarization (Apple can be slow)
+        timeout: 20m
 
 archives:
   - id: cerebrium
@@ -62,7 +86,7 @@ archives:
       - CHANGELOG*
 
 checksum:
-  name_template: 'checksums.txt'
+  name_template: "checksums.txt"
 
 snapshot:
   version_template: "{{ incpatch .Version }}-next"
@@ -71,10 +95,10 @@ changelog:
   sort: asc
   filters:
     exclude:
-      - '^docs:'
-      - '^test:'
-      - '^chore:'
-      - 'typo'
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+      - "typo"
 
 # Homebrew tap
 homebrew_casks:
@@ -114,7 +138,6 @@ release:
   draft: false
   prerelease: auto
   name_template: "v{{.Version}}"
-
 # Docker images (optional)
 # dockers:
 #   - image_templates:
