@@ -3,7 +3,6 @@ package commands
 import (
 	"context"
 	"fmt"
-	"github.com/cerebriumai/cerebrium/internal/version"
 	"io"
 	"log/slog"
 	"net/http"
@@ -14,7 +13,10 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cerebriumai/cerebrium/internal/version"
+
 	"github.com/cerebriumai/cerebrium/internal/api"
+	"github.com/cerebriumai/cerebrium/internal/auth"
 	"github.com/cerebriumai/cerebrium/internal/files"
 	"github.com/cerebriumai/cerebrium/internal/ui"
 	"github.com/cerebriumai/cerebrium/internal/ui/logging"
@@ -656,11 +658,95 @@ func (m *DeployView) zipFiles() tea.Msg {
 	return filesZippedMsg{zipPath: zipPath, zipSize: zipSize}
 }
 
+// isLikelyPrivateImage checks if the image URL suggests it's from a private registry
+func isLikelyPrivateImage(imageURL string) bool {
+	if imageURL == "" {
+		return false
+	}
+
+	// Public images that don't need auth
+	publicPrefixes := []string{
+		"nvidia/cuda:",
+		"debian:",
+		"ubuntu:",
+		"python:",
+		"public.ecr.aws/", // Public ECR repos
+	}
+
+	for _, prefix := range publicPrefixes {
+		if strings.HasPrefix(imageURL, prefix) {
+			return false
+		}
+	}
+
+	// Private registry indicators
+	privateIndicators := []string{
+		".dkr.ecr.",            // AWS ECR private
+		".azurecr.io/",         // Azure Container Registry
+		"gcr.io/",              // Google Container Registry
+		".pkg.dev/",            // Google Artifact Registry
+		"ghcr.io/",             // GitHub Container Registry
+		"registry.gitlab.com/", // GitLab Container Registry
+	}
+
+	for _, indicator := range privateIndicators {
+		if strings.Contains(imageURL, indicator) {
+			return true
+		}
+	}
+
+	// Docker Hub: if it has a namespace (user/org), it might be private
+	// Format: [registry/]namespace/image:tag
+	parts := strings.Split(imageURL, "/")
+	if len(parts) >= 2 && !strings.Contains(parts[0], ".") {
+		// Looks like namespace/image format (Docker Hub)
+		// Could be private, worth checking for auth
+		return true
+	}
+
+	// Custom domain registries (e.g., registry.company.com/image)
+	if strings.Contains(strings.Split(imageURL, "/")[0], ".") {
+		return true
+	}
+
+	return false
+}
+
 func (m *DeployView) createApp() tea.Msg {
 	payload := m.conf.Config.ToPayload()
 	payload["logLevel"] = m.conf.LogLevel
 	payload["disableBuildLogs"] = m.conf.DisableBuildLogs
 	payload["cliVersion"] = version.Version
+
+	// Include Docker auth if available for private registry support
+	baseImage := m.conf.Config.Deployment.DockerBaseImageURL
+	dockerAuth, err := auth.GetDockerAuth()
+
+	if err != nil {
+		// Only warn if we expect this image might need auth
+		if isLikelyPrivateImage(baseImage) {
+			slog.Warn("Failed to read Docker auth (may be needed for private image)",
+				"error", err,
+				"image", baseImage)
+		} else {
+			// For public images, just debug log
+			slog.Debug("Docker auth read error (not needed for public image)",
+				"error", err,
+				"image", baseImage)
+		}
+	} else if dockerAuth != "" {
+		slog.Info("Docker auth detected", "length", len(dockerAuth))
+		payload["dockerAuth"] = dockerAuth
+	} else {
+		// Only log if we might have expected auth
+		if isLikelyPrivateImage(baseImage) {
+			slog.Info("No Docker auth found (image may require authentication)",
+				"image", baseImage)
+		} else {
+			slog.Debug("No Docker auth (using public image)",
+				"image", baseImage)
+		}
+	}
 
 	response, err := m.conf.Client.CreateApp(m.ctx, m.conf.ProjectID, payload)
 	if err != nil {
