@@ -63,7 +63,7 @@ notarize:
         wait: true
 
         # Timeout for notarization (Apple can be slow)
-        timeout: 20m
+        timeout: 45m
 
 archives:
   - id: cerebrium
