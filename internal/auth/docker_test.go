@@ -10,19 +10,11 @@ import (
 )
 
 func TestGetDockerAuth(t *testing.T) {
-	// Save original HOME and USERPROFILE to restore later
-	originalHome := os.Getenv("HOME")
-	originalUserProfile := os.Getenv("USERPROFILE")
-	defer func() {
-		os.Setenv("HOME", originalHome)
-		os.Setenv("USERPROFILE", originalUserProfile)
-	}()
-
 	t.Run("returns empty when no config exists", func(t *testing.T) {
 		// Set HOME and USERPROFILE to a temp directory with no Docker config
 		tmpHome := t.TempDir()
-		os.Setenv("HOME", tmpHome)
-		os.Setenv("USERPROFILE", tmpHome) // For Windows
+		t.Setenv("HOME", tmpHome)
+		t.Setenv("USERPROFILE", tmpHome) // For Windows
 
 		auth, err := GetDockerAuth()
 		assert.NoError(t, err)
@@ -32,8 +24,8 @@ func TestGetDockerAuth(t *testing.T) {
 	t.Run("returns auth JSON when config has auth entries", func(t *testing.T) {
 		// Create a temp HOME with Docker config
 		tmpHome := t.TempDir()
-		os.Setenv("HOME", tmpHome)
-		os.Setenv("USERPROFILE", tmpHome) // For Windows
+		t.Setenv("HOME", tmpHome)
+		t.Setenv("USERPROFILE", tmpHome) // For Windows
 
 		dockerDir := filepath.Join(tmpHome, ".docker")
 		err := os.MkdirAll(dockerDir, 0700)
@@ -67,8 +59,8 @@ func TestGetDockerAuth(t *testing.T) {
 
 	t.Run("returns empty when using credential helpers", func(t *testing.T) {
 		tmpHome := t.TempDir()
-		os.Setenv("HOME", tmpHome)
-		os.Setenv("USERPROFILE", tmpHome) // For Windows
+		t.Setenv("HOME", tmpHome)
+		t.Setenv("USERPROFILE", tmpHome) // For Windows
 
 		dockerDir := filepath.Join(tmpHome, ".docker")
 		err := os.MkdirAll(dockerDir, 0700)
@@ -91,8 +83,8 @@ func TestGetDockerAuth(t *testing.T) {
 
 	t.Run("returns empty on config read error", func(t *testing.T) {
 		tmpHome := t.TempDir()
-		os.Setenv("HOME", tmpHome)
-		os.Setenv("USERPROFILE", tmpHome) // For Windows
+		t.Setenv("HOME", tmpHome)
+		t.Setenv("USERPROFILE", tmpHome) // For Windows
 
 		dockerDir := filepath.Join(tmpHome, ".docker")
 		err := os.MkdirAll(dockerDir, 0700)
@@ -110,8 +102,8 @@ func TestGetDockerAuth(t *testing.T) {
 
 	t.Run("handles config with both auth and credHelpers", func(t *testing.T) {
 		tmpHome := t.TempDir()
-		os.Setenv("HOME", tmpHome)
-		os.Setenv("USERPROFILE", tmpHome) // For Windows
+		t.Setenv("HOME", tmpHome)
+		t.Setenv("USERPROFILE", tmpHome) // For Windows
 
 		dockerDir := filepath.Join(tmpHome, ".docker")
 		err := os.MkdirAll(dockerDir, 0700)
