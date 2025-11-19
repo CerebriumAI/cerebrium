@@ -1,9 +1,10 @@
 name: Release
 
 on:
-  push:
-    tags:
-      - "v*"
+  # Temporarily disabled for local release
+  # push:
+  #   tags:
+  #     - "v*"
   workflow_dispatch:
     inputs:
       skip-tests:
