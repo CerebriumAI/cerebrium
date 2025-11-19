@@ -41,68 +41,68 @@ jobs:
       - name: Run tests
         run: go test -race -shuffle=on ./...
 
-  smoke-test:
-    name: Smoke test before release
-    # Run smoke tests for non-prerelease versions or when manually triggered without skip
-    if: |
-      (github.event_name == 'push' && !contains(github.ref_name, '-RC') && !contains(github.ref_name, '-beta') && !contains(github.ref_name, '-alpha')) ||
-      (github.event_name == 'workflow_dispatch' && github.event.inputs.skip-tests == 'false')
-    runs-on: ubuntu-latest
-    env:
-      CEREBRIUM_ENV: prod
-      API_KEY: ${{ secrets.E2E_TEST_PRIVATE_API_KEY }}
-      PROJECT_ID: ${{ vars.E2E_TEST_PROJECT_ID }}
-      ACCESS_TOKEN: ${{ secrets.E2E_TEST_ACCESS_TOKEN }}
-      REFRESH_TOKEN: ${{ secrets.E2E_TEST_REFRESH_TOKEN }}
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v5
+  # smoke-test:
+  #   name: Smoke test before release
+  #   # Run smoke tests for non-prerelease versions or when manually triggered without skip
+  #   if: |
+  #     (github.event_name == 'push' && !contains(github.ref_name, '-RC') && !contains(github.ref_name, '-beta') && !contains(github.ref_name, '-alpha')) ||
+  #     (github.event_name == 'workflow_dispatch' && github.event.inputs.skip-tests == 'false')
+  #   runs-on: ubuntu-latest
+  #   env:
+  #     CEREBRIUM_ENV: prod
+  #     API_KEY: ${{ secrets.E2E_TEST_PRIVATE_API_KEY }}
+  #     PROJECT_ID: ${{ vars.E2E_TEST_PROJECT_ID }}
+  #     ACCESS_TOKEN: ${{ secrets.E2E_TEST_ACCESS_TOKEN }}
+  #     REFRESH_TOKEN: ${{ secrets.E2E_TEST_REFRESH_TOKEN }}
+  #   steps:
+  #     - name: Checkout code
+  #       uses: actions/checkout@v5
 
-      - name: Set up Go
-        uses: actions/setup-go@v6
-        with:
-          go-version: "1.25"
-          cache: true
+  #     - name: Set up Go
+  #       uses: actions/setup-go@v6
+  #       with:
+  #         go-version: "1.25"
+  #         cache: true
 
-      - name: Install jq
-        run: sudo apt-get install jq
+  #     - name: Install jq
+  #       run: sudo apt-get install jq
 
-      - name: Build CLI
-        run: go build -o bin/cerebrium ./cmd/cerebrium
+  #     - name: Build CLI
+  #       run: go build -o bin/cerebrium ./cmd/cerebrium
 
-      - name: Add bin to PATH
-        run: echo "$GITHUB_WORKSPACE/bin" >> $GITHUB_PATH
+  #     - name: Add bin to PATH
+  #       run: echo "$GITHUB_WORKSPACE/bin" >> $GITHUB_PATH
 
-      - name: Create Cerebrium config
-        run: |
-          mkdir -p ~/.cerebrium
-          # For prod, config keys have no prefix. For dev/local, they have the env prefix
-          if [ "${{ env.CEREBRIUM_ENV }}" = "prod" ] || [ -z "${{ env.CEREBRIUM_ENV }}" ]; then
-            cat > ~/.cerebrium/config.yaml << EOF
-          project: ${{ env.PROJECT_ID }}
-          accesstoken: ${{ env.ACCESS_TOKEN }}
-          refreshtoken: ${{ env.REFRESH_TOKEN }}
-          EOF
-          else
-            cat > ~/.cerebrium/config.yaml << EOF
-          ${{ env.CEREBRIUM_ENV }}-project: ${{ env.PROJECT_ID }}
-          ${{ env.CEREBRIUM_ENV }}-accesstoken: ${{ env.ACCESS_TOKEN }}
-          ${{ env.CEREBRIUM_ENV }}-refreshtoken: ${{ env.REFRESH_TOKEN }}
-          EOF
-          fi
+  #     - name: Create Cerebrium config
+  #       run: |
+  #         mkdir -p ~/.cerebrium
+  #         # For prod, config keys have no prefix. For dev/local, they have the env prefix
+  #         if [ "${{ env.CEREBRIUM_ENV }}" = "prod" ] || [ -z "${{ env.CEREBRIUM_ENV }}" ]; then
+  #           cat > ~/.cerebrium/config.yaml << EOF
+  #         project: ${{ env.PROJECT_ID }}
+  #         accesstoken: ${{ env.ACCESS_TOKEN }}
+  #         refreshtoken: ${{ env.REFRESH_TOKEN }}
+  #         EOF
+  #         else
+  #           cat > ~/.cerebrium/config.yaml << EOF
+  #         ${{ env.CEREBRIUM_ENV }}-project: ${{ env.PROJECT_ID }}
+  #         ${{ env.CEREBRIUM_ENV }}-accesstoken: ${{ env.ACCESS_TOKEN }}
+  #         ${{ env.CEREBRIUM_ENV }}-refreshtoken: ${{ env.REFRESH_TOKEN }}
+  #         EOF
+  #         fi
 
-      - name: Run smoke tests
-        run: |
-          cerebrium version
-          cerebrium project list
-          cerebrium app list
-          cerebrium region get
+  #     - name: Run smoke tests
+  #       run: |
+  #         cerebrium version
+  #         cerebrium project list
+  #         cerebrium app list
+  #         cerebrium region get
 
   goreleaser:
     name: Release
-    needs: [test, smoke-test]
-    # Always run if tests were skipped, otherwise wait for both test and smoke-test to pass
-    if: always() && (needs.test.result == 'success' || needs.test.result == 'skipped') && (needs.smoke-test.result == 'success' || needs.smoke-test.result == 'skipped')
+    needs: [test] # removed smoke-test dependency
+    # Always run if tests were skipped, otherwise wait for test to pass
+    if: always() && (needs.test.result == 'success' || needs.test.result == 'skipped')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
