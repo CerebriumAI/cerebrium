@@ -36,9 +36,17 @@ var enabled bool
 // Initialize configures the Bugsnag error reporting client.
 // It sets up automatic error capture, system metadata collection, and user context tracking.
 // This function is idempotent and thread-safe for concurrent initialization.
-// If BugsnagAPIKey is not set at compile time, error reporting will be silently disabled.
+// If BugsnagAPIKey is not set at compile time or telemetry is disabled, error reporting will be silently disabled.
 func Initialize() error {
 	if initialized {
+		return nil
+	}
+
+	// Check if telemetry is disabled by user
+	cfg, _ := config.Load() // Ignore error, we'll use defaults if config fails
+	if cfg != nil && !cfg.IsTelemetryEnabled() {
+		initialized = true
+		enabled = false
 		return nil
 	}
 
