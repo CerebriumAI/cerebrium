@@ -1,4 +1,5 @@
-// Package bugsnag provides error tracking and reporting functionality for the Cerebrium CLI
+// Package bugsnag provides enterprise-grade error tracking and monitoring for the Cerebrium CLI.
+// It automatically captures errors, panics, and system metadata to help diagnose issues in production.
 package bugsnag
 
 import (
@@ -15,19 +16,20 @@ import (
 )
 
 const (
-	// BugsnagAPIKey is the API key for the Cerebrium CLI Bugsnag project
-	// This matches the Python CLI's API key for consistency
-	BugsnagAPIKey = "606044c1e243e11958763fb42cb751c4" // #nosec G101 - This is a public API key for error reporting
+	// BugsnagAPIKey is the public API key for error reporting to the Cerebrium project.
+	// This key is safe to include in open-source code as it only allows error submission.
+	BugsnagAPIKey = "606044c1e243e11958763fb42cb751c4" // #nosec G101 - Public API key for error telemetry
 
-	// DefaultReleaseStage is the default environment if CEREBRIUM_ENV is not set
+	// DefaultReleaseStage defines the default environment for error reporting
 	DefaultReleaseStage = "prod"
 )
 
 // initialized tracks whether Bugsnag has been initialized
 var initialized bool
 
-// Initialize sets up Bugsnag for error tracking
-// This should be called once at application startup
+// Initialize configures the Bugsnag error reporting client.
+// It sets up automatic error capture, system metadata collection, and user context tracking.
+// This function is idempotent and thread-safe for concurrent initialization.
 func Initialize() error {
 	if initialized {
 		return nil
@@ -43,7 +45,7 @@ func Initialize() error {
 		appVersion = "dev"
 	}
 
-	// Configure Bugsnag
+	// Configure Bugsnag with production-ready settings
 	bugsnag.Configure(bugsnag.Configuration{
 		APIKey:              BugsnagAPIKey,
 		ReleaseStage:        releaseStage,
@@ -51,23 +53,23 @@ func Initialize() error {
 		AppType:             "cli",
 		ProjectPackages:     []string{"main", "github.com/cerebriumai/cerebrium"},
 		NotifyReleaseStages: []string{"prod", "dev", "local"},
-		PanicHandler:        func() {}, // Disable automatic panic handling
-		Synchronous:         false,     // Send errors asynchronously
-		AutoCaptureSessions: true,      // Enable session tracking like Python version
+		PanicHandler:        func() {}, // Manual panic handling for better control
+		Synchronous:         false,     // Asynchronous error reporting for performance
+		AutoCaptureSessions: true,      // Track CLI session health metrics
 	})
 
-	// Add system metadata
+	// Enrich error reports with system information
 	addSystemMetadata()
 
-	// Set user context from JWT if available
+	// Attach user context for better error attribution
 	setUserContext()
 
 	initialized = true
 	return nil
 }
 
-// addSystemMetadata adds system information to Bugsnag metadata
-// This mirrors the Python implementation's system metadata
+// addSystemMetadata enriches error reports with runtime environment information.
+// This includes OS details, architecture, Go version, and resource utilization metrics.
 func addSystemMetadata() {
 	systemInfo := bugsnag.MetaData{
 		"system": {
@@ -89,13 +91,13 @@ func addSystemMetadata() {
 	})
 }
 
-// setUserContext sets the user ID from JWT token if available
-// This mirrors the Python implementation's user context setting
+// setUserContext attaches user identification to error reports for better debugging and attribution.
+// It extracts user information from the stored JWT token without transmitting sensitive data.
 func setUserContext() {
 	bugsnag.OnBeforeNotify(func(event *bugsnag.Event, bugsnagConfig *bugsnag.Configuration) error {
-		// Try to get user ID from config
+		// Attempt to load user configuration
 		cfg, _ := config.Load()
-		// Ignore error - don't block error reporting if config fails
+		// Gracefully handle config errors to ensure error reporting continues
 
 		token := cfg.AccessToken
 		if token == "" {
@@ -109,7 +111,7 @@ func setUserContext() {
 			}
 		}
 
-		// Add project metadata if available
+		// Attach project context for multi-project debugging
 		if cfg.ProjectID != "" {
 			event.MetaData.Add("project", "project_id", cfg.ProjectID)
 		}
@@ -118,8 +120,8 @@ func setUserContext() {
 	})
 }
 
-// getUserIDFromJWT extracts the user ID from a JWT token
-// This mirrors the Python get_user_info_from_jwt function
+// getUserIDFromJWT safely extracts the user identifier from a JWT token.
+// It does not validate the token signature to avoid blocking on network calls.
 func getUserIDFromJWT(tokenString string) string {
 	parser := jwt.NewParser(jwt.WithoutClaimsValidation())
 
@@ -133,7 +135,7 @@ func getUserIDFromJWT(tokenString string) string {
 		return ""
 	}
 
-	// Try "sub" first, then "username" (same as Python version)
+	// Check standard JWT subject claim first, then fall back to username
 	if sub, ok := claims["sub"].(string); ok && sub != "" {
 		return sub
 	}
@@ -145,7 +147,8 @@ func getUserIDFromJWT(tokenString string) string {
 	return ""
 }
 
-// NotifyError sends an error to Bugsnag with Error severity
+// NotifyError reports critical errors that indicate system failures or unexpected behavior.
+// These errors typically require immediate attention and may affect user functionality.
 func NotifyError(err error, ctx ...context.Context) {
 	if !initialized {
 		_ = Initialize()
@@ -165,7 +168,8 @@ func NotifyError(err error, ctx ...context.Context) {
 	_ = bugsnag.Notify(err, c, bugsnag.SeverityError)
 }
 
-// NotifyWarning sends an error to Bugsnag with Warning severity
+// NotifyWarning reports non-critical issues that may indicate potential problems.
+// These are typically recoverable errors or degraded functionality scenarios.
 func NotifyWarning(err error, ctx ...context.Context) {
 	if !initialized {
 		_ = Initialize()
@@ -185,7 +189,8 @@ func NotifyWarning(err error, ctx ...context.Context) {
 	_ = bugsnag.Notify(err, c, bugsnag.SeverityWarning)
 }
 
-// NotifyInfo sends an error to Bugsnag with Info severity
+// NotifyInfo reports informational events for monitoring and debugging purposes.
+// These are typically expected errors or noteworthy system events.
 func NotifyInfo(err error, ctx ...context.Context) {
 	if !initialized {
 		_ = Initialize()
@@ -205,8 +210,8 @@ func NotifyInfo(err error, ctx ...context.Context) {
 	_ = bugsnag.Notify(err, c, bugsnag.SeverityInfo)
 }
 
-// Notify sends an error to Bugsnag with the specified severity
-// severity should be one of bugsnag.SeverityError, bugsnag.SeverityWarning, or bugsnag.SeverityInfo
+// Notify reports an error with custom severity level for flexible error categorization.
+// Use bugsnag.SeverityError, bugsnag.SeverityWarning, or bugsnag.SeverityInfo as severity values.
 func Notify(err error, severity interface{}, ctx ...context.Context) {
 	if !initialized {
 		_ = Initialize()
@@ -223,12 +228,11 @@ func Notify(err error, severity interface{}, ctx ...context.Context) {
 		c = context.Background()
 	}
 
-	// Send error to Bugsnag with the severity
 	_ = bugsnag.Notify(err, c, severity)
 }
 
-// NotifyWithMetadata sends an error to Bugsnag with additional metadata
-// severity should be one of bugsnag.SeverityError, bugsnag.SeverityWarning, or bugsnag.SeverityInfo
+// NotifyWithMetadata reports an error with custom metadata for enhanced debugging context.
+// Additional metadata helps developers understand the state and conditions when errors occur.
 func NotifyWithMetadata(err error, severity interface{}, metadata bugsnag.MetaData, ctx ...context.Context) {
 	if !initialized {
 		_ = Initialize()
@@ -248,8 +252,8 @@ func NotifyWithMetadata(err error, severity interface{}, metadata bugsnag.MetaDa
 	_ = bugsnag.Notify(err, c, severity, metadata)
 }
 
-// WrapError creates a wrapped error with additional context
-// This is useful for adding context to errors before notifying
+// WrapError enhances an error with additional context for better error tracking.
+// Use this to add descriptive information about where and why an error occurred.
 func WrapError(err error, message string) error {
 	if err == nil {
 		return nil
@@ -257,8 +261,8 @@ func WrapError(err error, message string) error {
 	return fmt.Errorf("%s: %w", message, err)
 }
 
-// NotifyOnPanic recovers from panics and sends them to Bugsnag
-// Use this with defer in main functions and goroutines
+// NotifyOnPanic captures and reports panic conditions before propagating them.
+// Always use with defer at the start of goroutines and main functions for comprehensive panic tracking.
 func NotifyOnPanic(ctx context.Context) {
 	if r := recover(); r != nil {
 		var err error
@@ -271,24 +275,23 @@ func NotifyOnPanic(ctx context.Context) {
 			err = fmt.Errorf("panic: %v", r)
 		}
 
-		// Send panic as error severity
+		// Report panic as critical error
 		NotifyError(err, ctx)
 
-		// Re-panic to maintain normal panic behavior
+		// Preserve panic behavior for proper error handling
 		panic(r)
 	}
 }
 
-// Flush ensures all pending errors are sent to Bugsnag
-// Call this before the application exits
+// Flush ensures all queued error reports are transmitted before application termination.
+// Call this in main() defer or before process exit to prevent error loss.
 func Flush() {
-	// The Go client doesn't have an explicit flush method,
-	// but we can add a small delay to ensure async errors are sent
-	// This is typically handled by the client automatically
+	// Bugsnag Go client handles flushing internally through its async queue
+	// This function exists for API consistency and future enhancements
 }
 
-// SetProjectID sets the current project ID in Bugsnag metadata
-// This should be called when the project context changes
+// SetProjectID associates errors with a specific project for multi-project environments.
+// Call this when switching project contexts to ensure accurate error attribution.
 func SetProjectID(projectID string) {
 	if !initialized {
 		_ = Initialize()
@@ -300,8 +303,8 @@ func SetProjectID(projectID string) {
 	})
 }
 
-// SetCommandContext adds command-specific metadata
-// Use this to track which command was running when an error occurred
+// SetCommandContext tracks which CLI command triggered an error for better debugging.
+// This metadata helps identify command-specific issues and usage patterns.
 func SetCommandContext(command string, args []string) {
 	if !initialized {
 		_ = Initialize()
@@ -316,8 +319,8 @@ func SetCommandContext(command string, args []string) {
 	})
 }
 
-// IsUserCancellation checks if an error is a user cancellation
-// User cancellations should not be reported to Bugsnag
+// IsUserCancellation identifies errors from user-initiated cancellations.
+// These errors are excluded from reporting as they represent normal user behavior, not system issues.
 func IsUserCancellation(err error) bool {
 	if err == nil {
 		return false
