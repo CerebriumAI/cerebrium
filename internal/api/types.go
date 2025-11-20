@@ -341,13 +341,14 @@ func (r *Run) GetDisplayStatus() string {
 	}
 
 	// Handle special status text cases
-	if status == "containerQueued" || status == "proxyQueued" {
+	switch status {
+	case "containerQueued", "proxyQueued":
 		return "queued"
-	} else if status == "pending" || status == "processing" {
+	case "pending", "processing":
+		return strings.ToLower(status)
+	default:
 		return strings.ToLower(status)
 	}
-
-	return strings.ToLower(status)
 }
 
 // AppBuild represents a build for a Cerebrium application

@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -289,7 +290,7 @@ func TestLogsView_Init(t *testing.T) {
 			Return(&api.AppLogsResponse{Logs: []api.AppLogEntry{}}, nil).
 			Maybe()
 
-		model := NewLogsView(nil, LogsConfig{
+		model := NewLogsView(context.TODO(), LogsConfig{
 			DisplayConfig: ui.DisplayConfig{
 				IsInteractive:    true,
 				DisableAnimation: false,

@@ -3,11 +3,12 @@ package logging
 import (
 	"context"
 	"fmt"
-	"github.com/cerebriumai/cerebrium/internal/ui"
-	"github.com/charmbracelet/lipgloss"
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/cerebriumai/cerebrium/internal/ui"
+	"github.com/charmbracelet/lipgloss"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -333,8 +334,7 @@ type logBatchReceivedMsg struct {
 // providerDoneMsg signals that the log provider has finished collecting logs
 // This is exported so tests can reference it when using Finally() in test harness
 type providerDoneMsg struct {
-	finalStatus string
-	err         error
+	err error
 }
 
 type tickMsg time.Time

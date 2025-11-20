@@ -313,11 +313,11 @@ func (m *DeployView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.conf.SimpleOutput() {
 				fmt.Println("✓ Build complete!")
 				fmt.Println()
-				fmt.Println(fmt.Sprintf("✓ %s is now live!", m.conf.Config.Deployment.Name))
+				fmt.Printf("✓ %s is now live!\n", m.conf.Config.Deployment.Name)
 				fmt.Println()
-				fmt.Println(fmt.Sprintf("App Dashboard: %s", m.appResponse.DashboardURL))
+				fmt.Printf("App Dashboard: %s\n", m.appResponse.DashboardURL)
 				fmt.Println("\nEndpoint:")
-				fmt.Println(fmt.Sprintf("POST %s/{function_name}", m.appResponse.InternalEndpoint))
+				fmt.Printf("POST %s/{function_name}\n", m.appResponse.InternalEndpoint)
 			}
 		} else {
 			m.state = StateDeployError
@@ -604,7 +604,11 @@ func (m *DeployView) onKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	// Otherwise hand off to the log viewer and update it
 	updatedViewer, cmd := m.logViewer.Update(msg)
-	m.logViewer = updatedViewer.(*logging.LogViewerModel)
+	var ok bool
+	m.logViewer, ok = updatedViewer.(*logging.LogViewerModel)
+	if !ok {
+		return m, nil
+	}
 	return m, cmd
 }
 
@@ -993,7 +997,6 @@ func (m *DeployView) renderUploadProgress() string {
 }
 
 // Idle messages shown during long builds
-var idleIntervals = []time.Duration{20 * time.Second, 60 * time.Second, 120 * time.Second, 180 * time.Second}
 var idleMessages = []string{
 	"Hang in there, still building!",
 	"Still building, thanks for your patience!",

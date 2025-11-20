@@ -17,7 +17,7 @@ import (
 const (
 	// BugsnagAPIKey is the API key for the Cerebrium CLI Bugsnag project
 	// This matches the Python CLI's API key for consistency
-	BugsnagAPIKey = "606044c1e243e11958763fb42cb751c4"
+	BugsnagAPIKey = "606044c1e243e11958763fb42cb751c4" // #nosec G101 - This is a public API key for error reporting
 
 	// DefaultReleaseStage is the default environment if CEREBRIUM_ENV is not set
 	DefaultReleaseStage = "prod"
@@ -94,10 +94,8 @@ func addSystemMetadata() {
 func setUserContext() {
 	bugsnag.OnBeforeNotify(func(event *bugsnag.Event, bugsnagConfig *bugsnag.Configuration) error {
 		// Try to get user ID from config
-		cfg, err := config.Load()
-		if err != nil {
-			return nil // Don't block error reporting
-		}
+		cfg, _ := config.Load()
+		// Ignore error - don't block error reporting if config fails
 
 		token := cfg.AccessToken
 		if token == "" {
@@ -150,7 +148,7 @@ func getUserIDFromJWT(tokenString string) string {
 // NotifyError sends an error to Bugsnag with Error severity
 func NotifyError(err error, ctx ...context.Context) {
 	if !initialized {
-		Initialize()
+		_ = Initialize()
 	}
 
 	if err == nil {
@@ -164,13 +162,13 @@ func NotifyError(err error, ctx ...context.Context) {
 		c = context.Background()
 	}
 
-	bugsnag.Notify(err, c, bugsnag.SeverityError)
+	_ = bugsnag.Notify(err, c, bugsnag.SeverityError)
 }
 
 // NotifyWarning sends an error to Bugsnag with Warning severity
 func NotifyWarning(err error, ctx ...context.Context) {
 	if !initialized {
-		Initialize()
+		_ = Initialize()
 	}
 
 	if err == nil {
@@ -184,13 +182,13 @@ func NotifyWarning(err error, ctx ...context.Context) {
 		c = context.Background()
 	}
 
-	bugsnag.Notify(err, c, bugsnag.SeverityWarning)
+	_ = bugsnag.Notify(err, c, bugsnag.SeverityWarning)
 }
 
 // NotifyInfo sends an error to Bugsnag with Info severity
 func NotifyInfo(err error, ctx ...context.Context) {
 	if !initialized {
-		Initialize()
+		_ = Initialize()
 	}
 
 	if err == nil {
@@ -204,14 +202,14 @@ func NotifyInfo(err error, ctx ...context.Context) {
 		c = context.Background()
 	}
 
-	bugsnag.Notify(err, c, bugsnag.SeverityInfo)
+	_ = bugsnag.Notify(err, c, bugsnag.SeverityInfo)
 }
 
 // Notify sends an error to Bugsnag with the specified severity
 // severity should be one of bugsnag.SeverityError, bugsnag.SeverityWarning, or bugsnag.SeverityInfo
 func Notify(err error, severity interface{}, ctx ...context.Context) {
 	if !initialized {
-		Initialize()
+		_ = Initialize()
 	}
 
 	if err == nil {
@@ -226,14 +224,14 @@ func Notify(err error, severity interface{}, ctx ...context.Context) {
 	}
 
 	// Send error to Bugsnag with the severity
-	bugsnag.Notify(err, c, severity)
+	_ = bugsnag.Notify(err, c, severity)
 }
 
 // NotifyWithMetadata sends an error to Bugsnag with additional metadata
 // severity should be one of bugsnag.SeverityError, bugsnag.SeverityWarning, or bugsnag.SeverityInfo
 func NotifyWithMetadata(err error, severity interface{}, metadata bugsnag.MetaData, ctx ...context.Context) {
 	if !initialized {
-		Initialize()
+		_ = Initialize()
 	}
 
 	if err == nil {
@@ -247,7 +245,7 @@ func NotifyWithMetadata(err error, severity interface{}, metadata bugsnag.MetaDa
 		c = context.Background()
 	}
 
-	bugsnag.Notify(err, c, severity, metadata)
+	_ = bugsnag.Notify(err, c, severity, metadata)
 }
 
 // WrapError creates a wrapped error with additional context
@@ -284,18 +282,16 @@ func NotifyOnPanic(ctx context.Context) {
 // Flush ensures all pending errors are sent to Bugsnag
 // Call this before the application exits
 func Flush() {
-	if initialized {
-		// The Go client doesn't have an explicit flush method,
-		// but we can add a small delay to ensure async errors are sent
-		// This is typically handled by the client automatically
-	}
+	// The Go client doesn't have an explicit flush method,
+	// but we can add a small delay to ensure async errors are sent
+	// This is typically handled by the client automatically
 }
 
 // SetProjectID sets the current project ID in Bugsnag metadata
 // This should be called when the project context changes
 func SetProjectID(projectID string) {
 	if !initialized {
-		Initialize()
+		_ = Initialize()
 	}
 
 	bugsnag.OnBeforeNotify(func(event *bugsnag.Event, bugsnagConfig *bugsnag.Configuration) error {
@@ -308,7 +304,7 @@ func SetProjectID(projectID string) {
 // Use this to track which command was running when an error occurred
 func SetCommandContext(command string, args []string) {
 	if !initialized {
-		Initialize()
+		_ = Initialize()
 	}
 
 	bugsnag.OnBeforeNotify(func(event *bugsnag.Event, bugsnagConfig *bugsnag.Configuration) error {
