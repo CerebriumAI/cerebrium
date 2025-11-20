@@ -5,10 +5,20 @@ VERSION ?= dev
 COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 BUILD_DATE ?= $(shell date -u '+%Y-%m-%d_%H:%M:%S')
 
-# Linker flags to inject version information
+# Bugsnag configuration (optional: make build BUGSNAG_API_KEY=your-key)
+BUGSNAG_API_KEY ?=
+BUGSNAG_RELEASE_STAGE ?= prod
+
+# Linker flags to inject version information and optional Bugsnag configuration
 LDFLAGS := -X 'github.com/cerebriumai/cerebrium/internal/version.Version=$(VERSION)' \
            -X 'github.com/cerebriumai/cerebrium/internal/version.Commit=$(COMMIT)' \
            -X 'github.com/cerebriumai/cerebrium/internal/version.BuildDate=$(BUILD_DATE)'
+
+# Add Bugsnag flags if API key is provided
+ifdef BUGSNAG_API_KEY
+LDFLAGS += -X 'github.com/cerebriumai/cerebrium/pkg/bugsnag.BugsnagAPIKey=$(BUGSNAG_API_KEY)' \
+           -X 'github.com/cerebriumai/cerebrium/pkg/bugsnag.DefaultReleaseStage=$(BUGSNAG_RELEASE_STAGE)'
+endif
 
 # Build the binary
 build:

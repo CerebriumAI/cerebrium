@@ -15,24 +15,44 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-const (
-	// BugsnagAPIKey is the public API key for error reporting to the Cerebrium project.
-	// This key is safe to include in open-source code as it only allows error submission.
-	BugsnagAPIKey = "606044c1e243e11958763fb42cb751c4" // #nosec G101 - Public API key for error telemetry
+// Build-time variables that can be set via ldflags
+// Example: go build -ldflags "-X github.com/cerebriumai/cerebrium/pkg/bugsnag.BugsnagAPIKey=your-key"
+var (
+	// BugsnagAPIKey is the API key for error reporting, injected at compile time.
+	// If not set during build, error reporting will be disabled.
+	BugsnagAPIKey = ""
 
-	// DefaultReleaseStage defines the default environment for error reporting
+	// DefaultReleaseStage defines the default environment for error reporting.
+	// Can be overridden at compile time via ldflags.
 	DefaultReleaseStage = "prod"
 )
 
 // initialized tracks whether Bugsnag has been initialized
 var initialized bool
 
+// enabled tracks whether Bugsnag error reporting is actually active
+var enabled bool
+
 // Initialize configures the Bugsnag error reporting client.
 // It sets up automatic error capture, system metadata collection, and user context tracking.
 // This function is idempotent and thread-safe for concurrent initialization.
+// If BugsnagAPIKey is not set at compile time, error reporting will be silently disabled.
 func Initialize() error {
 	if initialized {
 		return nil
+	}
+
+	// Skip initialization if API key was not provided at compile time
+	if BugsnagAPIKey == "" {
+		initialized = true // Mark as initialized to prevent repeated checks
+		enabled = false
+		return nil
+	}
+
+	// Allow environment variable override for API key if needed
+	apiKey := BugsnagAPIKey
+	if envKey := os.Getenv("BUGSNAG_API_KEY"); envKey != "" {
+		apiKey = envKey
 	}
 
 	releaseStage := os.Getenv("CEREBRIUM_ENV")
@@ -47,7 +67,7 @@ func Initialize() error {
 
 	// Configure Bugsnag with production-ready settings
 	bugsnag.Configure(bugsnag.Configuration{
-		APIKey:              BugsnagAPIKey,
+		APIKey:              apiKey,
 		ReleaseStage:        releaseStage,
 		AppVersion:          appVersion,
 		AppType:             "cli",
@@ -65,7 +85,14 @@ func Initialize() error {
 	setUserContext()
 
 	initialized = true
+	enabled = true
 	return nil
+}
+
+// IsEnabled returns whether Bugsnag error reporting is active.
+// This will be false if no API key was provided at compile time.
+func IsEnabled() bool {
+	return enabled
 }
 
 // addSystemMetadata enriches error reports with runtime environment information.
@@ -154,7 +181,7 @@ func NotifyError(err error, ctx ...context.Context) {
 		_ = Initialize()
 	}
 
-	if err == nil {
+	if !enabled || err == nil {
 		return
 	}
 
@@ -175,7 +202,7 @@ func NotifyWarning(err error, ctx ...context.Context) {
 		_ = Initialize()
 	}
 
-	if err == nil {
+	if !enabled || err == nil {
 		return
 	}
 
@@ -196,7 +223,7 @@ func NotifyInfo(err error, ctx ...context.Context) {
 		_ = Initialize()
 	}
 
-	if err == nil {
+	if !enabled || err == nil {
 		return
 	}
 
@@ -217,7 +244,7 @@ func Notify(err error, severity interface{}, ctx ...context.Context) {
 		_ = Initialize()
 	}
 
-	if err == nil {
+	if !enabled || err == nil {
 		return
 	}
 
@@ -238,7 +265,7 @@ func NotifyWithMetadata(err error, severity interface{}, metadata bugsnag.MetaDa
 		_ = Initialize()
 	}
 
-	if err == nil {
+	if !enabled || err == nil {
 		return
 	}
 
