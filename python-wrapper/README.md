@@ -1,6 +1,6 @@
 # Cerebrium CLI
 
-Python wrapper for the Cerebrium CLI (Go-based).
+Official Python package for the Cerebrium CLI - deploy and manage AI applications with ease.
 
 ## Installation
 
@@ -8,44 +8,46 @@ Python wrapper for the Cerebrium CLI (Go-based).
 pip install cerebrium
 ```
 
-## Usage
+This will download and install the appropriate Cerebrium CLI binary for your platform.
 
-After installation, use the `cerebrium` command:
+## Quick Start
 
 ```bash
+# Login to Cerebrium
 cerebrium login
+
+# Initialize a new project
+cerebrium init my-app
+
+# Deploy your application
 cerebrium deploy
-cerebrium apps list
-cerebrium apps get <app-id>
 ```
 
-## What's Inside
+## About
 
-This package downloads and manages the Go-based Cerebrium CLI binary. When you run `pip install cerebrium`, it:
+This Python package is a wrapper that downloads and manages the Cerebrium Go CLI binary. When you install this package, it will:
 
-1. Downloads the appropriate binary for your platform (macOS, Linux, or Windows)
-2. Installs it to `~/.cerebrium/bin/`
-3. Provides a `cerebrium` command that executes the binary
+1. Detect your operating system and architecture
+2. Download the appropriate pre-compiled binary from GitHub releases
+3. Verify checksums for security
+4. Install it to `~/.cerebrium/bin/`
+5. Make it available as the `cerebrium` command
 
-## Manual Installation
+## Supported Platforms
 
-If you prefer to install the Go binary directly:
-
-```bash
-# macOS (Homebrew)
-brew install cerebriumai/tap/cerebrium
-
-# Linux/macOS (direct download)
-curl -fsSL https://github.com/CerebriumAI/cerebrium/releases/latest/download/install.sh | sh
-
-# Or download from releases
-# https://github.com/CerebriumAI/cerebrium/releases
-```
+- **macOS**: Intel (x86_64) and Apple Silicon (arm64)
+- **Linux**: x86_64 and arm64
+- **Windows**: x86_64
 
 ## Documentation
 
-Visit [docs.cerebrium.ai](https://docs.cerebrium.ai) for full documentation.
+For full documentation, visit [docs.cerebrium.ai](https://docs.cerebrium.ai)
+
+## Support
+
+- GitHub Issues: [github.com/CerebriumAI/cerebrium/issues](https://github.com/CerebriumAI/cerebrium/issues)
+- Email: support@cerebrium.ai
 
 ## License
 
-AGPL-3.0
+MIT License - see [LICENSE](https://github.com/CerebriumAI/cerebrium/blob/main/LICENSE) for details.
