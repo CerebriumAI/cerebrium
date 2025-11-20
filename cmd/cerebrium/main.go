@@ -6,9 +6,35 @@ import (
 	"strings"
 
 	"github.com/cerebriumai/cerebrium/internal/commands"
+	cerebriumBugsnag "github.com/cerebriumai/cerebrium/pkg/bugsnag"
 )
 
 func main() {
+	// Initialize Bugsnag error tracking
+	if err := cerebriumBugsnag.Initialize(); err != nil {
+		// Don't fail if Bugsnag initialization fails, just log it
+		fmt.Fprintf(os.Stderr, "Warning: Failed to initialize error tracking: %v\n", err)
+	}
+	defer cerebriumBugsnag.Flush()
+
+	// Recover from panics and report them to Bugsnag
+	defer func() {
+		if r := recover(); r != nil {
+			var err error
+			switch x := r.(type) {
+			case string:
+				err = fmt.Errorf("panic: %s", x)
+			case error:
+				err = fmt.Errorf("panic: %w", x)
+			default:
+				err = fmt.Errorf("panic: %v", r)
+			}
+			cerebriumBugsnag.NotifyError(err)
+			// Re-panic to maintain normal panic behavior
+			panic(r)
+		}
+	}()
+
 	rootCmd := commands.NewRootCmd()
 	if err := rootCmd.Execute(); err != nil {
 		// Commands handle their own error presentation logic

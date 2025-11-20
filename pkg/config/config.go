@@ -126,7 +126,7 @@ func Load() (*Config, error) {
 		RefreshToken:     viper.GetString(prefix + "refreshtoken"),
 		DefaultRegion:    viper.GetString(prefix + "defaultregion"),
 		SkipVersionCheck: viper.GetBool("skipversioncheck"), // Global setting (not env-specific)
-		LogLevel:         viper.GetString("loglevel"),        // Global setting (not env-specific)
+		LogLevel:         viper.GetString("loglevel"),       // Global setting (not env-specific)
 	}
 
 	return config, nil

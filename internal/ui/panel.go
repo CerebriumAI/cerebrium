@@ -93,7 +93,7 @@ func RenderDetailTable(sections []TableSection) string {
 			output.WriteString(sectionHeaderStyle.Render(section.Header))
 			output.WriteString("\n\n")
 		}
-		
+
 		// Section rows
 		for _, row := range section.Rows {
 			output.WriteString(labelStyle.Render(row.Label))

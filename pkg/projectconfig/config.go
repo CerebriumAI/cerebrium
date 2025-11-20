@@ -2,11 +2,11 @@ package projectconfig
 
 // ProjectConfig represents the complete cerebrium.toml configuration
 type ProjectConfig struct {
-	Deployment     DeploymentConfig     `mapstructure:"deployment" toml:"deployment"`
-	Hardware       HardwareConfig       `mapstructure:"hardware" toml:"hardware"`
-	Scaling        ScalingConfig        `mapstructure:"scaling" toml:"scaling"`
-	Dependencies   DependenciesConfig   `mapstructure:"dependencies" toml:"dependencies"`
-	CustomRuntime  *CustomRuntimeConfig `mapstructure:"custom" toml:"runtime,omitempty"`
+	Deployment     DeploymentConfig      `mapstructure:"deployment" toml:"deployment"`
+	Hardware       HardwareConfig        `mapstructure:"hardware" toml:"hardware"`
+	Scaling        ScalingConfig         `mapstructure:"scaling" toml:"scaling"`
+	Dependencies   DependenciesConfig    `mapstructure:"dependencies" toml:"dependencies"`
+	CustomRuntime  *CustomRuntimeConfig  `mapstructure:"custom" toml:"runtime,omitempty"`
 	PartnerService *PartnerServiceConfig `mapstructure:"partner" toml:"partner,omitempty"`
 }
 
@@ -49,9 +49,9 @@ type ScalingConfig struct {
 
 // DependenciesConfig represents the [cerebrium.dependencies.*] sections
 type DependenciesConfig struct {
-	Pip   map[string]string    `mapstructure:"pip" toml:"pip,omitempty"`
-	Conda map[string]string    `mapstructure:"conda" toml:"conda,omitempty"`
-	Apt   map[string]string    `mapstructure:"apt" toml:"apt,omitempty"`
+	Pip   map[string]string     `mapstructure:"pip" toml:"pip,omitempty"`
+	Conda map[string]string     `mapstructure:"conda" toml:"conda,omitempty"`
+	Apt   map[string]string     `mapstructure:"apt" toml:"apt,omitempty"`
 	Paths DependencyPathsConfig `mapstructure:"paths" toml:"paths,omitempty"`
 }
 

@@ -9,13 +9,13 @@ import (
 
 // Default values matching Python implementation
 var (
-	DefaultPythonVersion      = "3.11"
-	DefaultDockerBaseImageURL = "debian:bookworm-slim"
-	DefaultInclude            = []string{"./*", "main.py", "cerebrium.toml"}
-	DefaultExclude            = []string{".*"}
-	DefaultDisableAuth        = true
-	DefaultEntrypoint         = []string{"uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"}
-	DefaultPort               = 8000
+	DefaultPythonVersion       = "3.11"
+	DefaultDockerBaseImageURL  = "debian:bookworm-slim"
+	DefaultInclude             = []string{"./*", "main.py", "cerebrium.toml"}
+	DefaultExclude             = []string{".*"}
+	DefaultDisableAuth         = true
+	DefaultEntrypoint          = []string{"uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"}
+	DefaultPort                = 8000
 	DefaultHealthcheckEndpoint = ""
 	DefaultReadycheckEndpoint  = ""
 )

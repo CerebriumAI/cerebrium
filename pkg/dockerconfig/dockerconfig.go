@@ -67,7 +67,6 @@ func (c *Config) ToJSON() (string, error) {
 	return string(bytes), nil
 }
 
-
 // HasAuth checks if the config has any auth entries
 func (c *Config) HasAuth() bool {
 	if c == nil {

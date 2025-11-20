@@ -16,7 +16,9 @@ import (
 	"time"
 
 	"github.com/avast/retry-go/v4"
+	"github.com/bugsnag/bugsnag-go/v2"
 	"github.com/cerebriumai/cerebrium/internal/auth"
+	cerebriumBugsnag "github.com/cerebriumai/cerebrium/pkg/bugsnag"
 	"github.com/cerebriumai/cerebrium/pkg/config"
 )
 
@@ -156,7 +158,24 @@ func (c *client) request(ctx context.Context, method, path string, body any, req
 			// Handle authentication errors specially
 			if resp.StatusCode == 401 || resp.StatusCode == 403 {
 				slog.Warn("Authentication failed", "statusCode", resp.StatusCode, "path", path)
-				return retry.Unrecoverable(fmt.Errorf("you must log in to use this functionality. Please run 'cerebrium login'"))
+				authErr := fmt.Errorf("you must log in to use this functionality. Please run 'cerebrium login'")
+
+				// Report authentication errors to Bugsnag
+				cerebriumBugsnag.NotifyWithMetadata(
+					authErr,
+					bugsnag.SeverityWarning,
+					bugsnag.MetaData{
+						"api": {
+							"status_code": resp.StatusCode,
+							"method":      method,
+							"path":        path,
+							"attempt":     attempt,
+						},
+					},
+					ctx,
+				)
+
+				return retry.Unrecoverable(authErr)
 			}
 
 			// Handle other errors
@@ -168,7 +187,35 @@ func (c *client) request(ctx context.Context, method, path string, body any, req
 					"path", path,
 					"method", method,
 				)
-				return retry.Unrecoverable(fmt.Errorf("API error (%d): %s", resp.StatusCode, errResp.Message))
+
+				apiErr := fmt.Errorf("API error (%d): %s", resp.StatusCode, errResp.Message)
+
+				// Report API errors to Bugsnag (skip 404s as they're often expected)
+				if resp.StatusCode != 404 {
+					severity := bugsnag.SeverityError
+					if resp.StatusCode >= 500 {
+						severity = bugsnag.SeverityError // Server errors
+					} else if resp.StatusCode == 402 {
+						severity = bugsnag.SeverityWarning // Payment required
+					}
+
+					cerebriumBugsnag.NotifyWithMetadata(
+						apiErr,
+						severity,
+						bugsnag.MetaData{
+							"api": {
+								"status_code": resp.StatusCode,
+								"method":      method,
+								"path":        path,
+								"message":     errResp.Message,
+								"attempt":     attempt,
+							},
+						},
+						ctx,
+					)
+				}
+
+				return retry.Unrecoverable(apiErr)
 			}
 
 			slog.Error("API error",
@@ -177,7 +224,28 @@ func (c *client) request(ctx context.Context, method, path string, body any, req
 				"path", path,
 				"method", method,
 			)
-			return retry.Unrecoverable(fmt.Errorf("API error (%d): %s", resp.StatusCode, string(respBody)))
+
+			apiErr := fmt.Errorf("API error (%d): %s", resp.StatusCode, string(respBody))
+
+			// Report unexpected API errors to Bugsnag
+			if resp.StatusCode != 404 {
+				cerebriumBugsnag.NotifyWithMetadata(
+					apiErr,
+					bugsnag.SeverityError,
+					bugsnag.MetaData{
+						"api": {
+							"status_code": resp.StatusCode,
+							"method":      method,
+							"path":        path,
+							"response":    string(respBody),
+							"attempt":     attempt,
+						},
+					},
+					ctx,
+				)
+			}
+
+			return retry.Unrecoverable(apiErr)
 		},
 		retry.Attempts(2),
 		retry.LastErrorOnly(true),

@@ -13,6 +13,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/bugsnag/bugsnag-go/v2"
 	"github.com/cerebriumai/cerebrium/internal/version"
 
 	"github.com/cerebriumai/cerebrium/internal/api"
@@ -20,6 +21,7 @@ import (
 	"github.com/cerebriumai/cerebrium/internal/files"
 	"github.com/cerebriumai/cerebrium/internal/ui"
 	"github.com/cerebriumai/cerebrium/internal/ui/logging"
+	cerebriumBugsnag "github.com/cerebriumai/cerebrium/pkg/bugsnag"
 	"github.com/cerebriumai/cerebrium/pkg/projectconfig"
 	"github.com/charmbracelet/bubbles/progress"
 	tea "github.com/charmbracelet/bubbletea"
@@ -323,6 +325,21 @@ func (m *DeployView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			err.SilentExit = true // Will be shown in View()
 			m.err = err
 
+			// Report build failure to Bugsnag
+			cerebriumBugsnag.NotifyWithMetadata(
+				fmt.Errorf("deployment build failed: %s", msg.status),
+				bugsnag.SeverityError,
+				bugsnag.MetaData{
+					"deployment": {
+						"build_id":     m.buildID,
+						"build_status": msg.status,
+						"project_id":   m.conf.ProjectID,
+						"app_name":     m.conf.Config.Deployment.Name,
+					},
+				},
+				m.ctx,
+			)
+
 			if m.conf.SimpleOutput() {
 				fmt.Printf("✗ Build failed with status: %s\n", msg.status)
 			}
@@ -367,6 +384,25 @@ func (m *DeployView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		msg.SilentExit = true // Will be shown in View()
 		m.err = msg
 		m.state = StateDeployError
+
+		// Report errors to Bugsnag based on error type
+		// Don't report user cancellations
+		if msg.Type != ui.ErrorTypeUserCancelled && !cerebriumBugsnag.IsUserCancellation(msg.Err) {
+			metadata := bugsnag.MetaData{
+				"error": {
+					"type":       fmt.Sprintf("%d", msg.Type),
+					"state":      fmt.Sprintf("%d", m.state),
+					"project_id": m.conf.ProjectID,
+					"app_name":   m.conf.Config.Deployment.Name,
+				},
+			}
+
+			if msg.Type == ui.ErrorTypeValidation {
+				cerebriumBugsnag.NotifyWithMetadata(msg.Err, bugsnag.SeverityWarning, metadata, m.ctx)
+			} else {
+				cerebriumBugsnag.NotifyWithMetadata(msg.Err, bugsnag.SeverityError, metadata, m.ctx)
+			}
+		}
 
 		if m.conf.SimpleOutput() {
 			fmt.Printf("Error: %s\n", msg.Error())
