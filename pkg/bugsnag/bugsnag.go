@@ -43,7 +43,7 @@ func Initialize() error {
 	}
 
 	// Check if telemetry is disabled by user
-	cfg, _ := config.Load() // Ignore error, we'll use defaults if config fails
+	cfg, _ := config.Load() // Ignore error - proceed with default behavior if config unavailable
 	if cfg != nil && !cfg.IsTelemetryEnabled() {
 		initialized = true
 		enabled = false
@@ -130,9 +130,8 @@ func addSystemMetadata() {
 // It extracts user information from the stored JWT token without transmitting sensitive data.
 func setUserContext() {
 	bugsnag.OnBeforeNotify(func(event *bugsnag.Event, bugsnagConfig *bugsnag.Configuration) error {
-		// Attempt to load user configuration
+		// Load config to get user context - ignore errors to avoid blocking error reporting
 		cfg, _ := config.Load()
-		// Gracefully handle config errors to ensure error reporting continues
 
 		token := cfg.AccessToken
 		if token == "" {
