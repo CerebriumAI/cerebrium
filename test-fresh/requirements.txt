@@ -1,0 +1,4 @@
+# Add your Python dependencies here
+# Example:
+# numpy==1.24.0
+# requests>=2.28.0

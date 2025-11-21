@@ -103,14 +103,18 @@ changelog:
       - "typo"
 
 # Homebrew tap
-homebrew_casks:
+brews:
   - name: cerebrium
     repository:
       owner: CerebriumAI
       name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
     homepage: https://www.cerebrium.ai
     description: CLI for deploying and managing Cerebrium apps
     license: MIT
+    folder: Formula
+    test: |
+      system "#{bin}/cerebrium version"
 
 # Linux packages
 nfpms:
