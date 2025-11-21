@@ -108,7 +108,7 @@ brews:
     repository:
       owner: CerebriumAI
       name: homebrew-tap
-      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+      # Uses GITHUB_TOKEN by default, no need to specify
     homepage: https://www.cerebrium.ai
     description: CLI for deploying and managing Cerebrium apps
     license: MIT
