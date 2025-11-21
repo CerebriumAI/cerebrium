@@ -7,7 +7,15 @@ Command-line interface for [Cerebrium](https://cerebrium.ai) - the serverless in
 
 ## Installation
 
-### macOS
+### Python (pip)
+
+```bash
+pip install cerebrium
+```
+
+
+<details>
+<summary><strong>macOS</strong></summary>
 
 ```bash
 # Using Homebrew (recommended)
@@ -27,8 +35,10 @@ xattr -d com.apple.quarantine $(which cerebrium)
 ```
 
 Or right-click the binary in Finder → Open → confirm the security prompt.
+</details>
 
-### Linux
+<details>
+<summary><strong>Linux</strong></summary>
 
 ```bash
 # Download the latest release
@@ -40,8 +50,10 @@ sudo mv cerebrium /usr/local/bin/
 wget https://github.com/CerebriumAI/cerebrium/releases/latest/download/cerebrium_linux_amd64.deb
 sudo dpkg -i cerebrium_linux_amd64.deb
 ```
+</details>
 
-### Windows
+<details>
+<summary><strong>Windows</strong></summary>
 
 **PowerShell (Run as Administrator):**
 
@@ -70,25 +82,12 @@ Remove-Item cerebrium.zip
 3. Extract and add `cerebrium.exe` to your PATH
 
 **Note:** Package manager support (Chocolatey/Scoop) coming soon!
+</details>
 
 ### Verify Installation
 
 ```bash
 cerebrium version
-```
-
-## Quick Start
-
-```bash
-# Authenticate with Cerebrium
-cerebrium login
-
-# Initialize a new project
-cerebrium init my-app
-cd my-app
-
-# Deploy your application
-cerebrium deploy
 ```
 
 ## Usage
@@ -110,48 +109,9 @@ Available Commands:
 Run "cerebrium [command] --help" for detailed usage information.
 ```
 
-## Configuration
-
-The CLI uses `cerebrium.toml` for project configuration and `~/.cerebrium/config.yaml` for global settings.
-
-Example `cerebrium.toml`:
-
-```toml
-[cerebrium.deployment]
-name = "my-app"
-python_version = "3.11"
-
-[cerebrium.hardware]
-cpu = 2.0
-memory = 4.0
-compute = "CPU"
-region = "us-east-1"
-
-[cerebrium.scaling]
-min_replicas = 0
-max_replicas = 3
-```
-
-For complete configuration options:
-- Run `cerebrium init` to generate a template
-- See the [documentation](https://docs.cerebrium.ai)
-
-## Non-Interactive Mode
-
-The CLI supports non-interactive usage for CI/CD pipelines:
-
-```bash
-# Disable animations and colors
-cerebrium deploy --no-color
-
-# Skip confirmation prompts
-cerebrium deploy --disable-confirmation
-
-# Combine for CI environments
-CEREBRIUM_TOKEN=xxx cerebrium deploy --no-color -y
-```
-
 ## Documentation
+
+In order to start building with Cerebrium you can check out the following resources:
 
 - **Full Documentation**: [docs.cerebrium.ai](https://docs.cerebrium.ai)
 - **API Reference**: [api.cerebrium.ai](https://api.cerebrium.ai)
