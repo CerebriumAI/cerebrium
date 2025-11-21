@@ -51,9 +51,7 @@ You can also disable telemetry temporarily using the environment variable:
 				return ui.NewFileSystemError(fmt.Errorf("failed to save config: %w", err))
 			}
 
-			fmt.Println("✓ Telemetry and error reporting disabled")
-			fmt.Println("\nThe CLI will no longer send crash reports or error information.")
-			fmt.Println("Thank you for using Cerebrium!")
+			fmt.Println("✓ Telemetry disabled")
 
 			return nil
 		},
@@ -85,10 +83,7 @@ No personal data or code is ever transmitted - only error messages and system me
 				return ui.NewFileSystemError(fmt.Errorf("failed to save config: %w", err))
 			}
 
-			fmt.Println("✓ Telemetry and error reporting enabled")
-			fmt.Println("\nThank you for helping us improve Cerebrium!")
-			fmt.Println("Error reports help us identify and fix issues quickly.")
-			fmt.Println("No personal data or code is transmitted.")
+			fmt.Println("✓ Telemetry enabled")
 
 			return nil
 		},
@@ -110,13 +105,9 @@ func newTelemetryStatusCmd() *cobra.Command {
 			}
 
 			if cfg.IsTelemetryEnabled() {
-				fmt.Println("Telemetry: ENABLED")
-				fmt.Println("\nError reporting is active. This helps us improve Cerebrium.")
-				fmt.Println("To disable, run: cerebrium config telemetry disable")
+				fmt.Println("Telemetry: enabled")
 			} else {
-				fmt.Println("Telemetry: DISABLED")
-				fmt.Println("\nError reporting is disabled.")
-				fmt.Println("To enable, run: cerebrium config telemetry enable")
+				fmt.Println("Telemetry: disabled")
 			}
 
 			return nil
