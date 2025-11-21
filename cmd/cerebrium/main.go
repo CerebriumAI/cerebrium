@@ -16,7 +16,6 @@ func main() {
 		// Don't fail if Bugsnag initialization fails, just log it
 		fmt.Fprintf(os.Stderr, "Warning: Failed to initialize error tracking: %v\n", err)
 	}
-	defer cerebrium_bugsnag.Flush()
 
 	// Recover from panics and report them to Bugsnag
 	defer cerebrium_bugsnag.NotifyOnPanic(context.Background())

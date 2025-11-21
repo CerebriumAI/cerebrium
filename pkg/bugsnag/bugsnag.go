@@ -282,13 +282,6 @@ func NotifyOnPanic(ctx context.Context) {
 	}
 }
 
-// Flush ensures all queued error reports are transmitted before application termination.
-// Call this in main() defer or before process exit to prevent error loss.
-func Flush() {
-	// Bugsnag Go client handles flushing internally through its async queue
-	// This function exists for API consistency and future enhancements
-}
-
 // SetProjectID associates errors with a specific project for multi-project environments.
 // Call this when switching project contexts to ensure accurate error attribution.
 func SetProjectID(projectID string) {
