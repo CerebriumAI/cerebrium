@@ -162,6 +162,7 @@ func (c *client) request(ctx context.Context, method, path string, body any, req
 
 				// Report authentication errors to Bugsnag
 				cerebrium_bugsnag.NotifyWithMetadata(
+					ctx,
 					authErr,
 					bugsnag.SeverityWarning,
 					bugsnag.MetaData{
@@ -172,7 +173,6 @@ func (c *client) request(ctx context.Context, method, path string, body any, req
 							"attempt":     attempt,
 						},
 					},
-					ctx,
 				)
 
 				return retry.Unrecoverable(authErr)
@@ -200,6 +200,7 @@ func (c *client) request(ctx context.Context, method, path string, body any, req
 					}
 
 					cerebrium_bugsnag.NotifyWithMetadata(
+						ctx,
 						apiErr,
 						severity,
 						bugsnag.MetaData{
@@ -211,7 +212,6 @@ func (c *client) request(ctx context.Context, method, path string, body any, req
 								"attempt":     attempt,
 							},
 						},
-						ctx,
 					)
 				}
 
@@ -230,6 +230,7 @@ func (c *client) request(ctx context.Context, method, path string, body any, req
 			// Report unexpected API errors to Bugsnag
 			if resp.StatusCode != 404 {
 				cerebrium_bugsnag.NotifyWithMetadata(
+					ctx,
 					apiErr,
 					bugsnag.SeverityError,
 					bugsnag.MetaData{
@@ -241,7 +242,6 @@ func (c *client) request(ctx context.Context, method, path string, body any, req
 							"attempt":     attempt,
 						},
 					},
-					ctx,
 				)
 			}
 

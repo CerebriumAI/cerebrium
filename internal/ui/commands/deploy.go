@@ -327,6 +327,7 @@ func (m *DeployView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			// Report build failure to Bugsnag
 			cerebrium_bugsnag.NotifyWithMetadata(
+				m.ctx,
 				fmt.Errorf("deployment build failed: %s", msg.status),
 				bugsnag.SeverityError,
 				bugsnag.MetaData{
@@ -337,7 +338,6 @@ func (m *DeployView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						"app_name":     m.conf.Config.Deployment.Name,
 					},
 				},
-				m.ctx,
 			)
 
 			if m.conf.SimpleOutput() {
@@ -398,9 +398,9 @@ func (m *DeployView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 			if msg.Type == ui.ErrorTypeValidation {
-				cerebrium_bugsnag.NotifyWithMetadata(msg.Err, bugsnag.SeverityWarning, metadata, m.ctx)
+				cerebrium_bugsnag.NotifyWithMetadata(m.ctx, msg.Err, bugsnag.SeverityWarning, metadata)
 			} else {
-				cerebrium_bugsnag.NotifyWithMetadata(msg.Err, bugsnag.SeverityError, metadata, m.ctx)
+				cerebrium_bugsnag.NotifyWithMetadata(m.ctx, msg.Err, bugsnag.SeverityError, metadata)
 			}
 		}
 

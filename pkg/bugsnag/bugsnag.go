@@ -183,7 +183,7 @@ func getUserIDFromJWT(tokenString string) string {
 
 // NotifyError reports critical errors that indicate system failures or unexpected behavior.
 // These errors typically require immediate attention and may affect user functionality.
-func NotifyError(err error, ctx ...context.Context) {
+func NotifyError(ctx context.Context, err error) {
 	if !initialized {
 		_ = Initialize()
 	}
@@ -192,19 +192,12 @@ func NotifyError(err error, ctx ...context.Context) {
 		return
 	}
 
-	var c context.Context
-	if len(ctx) > 0 {
-		c = ctx[0]
-	} else {
-		c = context.Background()
-	}
-
-	_ = bugsnag.Notify(err, c, bugsnag.SeverityError)
+	_ = bugsnag.Notify(err, ctx, bugsnag.SeverityError)
 }
 
 // NotifyWarning reports non-critical issues that may indicate potential problems.
 // These are typically recoverable errors or degraded functionality scenarios.
-func NotifyWarning(err error, ctx ...context.Context) {
+func NotifyWarning(ctx context.Context, err error) {
 	if !initialized {
 		_ = Initialize()
 	}
@@ -213,19 +206,12 @@ func NotifyWarning(err error, ctx ...context.Context) {
 		return
 	}
 
-	var c context.Context
-	if len(ctx) > 0 {
-		c = ctx[0]
-	} else {
-		c = context.Background()
-	}
-
-	_ = bugsnag.Notify(err, c, bugsnag.SeverityWarning)
+	_ = bugsnag.Notify(err, ctx, bugsnag.SeverityWarning)
 }
 
 // NotifyInfo reports informational events for monitoring and debugging purposes.
 // These are typically expected errors or noteworthy system events.
-func NotifyInfo(err error, ctx ...context.Context) {
+func NotifyInfo(ctx context.Context, err error) {
 	if !initialized {
 		_ = Initialize()
 	}
@@ -234,19 +220,12 @@ func NotifyInfo(err error, ctx ...context.Context) {
 		return
 	}
 
-	var c context.Context
-	if len(ctx) > 0 {
-		c = ctx[0]
-	} else {
-		c = context.Background()
-	}
-
-	_ = bugsnag.Notify(err, c, bugsnag.SeverityInfo)
+	_ = bugsnag.Notify(err, ctx, bugsnag.SeverityInfo)
 }
 
 // Notify reports an error with custom severity level for flexible error categorization.
 // Use bugsnag.SeverityError, bugsnag.SeverityWarning, or bugsnag.SeverityInfo as severity values.
-func Notify(err error, severity interface{}, ctx ...context.Context) {
+func Notify(ctx context.Context, err error, severity interface{}) {
 	if !initialized {
 		_ = Initialize()
 	}
@@ -255,19 +234,12 @@ func Notify(err error, severity interface{}, ctx ...context.Context) {
 		return
 	}
 
-	var c context.Context
-	if len(ctx) > 0 {
-		c = ctx[0]
-	} else {
-		c = context.Background()
-	}
-
-	_ = bugsnag.Notify(err, c, severity)
+	_ = bugsnag.Notify(err, ctx, severity)
 }
 
 // NotifyWithMetadata reports an error with custom metadata for enhanced debugging context.
 // Additional metadata helps developers understand the state and conditions when errors occur.
-func NotifyWithMetadata(err error, severity interface{}, metadata bugsnag.MetaData, ctx ...context.Context) {
+func NotifyWithMetadata(ctx context.Context, err error, severity interface{}, metadata bugsnag.MetaData) {
 	if !initialized {
 		_ = Initialize()
 	}
@@ -276,14 +248,7 @@ func NotifyWithMetadata(err error, severity interface{}, metadata bugsnag.MetaDa
 		return
 	}
 
-	var c context.Context
-	if len(ctx) > 0 {
-		c = ctx[0]
-	} else {
-		c = context.Background()
-	}
-
-	_ = bugsnag.Notify(err, c, severity, metadata)
+	_ = bugsnag.Notify(err, ctx, severity, metadata)
 }
 
 // WrapError enhances an error with additional context for better error tracking.
@@ -310,7 +275,7 @@ func NotifyOnPanic(ctx context.Context) {
 		}
 
 		// Report panic as critical error
-		NotifyError(err, ctx)
+		NotifyError(ctx, err)
 
 		// Preserve panic behavior for proper error handling
 		panic(r)

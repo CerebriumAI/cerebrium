@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strings"
@@ -29,7 +30,7 @@ func main() {
 			default:
 				err = fmt.Errorf("panic: %v", r)
 			}
-			cerebrium_bugsnag.NotifyError(err)
+			cerebrium_bugsnag.NotifyError(context.Background(), err)
 			// Re-panic to maintain normal panic behavior
 			panic(r)
 		}

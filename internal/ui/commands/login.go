@@ -162,9 +162,9 @@ func (m *LoginView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 			if msg.Type == ui.ErrorTypeValidation {
-				cerebrium_bugsnag.NotifyWithMetadata(msg.Err, bugsnag.SeverityWarning, metadata, m.ctx)
+				cerebrium_bugsnag.NotifyWithMetadata(m.ctx, msg.Err, bugsnag.SeverityWarning, metadata)
 			} else {
-				cerebrium_bugsnag.NotifyWithMetadata(msg.Err, bugsnag.SeverityError, metadata, m.ctx)
+				cerebrium_bugsnag.NotifyWithMetadata(m.ctx, msg.Err, bugsnag.SeverityError, metadata)
 			}
 		}
 
