@@ -386,8 +386,7 @@ func (m *DeployView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.state = StateDeployError
 
 		// Report errors to Bugsnag based on error type
-		// Don't report user cancellations
-		if msg.Type != ui.ErrorTypeUserCancelled && !cerebrium_bugsnag.IsUserCancellation(msg.Err) {
+		if msg.Type != ui.ErrorTypeUserCancelled {
 			metadata := bugsnag.MetaData{
 				"error": {
 					"type":       fmt.Sprintf("%d", msg.Type),

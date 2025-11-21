@@ -152,8 +152,7 @@ func (m *LoginView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.state = StateError
 
 		// Report login errors to Bugsnag
-		// Don't report user cancellations
-		if msg.Type != ui.ErrorTypeUserCancelled && !cerebrium_bugsnag.IsUserCancellation(msg.Err) {
+		if msg.Type != ui.ErrorTypeUserCancelled {
 			metadata := bugsnag.MetaData{
 				"login": {
 					"error_type": fmt.Sprintf("%d", msg.Type),

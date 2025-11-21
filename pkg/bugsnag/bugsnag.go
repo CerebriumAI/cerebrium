@@ -188,7 +188,7 @@ func NotifyError(ctx context.Context, err error) {
 		_ = Initialize()
 	}
 
-	if !enabled || err == nil {
+	if !enabled || err == nil || IsUserCancellation(err) {
 		return
 	}
 
@@ -202,7 +202,7 @@ func NotifyWarning(ctx context.Context, err error) {
 		_ = Initialize()
 	}
 
-	if !enabled || err == nil {
+	if !enabled || err == nil || IsUserCancellation(err) {
 		return
 	}
 
@@ -216,7 +216,7 @@ func NotifyInfo(ctx context.Context, err error) {
 		_ = Initialize()
 	}
 
-	if !enabled || err == nil {
+	if !enabled || err == nil || IsUserCancellation(err) {
 		return
 	}
 
@@ -230,7 +230,7 @@ func Notify(ctx context.Context, err error, severity interface{}) {
 		_ = Initialize()
 	}
 
-	if !enabled || err == nil {
+	if !enabled || err == nil || IsUserCancellation(err) {
 		return
 	}
 
@@ -244,7 +244,7 @@ func NotifyWithMetadata(ctx context.Context, err error, severity interface{}, me
 		_ = Initialize()
 	}
 
-	if !enabled || err == nil {
+	if !enabled || err == nil || IsUserCancellation(err) {
 		return
 	}
 
