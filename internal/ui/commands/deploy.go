@@ -21,7 +21,7 @@ import (
 	"github.com/cerebriumai/cerebrium/internal/files"
 	"github.com/cerebriumai/cerebrium/internal/ui"
 	"github.com/cerebriumai/cerebrium/internal/ui/logging"
-	cerebriumBugsnag "github.com/cerebriumai/cerebrium/pkg/bugsnag"
+	cerebrium_bugsnag "github.com/cerebriumai/cerebrium/pkg/bugsnag"
 	"github.com/cerebriumai/cerebrium/pkg/projectconfig"
 	"github.com/charmbracelet/bubbles/progress"
 	tea "github.com/charmbracelet/bubbletea"
@@ -326,7 +326,7 @@ func (m *DeployView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.err = err
 
 			// Report build failure to Bugsnag
-			cerebriumBugsnag.NotifyWithMetadata(
+			cerebrium_bugsnag.NotifyWithMetadata(
 				fmt.Errorf("deployment build failed: %s", msg.status),
 				bugsnag.SeverityError,
 				bugsnag.MetaData{
@@ -387,7 +387,7 @@ func (m *DeployView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// Report errors to Bugsnag based on error type
 		// Don't report user cancellations
-		if msg.Type != ui.ErrorTypeUserCancelled && !cerebriumBugsnag.IsUserCancellation(msg.Err) {
+		if msg.Type != ui.ErrorTypeUserCancelled && !cerebrium_bugsnag.IsUserCancellation(msg.Err) {
 			metadata := bugsnag.MetaData{
 				"error": {
 					"type":       fmt.Sprintf("%d", msg.Type),
@@ -398,9 +398,9 @@ func (m *DeployView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 			if msg.Type == ui.ErrorTypeValidation {
-				cerebriumBugsnag.NotifyWithMetadata(msg.Err, bugsnag.SeverityWarning, metadata, m.ctx)
+				cerebrium_bugsnag.NotifyWithMetadata(msg.Err, bugsnag.SeverityWarning, metadata, m.ctx)
 			} else {
-				cerebriumBugsnag.NotifyWithMetadata(msg.Err, bugsnag.SeverityError, metadata, m.ctx)
+				cerebrium_bugsnag.NotifyWithMetadata(msg.Err, bugsnag.SeverityError, metadata, m.ctx)
 			}
 		}
 

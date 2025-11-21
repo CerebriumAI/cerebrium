@@ -18,7 +18,7 @@ import (
 	"github.com/avast/retry-go/v4"
 	"github.com/bugsnag/bugsnag-go/v2"
 	"github.com/cerebriumai/cerebrium/internal/auth"
-	cerebriumBugsnag "github.com/cerebriumai/cerebrium/pkg/bugsnag"
+	cerebrium_bugsnag "github.com/cerebriumai/cerebrium/pkg/bugsnag"
 	"github.com/cerebriumai/cerebrium/pkg/config"
 )
 
@@ -161,7 +161,7 @@ func (c *client) request(ctx context.Context, method, path string, body any, req
 				authErr := fmt.Errorf("you must log in to use this functionality. Please run 'cerebrium login'")
 
 				// Report authentication errors to Bugsnag
-				cerebriumBugsnag.NotifyWithMetadata(
+				cerebrium_bugsnag.NotifyWithMetadata(
 					authErr,
 					bugsnag.SeverityWarning,
 					bugsnag.MetaData{
@@ -199,7 +199,7 @@ func (c *client) request(ctx context.Context, method, path string, body any, req
 						severity = bugsnag.SeverityWarning // Payment required
 					}
 
-					cerebriumBugsnag.NotifyWithMetadata(
+					cerebrium_bugsnag.NotifyWithMetadata(
 						apiErr,
 						severity,
 						bugsnag.MetaData{
@@ -229,7 +229,7 @@ func (c *client) request(ctx context.Context, method, path string, body any, req
 
 			// Report unexpected API errors to Bugsnag
 			if resp.StatusCode != 404 {
-				cerebriumBugsnag.NotifyWithMetadata(
+				cerebrium_bugsnag.NotifyWithMetadata(
 					apiErr,
 					bugsnag.SeverityError,
 					bugsnag.MetaData{

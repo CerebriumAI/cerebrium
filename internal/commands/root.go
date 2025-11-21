@@ -14,7 +14,7 @@ import (
 	runsCmd "github.com/cerebriumai/cerebrium/internal/commands/runs"
 	"github.com/cerebriumai/cerebrium/internal/ui"
 	"github.com/cerebriumai/cerebrium/internal/version"
-	cerebriumBugsnag "github.com/cerebriumai/cerebrium/pkg/bugsnag"
+	cerebrium_bugsnag "github.com/cerebriumai/cerebrium/pkg/bugsnag"
 	"github.com/cerebriumai/cerebrium/pkg/config"
 	"github.com/cerebriumai/cerebrium/pkg/logrium"
 	"github.com/spf13/cobra"
@@ -32,7 +32,7 @@ func NewRootCmd() *cobra.Command {
 		// Load config once and store in context for all subcommands
 		PersistentPreRun: func(cmd *cobra.Command, args []string) {
 			// Set command context for Bugsnag
-			cerebriumBugsnag.SetCommandContext(cmd.Name(), args)
+			cerebrium_bugsnag.SetCommandContext(cmd.Name(), args)
 
 			verbose, _ := cmd.Flags().GetBool("verbose")
 

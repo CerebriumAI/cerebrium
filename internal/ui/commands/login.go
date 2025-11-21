@@ -9,7 +9,7 @@ import (
 	"github.com/cerebriumai/cerebrium/internal/api"
 	"github.com/cerebriumai/cerebrium/internal/auth"
 	"github.com/cerebriumai/cerebrium/internal/ui"
-	cerebriumBugsnag "github.com/cerebriumai/cerebrium/pkg/bugsnag"
+	cerebrium_bugsnag "github.com/cerebriumai/cerebrium/pkg/bugsnag"
 	"github.com/cerebriumai/cerebrium/pkg/config"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -153,7 +153,7 @@ func (m *LoginView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// Report login errors to Bugsnag
 		// Don't report user cancellations
-		if msg.Type != ui.ErrorTypeUserCancelled && !cerebriumBugsnag.IsUserCancellation(msg.Err) {
+		if msg.Type != ui.ErrorTypeUserCancelled && !cerebrium_bugsnag.IsUserCancellation(msg.Err) {
 			metadata := bugsnag.MetaData{
 				"login": {
 					"error_type": fmt.Sprintf("%d", msg.Type),
@@ -162,9 +162,9 @@ func (m *LoginView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 			if msg.Type == ui.ErrorTypeValidation {
-				cerebriumBugsnag.NotifyWithMetadata(msg.Err, bugsnag.SeverityWarning, metadata, m.ctx)
+				cerebrium_bugsnag.NotifyWithMetadata(msg.Err, bugsnag.SeverityWarning, metadata, m.ctx)
 			} else {
-				cerebriumBugsnag.NotifyWithMetadata(msg.Err, bugsnag.SeverityError, metadata, m.ctx)
+				cerebrium_bugsnag.NotifyWithMetadata(msg.Err, bugsnag.SeverityError, metadata, m.ctx)
 			}
 		}
 
