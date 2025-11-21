@@ -111,7 +111,7 @@ Run "cerebrium [command] --help" for detailed usage information.
 
 ## Documentation
 
-In order to start building with Cerebrium you can check out the following resources:
+To start building with Cerebrium, check out our [Getting Started Guide](https://docs.cerebrium.ai/cerebrium/getting-started/introduction) and explore these resources:
 
 - **Full Documentation**: [docs.cerebrium.ai](https://docs.cerebrium.ai)
 - **API Reference**: [api.cerebrium.ai](https://api.cerebrium.ai)
