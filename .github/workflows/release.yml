@@ -11,6 +11,10 @@ on:
         required: false
         default: false
         type: boolean
+      version:
+        description: "Version to release (optional, for manual releases)"
+        required: false
+        type: string
 
 permissions:
   contents: write

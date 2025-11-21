@@ -43,3 +43,7 @@ dist/
 *.log
 *.tmp
 .DS_Store # macOS specific
+
+# Node modules for semantic-release
+node_modules/
+package-lock.json
