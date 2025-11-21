@@ -19,22 +19,7 @@ func main() {
 	defer cerebrium_bugsnag.Flush()
 
 	// Recover from panics and report them to Bugsnag
-	defer func() {
-		if r := recover(); r != nil {
-			var err error
-			switch x := r.(type) {
-			case string:
-				err = fmt.Errorf("panic: %s", x)
-			case error:
-				err = fmt.Errorf("panic: %w", x)
-			default:
-				err = fmt.Errorf("panic: %v", r)
-			}
-			cerebrium_bugsnag.NotifyError(context.Background(), err)
-			// Re-panic to maintain normal panic behavior
-			panic(r)
-		}
-	}()
+	defer cerebrium_bugsnag.NotifyOnPanic(context.Background())
 
 	rootCmd := commands.NewRootCmd()
 	if err := rootCmd.Execute(); err != nil {
