@@ -55,36 +55,7 @@ jobs:
             echo "No new release"
           fi
 
-  goreleaser:
-    name: Build and Release with GoReleaser
-    needs: semantic-release
-    if: needs.semantic-release.outputs.new-release-published == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
-          ref: v${{ needs.semantic-release.outputs.new-release-version }}
-
-      - name: Set up Go
-        uses: actions/setup-go@v6
-        with:
-          go-version: "1.25"
-          cache: true
-
-      - name: Run GoReleaser
-        uses: goreleaser/goreleaser-action@v6
-        with:
-          version: "~> v2"
-          args: release --clean
-        env:
-          GITHUB_TOKEN: ${{ secrets.GH_PAT }}
-          # macOS code signing and notarization
-          MACOS_CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
-          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
-          MACOS_NOTARIZATION_ISSUER_ID: ${{ secrets.MACOS_NOTARIZATION_ISSUER_ID }}
-          MACOS_NOTARIZATION_KEY_ID: ${{ secrets.MACOS_NOTARIZATION_KEY_ID }}
-          MACOS_NOTARIZATION_KEY: ${{ secrets.MACOS_NOTARIZATION_KEY }}
-          # Bugsnag
-          BUGSNAG_API_KEY: ${{ secrets.BUGSNAG_API_KEY }}
+  # Note: GoReleaser and PyPI publishing will be triggered automatically
+  # when semantic-release creates a new GitHub release.
+  # The release.yml workflow listens for new tags (v*)
+  # The pypi-publish.yml workflow listens for release events

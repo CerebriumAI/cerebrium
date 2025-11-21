@@ -87,10 +87,13 @@ plugins:
         - internal/version/version.go
       message: "chore(release): ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}"
 
-  # Create GitHub release
+  # Create GitHub release and tag
   - - "@semantic-release/github"
     - successComment: false
       failComment: false
       releasedLabels:
         - released
         - "released-v${nextRelease.version}"
+      # This will create the GitHub release which triggers:
+      # 1. release.yml workflow (via tag push) -> GoReleaser -> Homebrew
+      # 2. pypi-publish.yml workflow (via release event) -> PyPI
