@@ -145,7 +145,7 @@ func (m *LogsView) View() string {
 	// Interactive mode: render based on state
 	switch m.state {
 	case LogsStatusLoading:
-		return fmt.Sprintf("Loading logs...") // TODO: Use spinner
+		return "Loading logs..." // TODO: Use spinner
 
 	case LogsStatusStreaming:
 		// Fall through, we just want to display the log viewer
@@ -158,7 +158,7 @@ func (m *LogsView) View() string {
 			output.WriteString("\n")
 		} else {
 			output.WriteString("\n")
-			output.WriteString(ui.FormatError(errors.New("An unknown error occurred")))
+			output.WriteString(ui.FormatError(errors.New("an unknown error occurred")))
 			output.WriteString("\n")
 		}
 
@@ -213,6 +213,10 @@ func (m *LogsView) onKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	// Otherwise hand off to the log viewer and update it
 	updatedViewer, cmd := m.logViewer.Update(msg)
-	m.logViewer = updatedViewer.(*logging.LogViewerModel)
+	var ok bool
+	m.logViewer, ok = updatedViewer.(*logging.LogViewerModel)
+	if !ok {
+		return m, nil
+	}
 	return m, cmd
 }

@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/bugsnag/bugsnag-go/v2"
 	"github.com/cerebriumai/cerebrium/internal/api"
 	"github.com/cerebriumai/cerebrium/internal/auth"
 	"github.com/cerebriumai/cerebrium/internal/ui"
+	cerebrium_bugsnag "github.com/cerebriumai/cerebrium/pkg/bugsnag"
 	"github.com/cerebriumai/cerebrium/pkg/config"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -148,6 +150,22 @@ func (m *LoginView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		msg.SilentExit = true // Will be shown in View()
 		m.err = msg
 		m.state = StateError
+
+		// Report login errors to Bugsnag
+		if msg.Type != ui.ErrorTypeUserCancelled {
+			metadata := bugsnag.MetaData{
+				"login": {
+					"error_type": fmt.Sprintf("%d", msg.Type),
+					"state":      fmt.Sprintf("%d", m.state),
+				},
+			}
+
+			if msg.Type == ui.ErrorTypeValidation {
+				cerebrium_bugsnag.NotifyWithMetadata(m.ctx, msg.Err, bugsnag.SeverityWarning, metadata)
+			} else {
+				cerebrium_bugsnag.NotifyWithMetadata(m.ctx, msg.Err, bugsnag.SeverityError, metadata)
+			}
+		}
 
 		if m.conf.SimpleOutput() {
 			fmt.Printf("Error: %s\n", msg.Error())

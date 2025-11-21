@@ -63,8 +63,8 @@ type TestHarness[T tea.Model] struct {
 	expectedSteps      []TestStep[T] // Steps that expect messages from async commands
 	finalStep          *TestStep[T]  // Final step that stops command processing
 	goldie             *goldie.Goldie
-	currentExpectIndex int           // Tracks which expected step we're on
-	stopProcessing     bool          // Set to true when Finally() step is reached
+	currentExpectIndex int  // Tracks which expected step we're on
+	stopProcessing     bool // Set to true when Finally() step is reached
 }
 
 // TestStep represents one step in a test sequence.

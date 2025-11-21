@@ -14,10 +14,11 @@ func NewConfigCmd() *cobra.Command {
 Configuration is stored in ~/.cerebrium/config.yaml
 
 Available subcommands:
-  set   - Set a configuration value
-  get   - Get a configuration value
-  list  - List all configuration
-  edit  - Open config file in editor`,
+  set       - Set a configuration value
+  get       - Get a configuration value
+  list      - List all configuration
+  edit      - Open config file in editor
+  telemetry - Manage telemetry settings`,
 	}
 
 	// Add subcommands
@@ -25,6 +26,7 @@ Available subcommands:
 	cmd.AddCommand(newGetCmd())
 	cmd.AddCommand(newListCmd())
 	cmd.AddCommand(newEditCmd())
+	cmd.AddCommand(newTelemetryCmd())
 
 	return cmd
 }

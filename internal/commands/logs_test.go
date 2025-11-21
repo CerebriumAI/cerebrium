@@ -73,7 +73,6 @@ func Test_determineAppID(t *testing.T) {
 			currentProjectID: "dev-p-0780791d",
 			expectedAppID:    "dev-p-0780791d-3-cpu-only",
 		},
-
 	}
 
 	for _, tc := range tcs {

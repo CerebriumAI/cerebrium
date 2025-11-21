@@ -140,3 +140,5 @@ jobs:
           MACOS_NOTARIZATION_ISSUER_ID: ${{ secrets.MACOS_NOTARIZATION_ISSUER_ID }}
           MACOS_NOTARIZATION_KEY_ID: ${{ secrets.MACOS_NOTARIZATION_KEY_ID }}
           MACOS_NOTARIZATION_KEY: ${{ secrets.MACOS_NOTARIZATION_KEY }}
+          # Bugsnag error tracking configuration
+          BUGSNAG_API_KEY: ${{ secrets.BUGSNAG_API_KEY }}

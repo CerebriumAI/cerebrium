@@ -24,6 +24,8 @@ builds:
       - -X github.com/cerebriumai/cerebrium/internal/version.Version={{.Version}}
       - -X github.com/cerebriumai/cerebrium/internal/version.Commit={{.Commit}}
       - -X github.com/cerebriumai/cerebrium/internal/version.BuildDate={{.Date}}
+      - -X github.com/cerebriumai/cerebrium/pkg/bugsnag.BugsnagAPIKey={{.Env.BUGSNAG_API_KEY}}
+      - -X github.com/cerebriumai/cerebrium/pkg/bugsnag.DefaultReleaseStage=prod
 
 # macOS Code Signing and Notarization
 # This uses GoReleaser's cross-platform notarization with anchore/quill

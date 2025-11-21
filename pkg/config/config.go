@@ -26,6 +26,7 @@ type Config struct {
 	DefaultRegion    string
 	SkipVersionCheck bool
 	LogLevel         string
+	TelemetryEnabled *bool // Pointer to distinguish between unset (nil) and explicitly set (true/false)
 }
 
 // ValidUserFacingConfigKeys lists config keys that users should interact with
@@ -34,6 +35,7 @@ var ValidUserFacingConfigKeys = map[string]bool{
 	// Global settings
 	"skipversioncheck": true,
 	"loglevel":         true,
+	"telemetry":        true,
 
 	// Environment-specific settings (user doesn't need to know about env prefixes)
 	"defaultregion": true,
@@ -50,6 +52,7 @@ func GetConfigKeyDescription(key string) string {
 	descriptions := map[string]string{
 		"skipversioncheck": "Disable automatic version update checks (true/false)",
 		"loglevel":         "Logging level (debug/info/warn/error, default: info)",
+		"telemetry":        "Enable error telemetry and crash reporting (true/false, default: true)",
 		"defaultregion":    "Default region for deployments (e.g., us-east-1, us-west-2)",
 		"project":          "Current project ID",
 		"accesstoken":      "OAuth access token (managed by 'cerebrium login')",
@@ -126,10 +129,33 @@ func Load() (*Config, error) {
 		RefreshToken:     viper.GetString(prefix + "refreshtoken"),
 		DefaultRegion:    viper.GetString(prefix + "defaultregion"),
 		SkipVersionCheck: viper.GetBool("skipversioncheck"), // Global setting (not env-specific)
-		LogLevel:         viper.GetString("loglevel"),        // Global setting (not env-specific)
+		LogLevel:         viper.GetString("loglevel"),       // Global setting (not env-specific)
+	}
+
+	// Handle telemetry setting - use pointer to distinguish unset from false
+	if viper.IsSet("telemetry") {
+		telemetryEnabled := viper.GetBool("telemetry")
+		config.TelemetryEnabled = &telemetryEnabled
 	}
 
 	return config, nil
+}
+
+// IsTelemetryEnabled returns whether telemetry is enabled.
+// Returns true by default if not explicitly set (opt-out model).
+func (c *Config) IsTelemetryEnabled() bool {
+	// Check environment variable first (highest priority)
+	if envVal := os.Getenv("CEREBRIUM_TELEMETRY_DISABLED"); envVal != "" {
+		return envVal != "true" && envVal != "1"
+	}
+
+	// Check config file setting
+	if c.TelemetryEnabled != nil {
+		return *c.TelemetryEnabled
+	}
+
+	// Default to enabled (opt-out model)
+	return true
 }
 
 // Save writes the current configuration to disk
@@ -142,6 +168,11 @@ func Save(config *Config) error {
 	viper.Set(prefix+"defaultregion", config.DefaultRegion)
 	viper.Set("skipversioncheck", config.SkipVersionCheck) // Global setting
 	viper.Set("loglevel", config.LogLevel)                 // Global setting
+
+	// Save telemetry setting if explicitly set
+	if config.TelemetryEnabled != nil {
+		viper.Set("telemetry", *config.TelemetryEnabled)
+	}
 
 	if err := viper.WriteConfig(); err != nil {
 		return fmt.Errorf("failed to write config: %w", err)

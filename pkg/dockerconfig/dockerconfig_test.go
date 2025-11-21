@@ -21,7 +21,7 @@ func TestLoadFromPath(t *testing.T) {
 		// Create a temporary config file
 		tmpDir := t.TempDir()
 		configPath := filepath.Join(tmpDir, "config.json")
-		
+
 		configData := `{
 			"auths": {
 				"docker.io": {
@@ -32,10 +32,10 @@ func TestLoadFromPath(t *testing.T) {
 				}
 			}
 		}`
-		
+
 		err := os.WriteFile(configPath, []byte(configData), 0600)
 		require.NoError(t, err)
-		
+
 		config, err := LoadFromPath(configPath)
 		assert.NoError(t, err)
 		assert.NotNil(t, config)
@@ -47,14 +47,14 @@ func TestLoadFromPath(t *testing.T) {
 	t.Run("loads config with empty auths", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		configPath := filepath.Join(tmpDir, "config.json")
-		
+
 		configData := `{
 			"auths": {}
 		}`
-		
+
 		err := os.WriteFile(configPath, []byte(configData), 0600)
 		require.NoError(t, err)
-		
+
 		config, err := LoadFromPath(configPath)
 		assert.NoError(t, err)
 		assert.NotNil(t, config)
@@ -64,10 +64,10 @@ func TestLoadFromPath(t *testing.T) {
 	t.Run("returns error for invalid JSON", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		configPath := filepath.Join(tmpDir, "config.json")
-		
+
 		err := os.WriteFile(configPath, []byte("invalid json"), 0600)
 		require.NoError(t, err)
-		
+
 		config, err := LoadFromPath(configPath)
 		assert.Error(t, err)
 		assert.Nil(t, config)
@@ -82,16 +82,16 @@ func TestConfig_ToJSON(t *testing.T) {
 				"docker.io": {Auth: "dXNlcjpwYXNz"},
 			},
 		}
-		
+
 		jsonStr, err := config.ToJSON()
 		assert.NoError(t, err)
 		assert.NotEmpty(t, jsonStr)
-		
+
 		// Verify it's valid JSON
 		var parsed map[string]interface{}
 		err = json.Unmarshal([]byte(jsonStr), &parsed)
 		assert.NoError(t, err)
-		
+
 		// Verify content
 		auths := parsed["auths"].(map[string]interface{})
 		dockerAuth := auths["docker.io"].(map[string]interface{})

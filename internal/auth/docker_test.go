@@ -71,7 +71,7 @@ func TestGetDockerAuth(t *testing.T) {
 		configData := `{
 			"auths": {}
 		}`
-		
+
 		err = os.WriteFile(configPath, []byte(configData), 0600)
 		require.NoError(t, err)
 

@@ -1,14 +1,25 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strings"
 
 	"github.com/cerebriumai/cerebrium/internal/commands"
+	cerebrium_bugsnag "github.com/cerebriumai/cerebrium/pkg/bugsnag"
 )
 
 func main() {
+	// Initialize Bugsnag error tracking
+	if err := cerebrium_bugsnag.Initialize(); err != nil {
+		// Don't fail if Bugsnag initialization fails, just log it
+		fmt.Fprintf(os.Stderr, "Warning: Failed to initialize error tracking: %v\n", err)
+	}
+
+	// Recover from panics and report them to Bugsnag
+	defer cerebrium_bugsnag.NotifyOnPanic(context.Background())
+
 	rootCmd := commands.NewRootCmd()
 	if err := rootCmd.Execute(); err != nil {
 		// Commands handle their own error presentation logic
