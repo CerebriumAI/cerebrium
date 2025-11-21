@@ -1,0 +1,100 @@
+name: Publish to PyPI
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to publish (e.g., 2.0.0)'
+        required: true
+        type: string
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install build tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install build twine
+
+      - name: Update version in Python package
+        if: github.event_name == 'release'
+        run: |
+          VERSION="${{ github.event.release.tag_name }}"
+          VERSION="${VERSION#v}"  # Remove 'v' prefix if present
+
+          # Update version in setup.py
+          sed -i "s/VERSION = \".*\"/VERSION = \"$VERSION\"/" python-wrapper/setup.py
+
+          # Update version in pyproject.toml
+          sed -i "s/version = \".*\"/version = \"$VERSION\"/" python-wrapper/pyproject.toml
+
+          echo "Updated Python package version to $VERSION"
+
+      - name: Update version (manual trigger)
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+
+          # Update version in setup.py
+          sed -i "s/VERSION = \".*\"/VERSION = \"$VERSION\"/" python-wrapper/setup.py
+
+          # Update version in pyproject.toml
+          sed -i "s/version = \".*\"/version = \"$VERSION\"/" python-wrapper/pyproject.toml
+
+          echo "Updated Python package version to $VERSION"
+
+      - name: Build Python package
+        working-directory: python-wrapper
+        run: |
+          python -m build
+          ls -la dist/
+
+      - name: Check package
+        working-directory: python-wrapper
+        run: |
+          twine check dist/*
+
+      - name: Publish to Test PyPI
+        if: github.event_name == 'workflow_dispatch'
+        working-directory: python-wrapper
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.TEST_PYPI_API_TOKEN }}
+        run: |
+          twine upload --repository testpypi dist/* --verbose
+
+      - name: Publish to PyPI
+        if: github.event_name == 'release' && !github.event.release.prerelease
+        working-directory: python-wrapper
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+        run: |
+          twine upload dist/* --verbose
+
+      - name: Test installation from PyPI
+        if: github.event_name == 'release' && !github.event.release.prerelease
+        run: |
+          # Wait for PyPI to update
+          sleep 30
+
+          # Create a clean virtual environment
+          python -m venv test_env
+          source test_env/bin/activate
+
+          # Install from PyPI
+          pip install cerebrium==${{ github.event.release.tag_name#v }}
+
+          # Test that it works
+          cerebrium --version
