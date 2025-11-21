@@ -1,10 +1,9 @@
 name: Release
 
 on:
-  # Temporarily disabled for manual local release
-  # push:
-  #   tags:
-  #     - "v*"
+  push:
+    tags:
+      - "v*"
   workflow_dispatch:
     inputs:
       skip-tests:
@@ -12,6 +11,10 @@ on:
         required: false
         default: false
         type: boolean
+      version:
+        description: "Version to release (optional, for manual releases)"
+        required: false
+        type: string
 
 permissions:
   contents: write

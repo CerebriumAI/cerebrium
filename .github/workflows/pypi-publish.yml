@@ -6,9 +6,14 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version to publish (e.g., 2.0.0)'
+        description: "Version to publish (e.g., 2.0.1 or 2.0.1b1 for beta)"
         required: true
         type: string
+      is_beta:
+        description: "Is this a beta release?"
+        required: true
+        type: boolean
+        default: true
 
 jobs:
   build-and-publish:
@@ -20,7 +25,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: "3.12"
 
       - name: Install build tools
         run: |
@@ -32,6 +37,15 @@ jobs:
         run: |
           VERSION="${{ github.event.release.tag_name }}"
           VERSION="${VERSION#v}"  # Remove 'v' prefix if present
+
+          # Check if it's a prerelease and add beta suffix
+          if [[ "${{ github.event.release.prerelease }}" == "true" ]]; then
+            # Add beta suffix if not already present
+            if [[ ! "$VERSION" =~ (a|b|rc) ]]; then
+              VERSION="${VERSION}b1"
+              echo "Converting to beta version: $VERSION"
+            fi
+          fi
 
           # Update version in setup.py
           sed -i "s/VERSION = \".*\"/VERSION = \"$VERSION\"/" python-wrapper/setup.py
@@ -45,6 +59,14 @@ jobs:
         if: github.event_name == 'workflow_dispatch'
         run: |
           VERSION="${{ github.event.inputs.version }}"
+
+          # Ensure beta versions have proper format
+          if [[ "${{ github.event.inputs.is_beta }}" == "true" ]]; then
+            if [[ ! "$VERSION" =~ (a|b|rc) ]]; then
+              VERSION="${VERSION}b1"
+              echo "Converting to beta version: $VERSION"
+            fi
+          fi
 
           # Update version in setup.py
           sed -i "s/VERSION = \".*\"/VERSION = \"$VERSION\"/" python-wrapper/setup.py
@@ -65,22 +87,24 @@ jobs:
         run: |
           twine check dist/*
 
-      - name: Publish to Test PyPI
-        if: github.event_name == 'workflow_dispatch'
-        working-directory: python-wrapper
-        env:
-          TWINE_USERNAME: __token__
-          TWINE_PASSWORD: ${{ secrets.TEST_PYPI_API_TOKEN }}
-        run: |
-          twine upload --repository testpypi dist/* --verbose
-
-      - name: Publish to PyPI
-        if: github.event_name == 'release' && !github.event.release.prerelease
+      - name: Publish Beta to PyPI
+        if: (github.event_name == 'release' && github.event.release.prerelease) || (github.event_name == 'workflow_dispatch' && github.event.inputs.is_beta == 'true')
         working-directory: python-wrapper
         env:
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
         run: |
+          echo "Publishing beta version to PyPI..."
+          twine upload dist/* --verbose
+
+      - name: Publish Stable to PyPI
+        if: (github.event_name == 'release' && !github.event.release.prerelease) || (github.event_name == 'workflow_dispatch' && github.event.inputs.is_beta == 'false')
+        working-directory: python-wrapper
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+        run: |
+          echo "Publishing stable version to PyPI..."
           twine upload dist/* --verbose
 
       - name: Test installation from PyPI
