@@ -282,19 +282,6 @@ func NotifyOnPanic(ctx context.Context) {
 	}
 }
 
-// SetProjectID associates errors with a specific project for multi-project environments.
-// Call this when switching project contexts to ensure accurate error attribution.
-func SetProjectID(projectID string) {
-	if !initialized {
-		_ = Initialize()
-	}
-
-	bugsnag.OnBeforeNotify(func(event *bugsnag.Event, bugsnagConfig *bugsnag.Configuration) error {
-		event.MetaData.Add("project", "project_id", projectID)
-		return nil
-	})
-}
-
 // SetCommandContext tracks which CLI command triggered an error for better debugging.
 // This metadata helps identify command-specific issues and usage patterns.
 func SetCommandContext(command string, args []string) {
