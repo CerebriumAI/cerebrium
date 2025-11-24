@@ -1,10 +1,9 @@
 name: Release
 
 on:
-  # Temporarily disabled for manual local release
-  # push:
-  #   tags:
-  #     - "v*"
+  push:
+    tags:
+      - "v*"
   workflow_dispatch:
     inputs:
       skip-tests:
@@ -12,6 +11,10 @@ on:
         required: false
         default: false
         type: boolean
+      version:
+        description: "Version to release (optional, for manual releases)"
+        required: false
+        type: string
 
 permissions:
   contents: write
@@ -33,7 +36,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version: "1.25"
+          go-version: "1.23"
           cache: true
 
       - name: Download dependencies
@@ -62,7 +65,7 @@ jobs:
   #     - name: Set up Go
   #       uses: actions/setup-go@v6
   #       with:
-  #         go-version: "1.25"
+  #         go-version: "1.23"
   #         cache: true
 
   #     - name: Install jq
@@ -114,7 +117,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version: "1.25"
+          go-version: "1.23"
           cache: true
 
       # Setup certificates and keys for signing (only for tag pushes, not manual dispatch)

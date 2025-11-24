@@ -78,7 +78,7 @@ def verify_checksum(data, expected_checksums, archive_name):
 
     # Find the expected checksum for this archive
     expected_checksum = None
-    for line in expected_checksums.split('\n'):
+    for line in expected_checksums.split("\n"):
         if archive_name in line:
             # Format: "<checksum>  <filename>"
             parts = line.split()
@@ -122,7 +122,7 @@ def download_binary(version):
     checksums_url = CHECKSUMS_URL_TEMPLATE.format(version=version)
     try:
         with urlopen(checksums_url) as response:
-            checksums_data = response.read().decode('utf-8')
+            checksums_data = response.read().decode("utf-8")
     except Exception as e:
         raise RuntimeError(
             f"Failed to download checksums from {checksums_url}: {e}\n"
