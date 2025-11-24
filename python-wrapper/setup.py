@@ -21,7 +21,8 @@ from setuptools import setup
 from setuptools.command.install import install
 
 # Version should match the Go CLI version
-VERSION = "2.0.5"
+VERSION = "2.1.0b1"  # PyPI uses b1 instead of -beta.1
+GITHUB_VERSION = "2.1.0-beta.1"  # GitHub uses -beta.1 format
 
 # GitHub release URL pattern
 # Note: Archive names don't include version (for /latest/ compatibility)
@@ -111,15 +112,16 @@ def download_binary(version):
     os_name, arch_name, ext = get_platform_info()
 
     archive_name = f"cerebrium_cli_{os_name}_{arch_name}.{ext}"
+    # Use GITHUB_VERSION for download URL
     url = RELEASE_URL_TEMPLATE.format(
-        version=version, os=os_name, arch=arch_name, ext=ext
+        version=GITHUB_VERSION, os=os_name, arch=arch_name, ext=ext
     )
 
-    print(f"Downloading Cerebrium CLI v{version} for {os_name}/{arch_name}...")
+    print(f"Downloading Cerebrium CLI v{GITHUB_VERSION} for {os_name}/{arch_name}...")
     print(f"URL: {url}")
 
     # Download checksums.txt for verification
-    checksums_url = CHECKSUMS_URL_TEMPLATE.format(version=version)
+    checksums_url = CHECKSUMS_URL_TEMPLATE.format(version=GITHUB_VERSION)
     try:
         with urlopen(checksums_url) as response:
             checksums_data = response.read().decode("utf-8")
