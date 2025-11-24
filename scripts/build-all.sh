@@ -16,7 +16,7 @@ PLATFORMS=(
     "windows/arm64"
 )
 
-echo "Building Cerebrium CLI v${VERSION}"
+echo "Building Cerebrium CLI ${VERSION}"
 echo "Commit: ${COMMIT}"
 echo "Date: ${BUILD_DATE}"
 
