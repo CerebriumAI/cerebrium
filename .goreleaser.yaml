@@ -108,9 +108,23 @@ homebrew_casks:
     repository:
       owner: CerebriumAI
       name: homebrew-tap
+      # Branch to push to (default: main)
+      branch: main
+      # Token for authentication (using existing GH_PAT)
+      token: "{{ .Env.GH_PAT }}"
+    # Commit author
+    commit_author:
+      name: Cerebrium Bot
+      email: bot@cerebrium.ai
+    # Commit message template
+    commit_msg_template: "Update {{ .ProjectName }} to {{ .Tag }}"
+    # Folder inside the tap repository
+    directory: Casks
     homepage: https://www.cerebrium.ai
     description: CLI for deploying and managing Cerebrium apps
     license: MIT
+    # Skip upload for prereleases
+    skip_upload: auto
 
 # Linux packages
 nfpms:
