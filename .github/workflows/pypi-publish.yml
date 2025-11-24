@@ -70,15 +70,36 @@ jobs:
       - name: Test installation from PyPI
         if: ${{ !github.event.release.prerelease }}
         run: |
-          # Wait for PyPI to update
-          sleep 30
+          VERSION="${{ github.event.release.tag_name#v }}"
 
           # Create a clean virtual environment
           python -m venv test_env
           source test_env/bin/activate
 
-          # Install from PyPI
-          pip install cerebrium==${{ github.event.release.tag_name#v }}
+          # Retry installation with exponential backoff
+          MAX_ATTEMPTS=5
+          ATTEMPT=1
+          DELAY=30
 
-          # Test that it works
-          cerebrium --version
+          while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
+            echo "Attempt $ATTEMPT of $MAX_ATTEMPTS..."
+
+            if pip install cerebrium==$VERSION; then
+              echo "✓ Successfully installed cerebrium $VERSION from PyPI"
+
+              # Test that it works
+              cerebrium --version
+              exit 0
+            else
+              if [ $ATTEMPT -lt $MAX_ATTEMPTS ]; then
+                echo "Package not yet available on PyPI. Waiting ${DELAY}s before retry..."
+                sleep $DELAY
+                DELAY=$((DELAY * 2))  # Exponential backoff
+              fi
+            fi
+
+            ATTEMPT=$((ATTEMPT + 1))
+          done
+
+          echo "ERROR: Failed to install cerebrium $VERSION from PyPI after $MAX_ATTEMPTS attempts"
+          exit 1

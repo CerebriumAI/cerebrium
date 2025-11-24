@@ -102,7 +102,7 @@ changelog:
       - "^chore:"
       - "typo"
 
-# Homebrew tap
+# Homebrew tap (using homebrew_casks as brews is deprecated in GoReleaser v2)
 homebrew_casks:
   - name: cerebrium
     repository:
