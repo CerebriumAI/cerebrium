@@ -14,65 +14,54 @@ We use **Semantic Versioning** (SemVer): `MAJOR.MINOR.PATCH`
 For the Go CLI migration:
 - Start at `v2.0.0` (major version bump for the rewrite)
 
-## How to Create a Release
+## How Releases Work
 
-### 1. Decide on Version Number
+### Automated Semantic Versioning (Default)
 
-Based on changes since last release:
-- **Breaking changes?** → Bump MAJOR (e.g., 1.48.2 → 2.0.0)
-- **New features?** → Bump MINOR (e.g., 1.48.2 → 1.49.0)
-- **Bug fixes only?** → Bump PATCH (e.g., 1.48.2 → 1.48.3)
+The project uses [semantic-release](https://github.com/semantic-release/semantic-release) to automatically version and release based on commit messages.
 
-### 2. Create and Push Git Tag
+**How it works:**
+1. Push commits to `main` or `master` with conventional commit messages
+2. The `semantic-release.yml` workflow analyzes commits and determines version bump:
+   - `feat:` commits → Minor version (2.0.0 → 2.1.0)
+   - `fix:` commits → Patch version (2.0.0 → 2.0.1)
+   - `feat!:` or `BREAKING CHANGE:` → Major version (2.0.0 → 3.0.0)
+3. Automatically creates git tag, GitHub release, and triggers publishing
 
+**Example commits:**
 ```bash
-# Ensure you're on the main branch with latest changes
-git checkout main
-git pull
-
-# Create an annotated tag with the version
-git tag -a v1.49.0 -m "Release v1.49.0"
-
-# Push the tag to GitHub
-git push origin v1.49.0
+git commit -m "feat: add support for custom regions"  # → 2.1.0
+git commit -m "fix: resolve authentication error"      # → 2.0.1
+git commit -m "feat!: redesign configuration format"   # → 3.0.0
 ```
 
-### 3. Run GoReleaser
+### Manual Release (Alternative)
 
-GoReleaser will automatically:
-- Build binaries for all platforms (macOS, Linux, Windows)
-- Create archives (tar.gz, zip)
-- Generate checksums
-- Create GitHub Release with changelog
-- Update Homebrew tap
-- Generate Debian/RPM packages
+If you need to create a release manually:
 
 ```bash
-# Test the release locally first (doesn't publish)
-make release-dry
-
-# When ready, create the actual release
-# NOTE: Requires GITHUB_TOKEN environment variable
-export GITHUB_TOKEN="your_github_token"
-goreleaser release --clean
+# Create and push a tag
+git tag -a v2.1.0 -m "Release v2.1.0"
+git push origin v2.1.0
 ```
 
-### 4. Publish Python Wrapper to PyPI
+This will trigger the automated release pipeline.
 
-After GoReleaser completes, publish the Python wrapper:
+## What Happens During a Release
 
-```bash
-cd python-wrapper
+When a new tag is created (either by semantic-release or manually), the following workflows run automatically:
 
-# Update version in setup.py to match the Go CLI version
-# Edit setup.py: VERSION = "1.49.0"
+1. **release.yml**: Runs GoReleaser which:
+   - Builds binaries for all platforms (macOS, Linux, Windows)
+   - Creates archives (tar.gz, zip)
+   - Generates checksums
+   - Updates Homebrew tap
+   - Creates Debian/RPM packages
 
-# Build the package
-python -m build
-
-# Upload to PyPI (requires PyPI credentials)
-python -m twine upload dist/*
-```
+2. **pypi-publish.yml**: Publishes to PyPI:
+   - Builds the Python wrapper package
+   - Publishes to PyPI (pip install cerebrium)
+   - Handles beta versions for prereleases
 
 ### 5. Verify the Release
 
