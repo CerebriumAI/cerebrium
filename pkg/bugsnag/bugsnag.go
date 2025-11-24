@@ -33,6 +33,14 @@ var initialized bool
 // enabled tracks whether Bugsnag error reporting is actually active
 var enabled bool
 
+// silentLogger is a no-op logger that suppresses Bugsnag's default logging output.
+// This prevents messages like "notifying bugsnag: error message" from being shown to users.
+type silentLogger struct{}
+
+func (l *silentLogger) Printf(format string, v ...interface{}) {
+	// Intentionally empty - suppress all Bugsnag log output
+}
+
 // Initialize configures the Bugsnag error reporting client.
 // It sets up automatic error capture, system metadata collection, and user context tracking.
 // This function is idempotent and thread-safe for concurrent initialization.
@@ -81,9 +89,10 @@ func Initialize() error {
 		AppType:             "cli",
 		ProjectPackages:     []string{"main", "github.com/cerebriumai/cerebrium"},
 		NotifyReleaseStages: []string{"prod", "dev", "local"},
-		PanicHandler:        func() {}, // Manual panic handling for better control
-		Synchronous:         false,     // Asynchronous error reporting for performance
-		AutoCaptureSessions: true,      // Track CLI session health metrics
+		PanicHandler:        func() {},       // Manual panic handling for better control
+		Synchronous:         false,           // Asynchronous error reporting for performance
+		AutoCaptureSessions: true,            // Track CLI session health metrics
+		Logger:              &silentLogger{}, // Suppress Bugsnag log output to users
 	})
 
 	// Enrich error reports with system information
