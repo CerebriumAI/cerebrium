@@ -21,8 +21,8 @@ from setuptools import setup
 from setuptools.command.install import install
 
 # Version should match the Go CLI version
-VERSION = "2.1.0b1"  # PyPI uses b1 instead of -beta.1
-GITHUB_VERSION = "2.1.0-beta.1"  # GitHub uses -beta.1 format
+VERSION = "2.1.0b2"  # PyPI uses b2 instead of -beta.2
+GITHUB_VERSION = "2.1.0-beta.2"  # GitHub uses -beta.2 format
 
 # GitHub release URL pattern
 # Note: Archive names don't include version (for /latest/ compatibility)

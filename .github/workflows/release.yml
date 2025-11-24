@@ -133,7 +133,7 @@ jobs:
         uses: goreleaser/goreleaser-action@v6
         with:
           version: "~> v2"
-          args: release --clean
+          args: release --clean --config .goreleaser-prebuilt.yaml
         env:
           GITHUB_TOKEN: ${{ secrets.GH_PAT }}
           # macOS code signing and notarization using anchore/quill

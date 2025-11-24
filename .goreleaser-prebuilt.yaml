@@ -1,0 +1,42 @@
+version: 2
+
+before:
+  hooks:
+    - ./scripts/build-all.sh {{ .Version }}
+
+builds:
+  - id: cerebrium-prebuilt
+    prebuilt:
+      path: dist/cerebrium_{{ .Os }}_{{ .Arch }}{{ .Ext }}
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    # No actual building - just using prebuilt binaries
+
+archives:
+  - id: cerebrium
+    builds:
+      - cerebrium-prebuilt
+    format_overrides:
+      - goos: windows
+        format: zip
+    name_template: >-
+      cerebrium_cli_{{ .Os }}_{{ .Arch }}
+    files:
+      - LICENSE*
+      - README*
+
+checksum:
+  name_template: "checksums.txt"
+
+release:
+  github:
+    owner: CerebriumAI
+    name: cerebrium
+  draft: false
+  prerelease: auto
+  name_template: "v{{.Version}}"
