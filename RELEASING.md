@@ -119,8 +119,7 @@ make build VERSION=2.1.0
 
 The following secrets must be configured in GitHub repository settings:
 
-- **GITHUB_TOKEN**: Automatically provided by GitHub Actions
-- **HOMEBREW_TAP_GITHUB_TOKEN**: Personal access token with repo scope for updating Homebrew tap
+- **GH_PAT**: GitHub Personal Access Token with repo scope (for releases and Homebrew tap updates)
 - **PYPI_API_TOKEN**: PyPI API token for publishing Python packages
 
 ## 🔔 Update Notifications
@@ -179,5 +178,5 @@ git push origin --delete v2.0.1
 
 ### Homebrew formula not updating
 - Only stable releases update Homebrew (not pre-releases)
-- Check HOMEBREW_TAP_GITHUB_TOKEN has write access to tap repository
+- Check GH_PAT has write access to tap repository
 - Verify tap repository exists at `cerebriumai/homebrew-tap`
