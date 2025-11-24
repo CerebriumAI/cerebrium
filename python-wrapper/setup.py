@@ -21,8 +21,7 @@ from setuptools import setup
 from setuptools.command.install import install
 
 # Version should match the Go CLI version
-# This is replaced automatically during the release process
-VERSION = "0.0.0-dev"  # Placeholder - actual version set by CI/CD
+VERSION = "2.0.0"
 
 # GitHub release URL pattern
 # Note: Archive names don't include version (for /latest/ compatibility)
