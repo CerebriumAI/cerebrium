@@ -70,7 +70,8 @@ jobs:
       - name: Test installation from PyPI
         if: ${{ !github.event.release.prerelease }}
         run: |
-          VERSION="${{ github.event.release.tag_name#v }}"
+          VERSION="${{ github.event.release.tag_name }}"
+          VERSION="${VERSION#v}"  # Remove 'v' prefix if present
 
           # Create a clean virtual environment
           python -m venv test_env
