@@ -7,6 +7,7 @@ maintaining backward compatibility with 'pip install cerebrium'.
 
 import hashlib
 import io
+import json
 import os
 import platform
 import stat
@@ -20,8 +21,13 @@ from urllib.request import urlopen
 from setuptools import setup
 from setuptools.command.install import install
 
-# Version should match the Go CLI version
-VERSION = "2.0.0"
+# Version of the Python wrapper (not the CLI)
+WRAPPER_VERSION = "2.0.4"
+
+# GitHub API endpoint for latest release
+LATEST_RELEASE_API = (
+    "https://api.github.com/repos/CerebriumAI/cerebrium/releases/latest"
+)
 
 # GitHub release URL pattern
 # Note: Archive names don't include version (for /latest/ compatibility)
@@ -35,6 +41,22 @@ CHECKSUMS_URL_TEMPLATE = (
     "https://github.com/CerebriumAI/cerebrium/releases/download/"
     "v{version}/checksums.txt"
 )
+
+
+def get_latest_version():
+    """Get the latest release version from GitHub."""
+    try:
+        print("Fetching latest Cerebrium CLI version from GitHub...")
+        with urlopen(LATEST_RELEASE_API) as response:
+            data = json.loads(response.read().decode("utf-8"))
+            version = data["tag_name"].lstrip("v")
+            print(f"Latest version: v{version}")
+            return version
+    except Exception as e:
+        # Fallback to a known good version if API fails
+        print(f"Warning: Could not fetch latest version: {e}")
+        print("Falling back to v2.0.4")
+        return "2.0.4"
 
 
 def get_platform_info():
@@ -78,7 +100,7 @@ def verify_checksum(data, expected_checksums, archive_name):
 
     # Find the expected checksum for this archive
     expected_checksum = None
-    for line in expected_checksums.split('\n'):
+    for line in expected_checksums.split("\n"):
         if archive_name in line:
             # Format: "<checksum>  <filename>"
             parts = line.split()
@@ -106,8 +128,12 @@ def verify_checksum(data, expected_checksums, archive_name):
     print(f"✓ Checksum verified: {sha256_hash[:16]}...")
 
 
-def download_binary(version):
+def download_binary(version=None):
     """Download the appropriate binary for this platform."""
+    # If no version specified, get the latest
+    if version is None:
+        version = get_latest_version()
+
     os_name, arch_name, ext = get_platform_info()
 
     archive_name = f"cerebrium_cli_{os_name}_{arch_name}.{ext}"
@@ -122,7 +148,7 @@ def download_binary(version):
     checksums_url = CHECKSUMS_URL_TEMPLATE.format(version=version)
     try:
         with urlopen(checksums_url) as response:
-            checksums_data = response.read().decode('utf-8')
+            checksums_data = response.read().decode("utf-8")
     except Exception as e:
         raise RuntimeError(
             f"Failed to download checksums from {checksums_url}: {e}\n"
@@ -198,12 +224,12 @@ class PostInstallCommand(install):
 
     def run(self):
         install.run(self)
-        download_binary(VERSION)
+        download_binary()  # Will fetch latest version automatically
 
 
 setup(
     name="cerebrium",
-    version=VERSION,
+    version=WRAPPER_VERSION,
     description="CLI for deploying and managing Cerebrium apps",
     long_description=open("README.md").read() if Path("README.md").exists() else "",
     long_description_content_type="text/markdown",
