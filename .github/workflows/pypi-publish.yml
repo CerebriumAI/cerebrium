@@ -86,7 +86,7 @@ jobs:
               echo "✓ Successfully installed cerebrium $VERSION from PyPI"
 
               # Test that it works
-              cerebrium --version
+              cerebrium version
               exit 0
             else
               if [ $ATTEMPT -lt $MAX_ATTEMPTS ]; then
