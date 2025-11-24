@@ -4,6 +4,10 @@ on:
   release:
     types: [published]
 
+permissions:
+  id-token: write # Required for OIDC trusted publishing
+  contents: read
+
 jobs:
   build-and-publish:
     runs-on: ubuntu-latest
@@ -55,17 +59,10 @@ jobs:
           twine check dist/*
 
       - name: Publish to PyPI
-        working-directory: python-wrapper
-        env:
-          TWINE_USERNAME: __token__
-          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
-        run: |
-          if [[ "${{ github.event.release.prerelease }}" == "true" ]]; then
-            echo "Publishing beta version to PyPI..."
-          else
-            echo "Publishing stable version to PyPI..."
-          fi
-          twine upload dist/* --verbose
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: python-wrapper/dist/
+          skip-existing: true
 
       - name: Test installation from PyPI
         if: ${{ !github.event.release.prerelease }}
