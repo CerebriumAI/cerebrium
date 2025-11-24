@@ -68,20 +68,6 @@ plugins:
           - type: ci
             hidden: true
 
-  # Update version in Go files
-  - - "@semantic-release/exec"
-    - prepareCmd: |
-        echo "${nextRelease.version}" > VERSION
-        # Update version in Go code if needed
-        sed -i "s/Version = \".*\"/Version = \"${nextRelease.version}\"/" internal/version/version.go || true
-
-  # Commit changes
-  - - "@semantic-release/git"
-    - assets:
-        - VERSION
-        - internal/version/version.go
-      message: "chore(release): ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}"
-
   # Create GitHub release and tag
   - - "@semantic-release/github"
     - successComment: false
