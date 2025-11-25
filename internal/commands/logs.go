@@ -105,6 +105,8 @@ func runLogsCommand(cmd *cobra.Command, appName string, noFollow bool, since str
 			tea.WithoutRenderer(),
 			tea.WithInput(nil),
 		)
+	} else {
+		programOpts = append(programOpts, tea.WithMouseCellMotion())
 	}
 
 	p := tea.NewProgram(model, programOpts...)

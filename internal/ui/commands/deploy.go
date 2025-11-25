@@ -504,7 +504,12 @@ func (m *DeployView) View() string {
 		output.WriteString("\n")
 	}
 
-	// State 5: Building app
+	// Show log viewer if initialized (before build status so status appears below logs)
+	if m.logViewer != nil {
+		output.WriteString(m.logViewer.View())
+	}
+
+	// State 5: Building app (shown below logs)
 	switch {
 	case m.state == StateBuildingApp:
 		// Show spinner message
@@ -524,11 +529,6 @@ func (m *DeployView) View() string {
 		output.WriteString(formatStateLine("-", "Build app", ui.PendingStyle.Render))
 	}
 	output.WriteString("\n")
-
-	// Show log viewer if initialized
-	if m.logViewer != nil {
-		output.WriteString(m.logViewer.View())
-	}
 
 	// Show success message
 	if m.state == StateDeploySuccess {
