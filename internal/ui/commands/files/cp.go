@@ -66,7 +66,7 @@ type fileToUpload struct {
 
 func NewFileUploadView(ctx context.Context, conf CpConfig) *FileUploadView {
 	prog := progress.New(
-		progress.WithDefaultGradient(),
+		progress.WithSolidFill("#EB3A6F"),
 		progress.WithWidth(50),
 		progress.WithoutPercentage(),
 	)

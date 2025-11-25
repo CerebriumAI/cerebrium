@@ -97,7 +97,7 @@ func NewDeployView(ctx context.Context, conf DeployConfig) *DeployView {
 	}
 
 	prog := progress.New(
-		progress.WithDefaultGradient(),
+		progress.WithSolidFill("#EB3A6F"),
 		progress.WithWidth(50),
 		progress.WithoutPercentage(),
 	)
@@ -969,7 +969,7 @@ func (m *DeployView) renderUploadProgress() string {
 	percentStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("12")).
 		Bold(true)
-	output.WriteString(fmt.Sprintf("     %s %s\n", progressView, percentStyle.Render(fmt.Sprintf("%3d%%", percentage))))
+	output.WriteString(fmt.Sprintf("   %s %s\n", progressView, percentStyle.Render(fmt.Sprintf("%3d%%", percentage))))
 
 	// Render stats (uploaded/total, speed, ETA)
 	statsStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("8"))

@@ -73,7 +73,7 @@ type fileToDownload struct {
 // NewFileDownloadView creates a new file download view
 func NewFileDownloadView(ctx context.Context, conf DownloadConfig) *FileDownloadView {
 	prog := progress.New(
-		progress.WithDefaultGradient(),
+		progress.WithSolidFill("#EB3A6F"),
 		progress.WithWidth(50),
 		progress.WithoutPercentage(),
 	)
