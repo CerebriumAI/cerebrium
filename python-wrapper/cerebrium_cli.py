@@ -33,10 +33,10 @@ def github_to_pypi_version(github_version: str) -> str:
         2.1.0-rc.1    -> 2.1.0rc1
         2.1.0         -> 2.1.0
     """
-    match = re.match(r"^(\d+\.\d+\.\d+)-(alpha|beta|rc)\.(\d+)$", github_version)
+    match = re.match(r"^(\d+\.\d+\.\d+)-(alpha|beta|rc|RC)\.(\d+)$", github_version)
     if match:
         base, pre_type, pre_num = match.groups()
-        pre_map = {"alpha": "a", "beta": "b", "rc": "rc"}
+        pre_map = {"alpha": "a", "beta": "b", "rc": "rc", "RC": "rc"}
         return f"{base}{pre_map[pre_type]}{pre_num}"
 
     return github_version  # Stable version, no change needed
