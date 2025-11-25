@@ -567,7 +567,7 @@ func (m *DeployView) onKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// Handle confirmation state first
 	if m.state == StateConfirmation {
 		switch msg.String() {
-		case "y", "Y":
+		case "y", "Y", "enter":
 			// User confirmed deployment
 			m.state = StateLoadingFiles
 			return m, tea.Batch(
