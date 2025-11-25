@@ -152,6 +152,9 @@ func (m *LogViewerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		return m.onKey(msg)
 
+	case tea.MouseMsg:
+		return m.onMouse(msg)
+
 	case ui.SignalCancelMsg:
 		m.state = viewerStateFinished
 		return m, tea.Quit
@@ -250,7 +253,7 @@ func (m *LogViewerModel) View() string {
 	output.WriteString("\n")
 
 	if len(m.logs) > m.config.ViewSize {
-		output.WriteString(ui.HelpStyle.Render(" j/k: scroll | J/K: scroll to bottom/top | ctrl+u/d: page up/down"))
+		output.WriteString(ui.HelpStyle.Render(" ↑/↓: scroll | Home/End: top/bottom | PgUp/PgDn: page | mouse wheel supported"))
 		output.WriteString("\n")
 	}
 
@@ -263,42 +266,53 @@ func (m *LogViewerModel) onKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.state = viewerStateFinished
 		return m, tea.Quit
 
-	case "j":
-		// Scroll down one line (only when expanded and logs exist)
+	case "down", "j":
+		// Scroll down one line
 		maxOffset := max(0, len(m.logs)-m.config.ViewSize)
 		m.scrollOffset = min(maxOffset, m.scrollOffset+1)
-		// Always check if last log is visible
 		m.anchorBottom = m.scrollOffset+m.config.ViewSize >= len(m.logs)
 
-	case "J":
-		// Scroll to bottom (Shift+J)
-		m.scrollOffset = max(0, len(m.logs)-m.config.ViewSize)
-		// Always check if last log is visible
-		m.anchorBottom = m.scrollOffset+m.config.ViewSize >= len(m.logs)
-
-	case "k":
-		// Scroll up one line (only when expanded)
+	case "up", "k":
+		// Scroll up one line
 		m.scrollOffset = max(0, m.scrollOffset-1)
-		// Always check if last log is visible
 		m.anchorBottom = m.scrollOffset+m.config.ViewSize >= len(m.logs)
 
-	case "K":
-		// Scroll to top (Shift+K)
+	case "end", "J":
+		// Scroll to bottom
+		m.scrollOffset = max(0, len(m.logs)-m.config.ViewSize)
+		m.anchorBottom = m.scrollOffset+m.config.ViewSize >= len(m.logs)
+
+	case "home", "K":
+		// Scroll to top
 		m.scrollOffset = 0
-		// Always check if last log is visible
 		m.anchorBottom = m.scrollOffset+m.config.ViewSize >= len(m.logs)
 
-	case "ctrl+u":
+	case "pgup", "ctrl+u":
 		// Page up - scroll up 10 lines
 		m.scrollOffset = max(0, m.scrollOffset-10)
-		// Always check if last log is visible
 		m.anchorBottom = m.scrollOffset+m.config.ViewSize >= len(m.logs)
 
-	case "ctrl+d":
+	case "pgdown", "ctrl+d":
 		// Page down - scroll down 10 lines
 		maxOffset := max(0, len(m.logs)-m.config.ViewSize)
 		m.scrollOffset = min(maxOffset, m.scrollOffset+10)
-		// Always check if last log is visible
+		m.anchorBottom = m.scrollOffset+m.config.ViewSize >= len(m.logs)
+	}
+
+	return m, nil
+}
+
+func (m *LogViewerModel) onMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
+	switch msg.Button {
+	case tea.MouseButtonWheelUp:
+		// Scroll up 1 line
+		m.scrollOffset = max(0, m.scrollOffset-1)
+		m.anchorBottom = m.scrollOffset+m.config.ViewSize >= len(m.logs)
+
+	case tea.MouseButtonWheelDown:
+		// Scroll down 1 line
+		maxOffset := max(0, len(m.logs)-m.config.ViewSize)
+		m.scrollOffset = min(maxOffset, m.scrollOffset+1)
 		m.anchorBottom = m.scrollOffset+m.config.ViewSize >= len(m.logs)
 	}
 

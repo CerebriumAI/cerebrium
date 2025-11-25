@@ -151,6 +151,8 @@ func runDeploy(cmd *cobra.Command, opts deployOptions, disableConfirmation bool)
 			tea.WithoutRenderer(),
 			tea.WithInput(nil),
 		)
+	} else {
+		programOpts = append(programOpts, tea.WithMouseCellMotion())
 	}
 
 	// Run Bubbletea program (it handles its own cleanup)
