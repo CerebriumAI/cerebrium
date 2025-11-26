@@ -64,6 +64,13 @@ func (m *GetView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, tea.Quit
 
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "ctrl+c", "q", "esc":
+			return m, tea.Quit
+		}
+		return m, nil
+
 	case appDetailsLoadedMsg:
 		m.appDetails = msg.appDetails
 		m.loading = false

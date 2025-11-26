@@ -18,7 +18,29 @@ const (
 	StatusDegraded            Status = "degraded"
 	StatusDowntime            Status = "downtime"
 	StatusMaintenance         Status = "maintenance"
+	StatusNotMonitored        Status = "not_monitored"
+	StatusUnknown             Status = "unknown"
 )
+
+// StatusFromString converts a string to a Status, returning StatusUnknown for unrecognised values.
+func StatusFromString(s string) Status {
+	switch s {
+	case "operational":
+		return StatusOperational
+	case "degraded_performance":
+		return StatusDegradedPerformance
+	case "degraded":
+		return StatusDegraded
+	case "downtime":
+		return StatusDowntime
+	case "maintenance":
+		return StatusMaintenance
+	case "not_monitored":
+		return StatusNotMonitored
+	default:
+		return StatusUnknown
+	}
+}
 
 // Component represents a service component on the status page
 type Component struct {
@@ -165,9 +187,9 @@ func (c *Client) normalize(raw *rawStatusResponse) *StatusResponse {
 			}
 
 			if name != "" {
-				status := StatusOperational // default
-				if s, ok := item.Attributes["status"].(Status); ok {
-					status = s
+				status := StatusUnknown // default
+				if s, ok := item.Attributes["status"].(string); ok {
+					status = StatusFromString(s)
 				}
 
 				component := Component{
@@ -184,83 +206,100 @@ func (c *Client) normalize(raw *rawStatusResponse) *StatusResponse {
 	// Check for unresolved status reports (incidents)
 	for _, item := range raw.Included {
 		if item.Type == "status_report" {
-			if aggregateState, ok := item.Attributes["aggregate_state"].(Status); ok && aggregateState != "resolved" {
-				// This is an active incident
-				incidentURL := "https://status.cerebrium.ai"
-				if raw.Data != nil && raw.Data.Attributes != nil {
-					if customDomain, ok := raw.Data.Attributes["custom_domain"].(string); ok && customDomain != "" {
-						incidentURL = "https://" + customDomain
+			aggregateStateStr, ok := item.Attributes["aggregate_state"].(string)
+			if !ok || aggregateStateStr == "resolved" {
+				continue
+			}
+
+			// Check if maintenance window has ended (ends_at is in the past)
+			if endsAtStr, ok := item.Attributes["ends_at"].(string); ok && endsAtStr != "" {
+				if endsAt, err := time.Parse(time.RFC3339, endsAtStr); err == nil {
+					if time.Now().After(endsAt) {
+						// Maintenance window has ended, skip this report
+						continue
 					}
 				}
+			}
 
-				title := "Ongoing incident"
-				if titleAttr, ok := item.Attributes["title"].(string); ok && titleAttr != "" {
-					title = titleAttr
+			aggregateState := StatusFromString(aggregateStateStr)
+			// This is an active incident
+			incidentURL := "https://status.cerebrium.ai"
+			if raw.Data != nil && raw.Data.Attributes != nil {
+				if customDomain, ok := raw.Data.Attributes["custom_domain"].(string); ok && customDomain != "" {
+					incidentURL = "https://" + customDomain
 				}
+			}
 
-				// Find affected components from this incident
-				var affectedComponents []Component
-				if affectedResources, ok := item.Attributes["affected_resources"].([]any); ok {
-					for _, res := range affectedResources {
-						if resMap, ok := res.(map[string]any); ok {
-							if resourceID, ok := resMap["status_page_resource_id"].(string); ok {
-								if comp, exists := componentMap[resourceID]; exists {
-									affectedComponents = append(affectedComponents, comp)
-								}
+			title := "Ongoing incident"
+			if titleAttr, ok := item.Attributes["title"].(string); ok && titleAttr != "" {
+				title = titleAttr
+			}
+
+			// Find affected components from this incident
+			var affectedComponents []Component
+			if affectedResources, ok := item.Attributes["affected_resources"].([]any); ok {
+				for _, res := range affectedResources {
+					if resMap, ok := res.(map[string]any); ok {
+						if resourceID, ok := resMap["status_page_resource_id"].(string); ok {
+							if comp, exists := componentMap[resourceID]; exists {
+								affectedComponents = append(affectedComponents, comp)
 							}
 						}
 					}
 				}
-
-				incident := Incident{
-					ID:                 item.ID,
-					Name:               title,
-					Status:             aggregateState,
-					URL:                incidentURL,
-					CurrentWorstImpact: mapAggregateStateToImpact(aggregateState),
-					AffectedComponents: affectedComponents,
-				}
-
-				resp.OngoingIncidents = append(resp.OngoingIncidents, incident)
 			}
+
+			incident := Incident{
+				ID:                 item.ID,
+				Name:               title,
+				Status:             aggregateState,
+				URL:                incidentURL,
+				CurrentWorstImpact: mapAggregateStateToImpact(aggregateState),
+				AffectedComponents: affectedComponents,
+			}
+
+			resp.OngoingIncidents = append(resp.OngoingIncidents, incident)
 		}
 	}
 
 	// Also check overall system state as fallback
 	if len(resp.OngoingIncidents) == 0 && raw.Data != nil && raw.Data.Attributes != nil {
-		if overallState, ok := raw.Data.Attributes["aggregate_state"].(Status); ok && overallState != StatusOperational {
-			// Find affected components (non-operational)
-			var affectedComponents []Component
-			for _, comp := range resp.AllComponents {
-				if comp.Status != StatusOperational {
-					affectedComponents = append(affectedComponents, comp)
+		if overallStateStr, ok := raw.Data.Attributes["aggregate_state"].(string); ok {
+			overallState := StatusFromString(overallStateStr)
+			if overallState != StatusOperational {
+				// Find affected components (non-operational)
+				var affectedComponents []Component
+				for _, comp := range resp.AllComponents {
+					if comp.Status != StatusOperational {
+						affectedComponents = append(affectedComponents, comp)
+					}
 				}
-			}
 
-			incidentURL := "https://status.cerebrium.ai"
-			if customDomain, ok := raw.Data.Attributes["custom_domain"].(string); ok && customDomain != "" {
-				incidentURL = "https://" + customDomain
-			}
-
-			title := "Some Cerebrium services are experiencing issues"
-			if len(affectedComponents) > 0 {
-				componentNames := make([]string, 0, len(affectedComponents))
-				for _, comp := range affectedComponents {
-					componentNames = append(componentNames, comp.Name)
+				incidentURL := "https://status.cerebrium.ai"
+				if customDomain, ok := raw.Data.Attributes["custom_domain"].(string); ok && customDomain != "" {
+					incidentURL = "https://" + customDomain
 				}
-				title = fmt.Sprintf("Issues affecting: %s", strings.Join(componentNames, ", "))
-			}
 
-			incident := Incident{
-				ID:                 "system-status",
-				Name:               title,
-				Status:             overallState,
-				URL:                incidentURL,
-				CurrentWorstImpact: mapAggregateStateToImpact(overallState),
-				AffectedComponents: affectedComponents,
-			}
+				title := "Some Cerebrium services are experiencing issues"
+				if len(affectedComponents) > 0 {
+					componentNames := make([]string, 0, len(affectedComponents))
+					for _, comp := range affectedComponents {
+						componentNames = append(componentNames, comp.Name)
+					}
+					title = fmt.Sprintf("Issues affecting: %s", strings.Join(componentNames, ", "))
+				}
 
-			resp.OngoingIncidents = append(resp.OngoingIncidents, incident)
+				incident := Incident{
+					ID:                 "system-status",
+					Name:               title,
+					Status:             overallState,
+					URL:                incidentURL,
+					CurrentWorstImpact: mapAggregateStateToImpact(overallState),
+					AffectedComponents: affectedComponents,
+				}
+
+				resp.OngoingIncidents = append(resp.OngoingIncidents, incident)
+			}
 		}
 	}
 

@@ -331,8 +331,7 @@ func (m *LoginView) setProjectContext() tea.Msg {
 	}
 
 	// Get projects
-	ctx := context.Background()
-	projects, err := m.conf.Client.GetProjects(ctx)
+	projects, err := m.conf.Client.GetProjects(m.ctx)
 	if err != nil {
 		// Non-fatal, just return success
 		return projectSetMsg{}
