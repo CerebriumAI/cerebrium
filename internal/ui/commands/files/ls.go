@@ -125,7 +125,7 @@ func (m *ListView) onKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	// Handle quit keys (ctrl+c is handled by SignalCancelMsg)
 	switch msg.String() {
-	case "q", "esc":
+	case "ctrl+c", "q", "esc":
 		return m, tea.Quit
 	case "J":
 		return m.scrollToBottom()

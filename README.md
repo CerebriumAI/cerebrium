@@ -7,15 +7,7 @@ Command-line interface for [Cerebrium](https://cerebrium.ai) - the serverless in
 
 ## Installation
 
-### Python (pip)
-
-```bash
-pip install cerebrium
-```
-
-
-<details>
-<summary><strong>macOS</strong></summary>
+### Brew (macOS)
 
 ```bash
 # Using Homebrew (recommended)
@@ -28,17 +20,15 @@ sudo mv cerebrium /usr/local/bin/
 # For Intel Macs, use: cerebrium_cli_darwin_amd64.tar.gz
 ```
 
-**Note:** Code signing and notarization are coming soon. In the meantime, if macOS blocks the binary, remove the quarantine flag:
+### Pip
 
 ```bash
-xattr -d com.apple.quarantine $(which cerebrium)
+pip install cerebrium
 ```
 
-Or right-click the binary in Finder → Open → confirm the security prompt.
-</details>
+NOTE: Our pip installer is a thin wrapper around the packaged go binary. On first use, it downloads and installs the go binary, and then passes calls down to the go binary.
 
-<details>
-<summary><strong>Linux</strong></summary>
+### Direct Download
 
 ```bash
 # Download the latest release
@@ -50,10 +40,8 @@ sudo mv cerebrium /usr/local/bin/
 wget https://github.com/CerebriumAI/cerebrium/releases/latest/download/cerebrium_linux_amd64.deb
 sudo dpkg -i cerebrium_linux_amd64.deb
 ```
-</details>
 
-<details>
-<summary><strong>Windows</strong></summary>
+### Windows
 
 **PowerShell (Run as Administrator):**
 
@@ -82,7 +70,6 @@ Remove-Item cerebrium.zip
 3. Extract and add `cerebrium.exe` to your PATH
 
 **Note:** Package manager support (Chocolatey/Scoop) coming soon!
-</details>
 
 ### Verify Installation
 
@@ -95,18 +82,29 @@ cerebrium version
 The CLI provides commands for managing your Cerebrium apps and infrastructure:
 
 ```bash
-cerebrium [command]
+Command line interface for the Cerebrium platform
+
+Usage:
+  cerebrium [command]
 
 Available Commands:
-  deploy      Deploy your application to Cerebrium
+  apps        Manage Cerebrium apps (alias: `app`)
+  config      Manage CLI configuration
+  cp          Copy files to persistent storage
+  deploy      Deploy a Cerebrium app
+  download    Download files from persistent storage
+  help        Help about any command
+  init        Initialize an empty Cerebrium Cortex project
   login       Authenticate with Cerebrium
-  logs        View application logs
-  apps         Manage applications (list, delete, describe)
-  projects     Manage projects
-  run         Execute code in your project context
-  status      Check service status
-
-Run "cerebrium [command] --help" for detailed usage information.
+  logs        View logs for an app
+  ls          List contents of persistent storage
+  projects    Manage Cerebrium projects (alias: `project`)
+  region      Manage default region
+  rm          Remove files from persistent storage
+  run         Run a file in the current project context
+  runs        Manage app runs
+  status      Check Cerebrium service status
+  version     Print the version number
 ```
 
 ## Documentation
@@ -118,6 +116,34 @@ In order to start building with Cerebrium, you can check out the following resou
 - **Full Documentation**: [docs.cerebrium.ai](https://docs.cerebrium.ai)
 - **API Reference**: [api.cerebrium.ai](https://api.cerebrium.ai)
 - **Examples**: [github.com/CerebriumAI/examples](https://github.com/CerebriumAI/examples)
+
+### Autocompletion
+
+The CLI supports shell autocompletion for bash, zsh, fish, and PowerShell. Run `cerebrium completion --help` for details.
+
+**Quick setup:**
+
+```bash
+# Bash (macOS)
+cerebrium completion bash > $(brew --prefix)/etc/bash_completion.d/cerebrium
+
+# Bash (Linux)
+cerebrium completion bash > /etc/bash_completion.d/cerebrium
+
+# Zsh (macOS)
+cerebrium completion zsh > $(brew --prefix)/share/zsh/site-functions/_cerebrium
+
+# Zsh (Linux)
+cerebrium completion zsh > "${fpath[1]}/_cerebrium"
+
+# Fish
+cerebrium completion fish > ~/.config/fish/completions/cerebrium.fish
+
+# PowerShell (add to your profile for persistence)
+cerebrium completion powershell | Out-String | Invoke-Expression
+```
+
+Restart your shell after setup.
 
 ## Development
 

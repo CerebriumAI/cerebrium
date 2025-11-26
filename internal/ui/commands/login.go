@@ -224,7 +224,7 @@ func (m *LoginView) View() string {
 	case m.state > StateWaitingForAuth:
 		output.WriteString(formatStateLine("✓", "Received credentials", ui.SuccessStyle))
 	default:
-		output.WriteString(formatStateLine("-", "Waiting for credentials", ui.PendingStyle))
+		output.WriteString(formatStateLine("-", "Get credentials", ui.PendingStyle))
 	}
 	output.WriteString("\n")
 
@@ -235,7 +235,7 @@ func (m *LoginView) View() string {
 	case m.state > StateSavingToken:
 		output.WriteString(formatStateLine("✓", "Saved auth token", ui.SuccessStyle))
 	default:
-		output.WriteString(formatStateLine("-", "Saving auth token", ui.PendingStyle))
+		output.WriteString(formatStateLine("-", "Save auth token", ui.PendingStyle))
 	}
 	output.WriteString("\n")
 
@@ -246,7 +246,7 @@ func (m *LoginView) View() string {
 	case m.state > StateSettingProject:
 		output.WriteString(formatStateLine("✓", "Set project context", ui.SuccessStyle))
 	default:
-		output.WriteString(formatStateLine("-", "Setting project context", ui.PendingStyle))
+		output.WriteString(formatStateLine("-", "Set project context", ui.PendingStyle))
 	}
 	output.WriteString("\n")
 
@@ -331,8 +331,7 @@ func (m *LoginView) setProjectContext() tea.Msg {
 	}
 
 	// Get projects
-	ctx := context.Background()
-	projects, err := m.conf.Client.GetProjects(ctx)
+	projects, err := m.conf.Client.GetProjects(m.ctx)
 	if err != nil {
 		// Non-fatal, just return success
 		return projectSetMsg{}

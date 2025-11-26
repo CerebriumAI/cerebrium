@@ -8,9 +8,7 @@ import (
 
 	"github.com/cerebriumai/cerebrium/internal/statuspage"
 	"github.com/cerebriumai/cerebrium/internal/ui"
-	"github.com/charmbracelet/bubbles/table"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 )
@@ -38,7 +36,6 @@ type StatusView struct {
 	state   StatusState
 	spinner *ui.SpinnerModel
 	err     *ui.UIError
-	table   table.Model
 
 	// Status data
 	status *statuspage.StatusResponse
@@ -74,11 +71,6 @@ func (m *StatusView) Init() tea.Cmd {
 func (m *StatusView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case ui.SignalCancelMsg:
-		// Handle termination signal (SIGINT, SIGTERM)
-		if m.conf.SimpleOutput() {
-			fmt.Printf("\nCancelled by user\n")
-		}
-		m.err = ui.NewUserCancelledError()
 		return m, tea.Quit
 
 	case tea.KeyMsg:
@@ -88,7 +80,7 @@ func (m *StatusView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		switch msg.String() {
-		case "ctrl+c", "q":
+		case "ctrl+c", "q", "esc":
 			m.err = ui.NewUserCancelledError()
 			return m, tea.Quit
 		}
@@ -100,9 +92,6 @@ func (m *StatusView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Print directly in simple mode
 		if m.conf.SimpleOutput() {
 			m.printSimpleStatus()
-		} else {
-			// Create table for interactive mode
-			m.createStatusTable()
 		}
 
 		return m, tea.Quit
@@ -219,87 +208,23 @@ func (m *StatusView) printSimpleStatus() {
 	}
 }
 
-// createStatusTable creates a beautiful table for status display
-func (m *StatusView) createStatusTable() {
-	if m.status == nil || len(m.status.AllComponents) == 0 {
-		return
+// formatStatusText returns styled status text for a component
+func formatStatusText(status statuspage.Status) string {
+	switch status {
+	case statuspage.StatusOperational:
+		return ui.GreenStyle.Render("✓ Operational")
+	case statuspage.StatusDegradedPerformance, statuspage.StatusDegraded:
+		return ui.YellowStyle.Render("⚠ Degraded")
+	case statuspage.StatusDowntime:
+		return ui.RedStyle.Render("✗ Down")
+	case statuspage.StatusMaintenance:
+		return ui.CyanStyle.Render("🔧 Maintenance")
+	case statuspage.StatusNotMonitored:
+		return ui.PendingStyle.Render("- Not Monitored")
+	default:
+		caser := cases.Title(language.English)
+		return ui.PendingStyle.Render("? " + caser.String(string(status)))
 	}
-
-	// Sort components by name for consistent display
-	components := make([]statuspage.Component, len(m.status.AllComponents))
-	copy(components, m.status.AllComponents)
-	sort.Slice(components, func(i, j int) bool {
-		return components[i].Name < components[j].Name
-	})
-
-	// Create table rows with status styling
-	var rows []table.Row
-	for _, component := range components {
-		var statusText string
-		switch component.Status {
-		case "operational":
-			statusText = ui.GreenStyle.Render("✓ Operational")
-		case "degraded_performance", "degraded":
-			statusText = ui.YellowStyle.Render("⚠ Degraded")
-		case "downtime":
-			statusText = ui.RedStyle.Render("✗ Down")
-		case "maintenance":
-			statusText = ui.CyanStyle.Render("🔧 Maintenance")
-		default:
-			caser := cases.Title(language.English)
-			statusText = ui.PendingStyle.Render("? " + caser.String(string(component.Status)))
-		}
-
-		// Service name in explicit plain white text, status with color
-		plainServiceName := lipgloss.NewStyle().Foreground(lipgloss.Color("15")).Render(component.Name)
-		rows = append(rows, table.Row{
-			plainServiceName,              // Explicitly plain white text for service names
-			strings.TrimSpace(statusText), // Colored status only
-		})
-	}
-
-	// Calculate dynamic column widths
-	const padding = 8
-	widths := map[int]int{
-		0: len("Service"),
-		1: len("Status"),
-	}
-
-	// Find max width for each column
-	for _, row := range rows {
-		for i, cell := range row {
-			// Use lipgloss Width to get visual width (handles ANSI codes)
-			cellWidth := lipgloss.Width(cell)
-			if cellWidth > widths[i] {
-				widths[i] = cellWidth
-			}
-		}
-	}
-
-	// Create table columns with dynamic widths
-	columns := []table.Column{
-		{Title: "Service", Width: widths[0] + padding},
-		{Title: "Status", Width: widths[1] + padding},
-	}
-
-	// Style the table
-	s := table.DefaultStyles()
-	s.Header = s.Header.
-		BorderStyle(lipgloss.NormalBorder()).
-		BorderForeground(lipgloss.Color("11")).
-		BorderBottom(true).
-		Bold(true).
-		Padding(0, 1)
-	s.Selected = lipgloss.Style{} // No selection styling
-
-	// Create table
-	m.table = table.New(
-		table.WithColumns(columns),
-		table.WithRows(rows),
-		table.WithHeight(min(len(rows)+1, 20)), // Include header, max 20 rows
-		table.WithFocused(false),
-	)
-	m.table.SetStyles(s)
 }
 
 // renderInteractiveStatus renders status for interactive TTY mode
@@ -309,12 +234,6 @@ func (m *StatusView) renderInteractiveStatus() string {
 	if len(m.status.OngoingIncidents) == 0 {
 		// All operational - show green status with table
 		output.WriteString(ui.GreenStyle.Render("✓ All Systems Operational") + "\n\n")
-
-		// Show the beautiful status table
-		if m.table.Columns() != nil {
-			output.WriteString(ui.TitleStyle.Render("Service Status") + "\n\n")
-			output.WriteString(m.table.View())
-		}
 	} else {
 		// There are incidents - show them prominently
 		incidentCount := len(m.status.OngoingIncidents)
@@ -329,7 +248,7 @@ func (m *StatusView) renderInteractiveStatus() string {
 			output.WriteString(ui.ErrorStyle.Render("Issue: ") + incident.Name + "\n")
 
 			statusColor := ui.YellowStyle
-			if incident.Status == "downtime" {
+			if incident.Status == statuspage.StatusDowntime {
 				statusColor = ui.RedStyle
 			}
 			caser := cases.Title(language.English)
@@ -348,13 +267,36 @@ func (m *StatusView) renderInteractiveStatus() string {
 			output.WriteString(ui.PendingStyle.Render("More info: ") + ui.URLStyle.Render(incident.URL) + "\n")
 			output.WriteString("\n")
 		}
+	}
 
-		// Show status table even with incidents
-		if m.table.Columns() != nil {
-			output.WriteString(ui.TitleStyle.Render("Service Status") + "\n\n")
-			output.WriteString(m.table.View())
-		}
+	// Show service status table
+	if len(m.status.AllComponents) > 0 {
+		output.WriteString(ui.TitleStyle.Render("Service Status") + "\n\n")
+		output.WriteString(m.renderStatusTable())
 	}
 
 	return output.String()
+}
+
+// renderStatusTable renders the component status table using RenderDetailTable
+func (m *StatusView) renderStatusTable() string {
+	// Sort components by name for consistent display
+	components := make([]statuspage.Component, len(m.status.AllComponents))
+	copy(components, m.status.AllComponents)
+	sort.Slice(components, func(i, j int) bool {
+		return components[i].Name < components[j].Name
+	})
+
+	// Build rows for the detail table
+	rows := make([]ui.TableRow, 0, len(components))
+	for _, component := range components {
+		rows = append(rows, ui.TableRow{
+			Label: component.Name,
+			Value: formatStatusText(component.Status),
+		})
+	}
+
+	return ui.RenderDetailTable([]ui.TableSection{
+		{Rows: rows},
+	})
 }

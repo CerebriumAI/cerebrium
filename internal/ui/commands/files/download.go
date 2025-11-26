@@ -266,7 +266,7 @@ func (m *FileDownloadView) onKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 
 	switch msg.String() {
-	case "q", "esc":
+	case "ctrl+c", "q", "esc":
 		return m.onCancel()
 	}
 

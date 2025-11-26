@@ -23,18 +23,19 @@ func TestAppsListView(t *testing.T) {
 		ctx := t.Context()
 		mockClient := apimock.NewMockClient(t)
 
+		// Apps are pre-sorted by UpdatedAt (most recent first) as they would be from the client
 		apps := []api.App{
-			{
-				ID:        "app-1",
-				Status:    "ACTIVE",
-				CreatedAt: baseTime,
-				UpdatedAt: baseTime.Add(2 * time.Hour),
-			},
 			{
 				ID:        "app-2",
 				Status:    "PENDING",
 				CreatedAt: baseTime.Add(time.Hour),
 				UpdatedAt: baseTime.Add(3 * time.Hour),
+			},
+			{
+				ID:        "app-1",
+				Status:    "ACTIVE",
+				CreatedAt: baseTime,
+				UpdatedAt: baseTime.Add(2 * time.Hour),
 			},
 			{
 				ID:        "app-3",
@@ -72,7 +73,7 @@ func TestAppsListView(t *testing.T) {
 				ModelAssert: func(t *testing.T, m *ListView) {
 					assert.False(t, m.loading)
 					assert.Len(t, m.apps, 3)
-					// Verify sorting by UpdatedAt (most recent first)
+					// Verify order is preserved from client (sorted by UpdatedAt, most recent first)
 					assert.Equal(t, "app-2", m.apps[0].ID)
 					assert.Equal(t, "app-1", m.apps[1].ID)
 					assert.Equal(t, "app-3", m.apps[2].ID)
@@ -149,18 +150,19 @@ func TestAppsListView(t *testing.T) {
 		ctx := t.Context()
 		mockClient := apimock.NewMockClient(t)
 
+		// Apps are pre-sorted by UpdatedAt (most recent first) as they would be from the client
 		apps := []api.App{
-			{
-				ID:        "simple-app-1",
-				Status:    "ACTIVE",
-				CreatedAt: baseTime,
-				UpdatedAt: baseTime.Add(time.Hour),
-			},
 			{
 				ID:        "simple-app-2",
 				Status:    "BUILDING",
 				CreatedAt: baseTime,
 				UpdatedAt: baseTime.Add(2 * time.Hour),
+			},
+			{
+				ID:        "simple-app-1",
+				Status:    "ACTIVE",
+				CreatedAt: baseTime,
+				UpdatedAt: baseTime.Add(time.Hour),
 			},
 		}
 
@@ -185,7 +187,7 @@ func TestAppsListView(t *testing.T) {
 				},
 				ModelAssert: func(t *testing.T, m *ListView) {
 					assert.Len(t, m.apps, 2)
-					// Should still be sorted
+					// Verify order is preserved from client
 					assert.Equal(t, "simple-app-2", m.apps[0].ID)
 					assert.Equal(t, "simple-app-1", m.apps[1].ID)
 				},

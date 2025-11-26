@@ -66,6 +66,9 @@ func (m *ListView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.onError(v)
 
 	case tea.KeyMsg:
+		if v.String() == "ctrl+c" {
+			return m, tea.Quit
+		}
 		return m.onKey(v)
 
 	default:
@@ -116,7 +119,7 @@ func (m *ListView) onKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	// Handle quit keys (ctrl+c is handled by SignalCancelMsg)
 	switch msg.String() {
-	case "q", "esc":
+	case "ctrl+c", "q", "esc":
 		return m, tea.Quit
 	case "J":
 		return m.scrollToBottom()
@@ -306,10 +309,31 @@ func (m *ListView) fetchProjects() tea.Msg {
 // Utils
 
 func newTable(rows []table.Row) table.Model {
-	// Create table columns
+	// Calculate dynamic column widths based on content
+	// Add padding for better spacing
+	const padding = 4
+
+	// Initialize with header lengths
+	widths := map[int]int{
+		0: len("ID"),
+		1: len("Name"),
+	}
+
+	// Find max width for each column
+	for _, row := range rows {
+		for i, cell := range row {
+			// Use lipgloss Width to get visual width (handles ANSI codes)
+			cellWidth := lipgloss.Width(cell)
+			if cellWidth > widths[i] {
+				widths[i] = cellWidth
+			}
+		}
+	}
+
+	// Create table columns with dynamic widths plus padding
 	columns := []table.Column{
-		{Title: "ID", Width: 50},
-		{Title: "Name", Width: 50},
+		{Title: "ID", Width: widths[0] + padding},
+		{Title: "Name", Width: widths[1] + padding},
 	}
 
 	// Style the table

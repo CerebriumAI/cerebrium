@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"sort"
 	"strings"
 
 	"github.com/cerebriumai/cerebrium/internal/ui"
@@ -79,9 +78,6 @@ func (m *ListView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 
 	case tea.KeyMsg:
-		if msg.String() == "ctrl+c" {
-			return m, tea.Quit
-		}
 		return m.onKey(msg)
 
 	default:
@@ -177,7 +173,7 @@ func (m *ListView) onKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	slog.Debug("key pressed", "key", msg.String())
 
 	switch msg.String() {
-	case "q", "esc":
+	case "ctrl+c", "q", "esc":
 		return m, tea.Quit
 	case "J":
 		return m.scrollToBottom()
@@ -258,10 +254,6 @@ func (m *ListView) delegateToTable(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m *ListView) onLoaded(apps []api.App) (tea.Model, tea.Cmd) {
 	m.apps = apps
 	m.loading = false
-	// Sort by updated date (most recent first)
-	sort.Slice(m.apps, func(i, j int) bool {
-		return m.apps[i].UpdatedAt.After(m.apps[j].UpdatedAt)
-	})
 
 	if m.conf.SimpleOutput() {
 		// Simple mode: print directly

@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -269,6 +270,10 @@ func (c *client) GetProjects(ctx context.Context) ([]Project, error) {
 		return nil, fmt.Errorf("failed to parse projects response: %w", err)
 	}
 
+	sort.Slice(projects, func(i, j int) bool {
+		return projects[i].Name < projects[j].Name
+	})
+
 	return projects, nil
 }
 
@@ -284,6 +289,11 @@ func (c *client) GetApps(ctx context.Context, projectID string) ([]App, error) {
 	if err := json.Unmarshal(body, &apps); err != nil {
 		return nil, fmt.Errorf("failed to parse apps response: %w", err)
 	}
+
+	// Sort by most recently updated
+	sort.Slice(apps, func(i, j int) bool {
+		return apps[i].UpdatedAt.After(apps[j].UpdatedAt)
+	})
 
 	return apps, nil
 }
