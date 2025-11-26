@@ -26,7 +26,7 @@ jobs:
     name: Test before release
     # Run tests for non-prerelease versions (v1.0.0) or when manually triggered without skip
     if: |
-      (github.event_name == 'push' && !contains(github.ref_name, '-RC') && !contains(github.ref_name, '-beta') && !contains(github.ref_name, '-alpha')) ||
+      (github.event_name == 'push' && !contains(github.ref_name, '-RC') && !contains(github.ref_name, '-rc') && !contains(github.ref_name, '-beta') && !contains(github.ref_name, '-alpha')) ||
       (github.event_name == 'workflow_dispatch' && github.event.inputs.skip-tests == 'false')
     runs-on: ubuntu-latest
     steps:
@@ -45,68 +45,152 @@ jobs:
       - name: Run tests
         run: go test -race -shuffle=on ./...
 
-  # smoke-test:
-  #   name: Smoke test before release
-  #   # Run smoke tests for non-prerelease versions or when manually triggered without skip
-  #   if: |
-  #     (github.event_name == 'push' && !contains(github.ref_name, '-RC') && !contains(github.ref_name, '-beta') && !contains(github.ref_name, '-alpha')) ||
-  #     (github.event_name == 'workflow_dispatch' && github.event.inputs.skip-tests == 'false')
-  #   runs-on: ubuntu-latest
-  #   env:
-  #     CEREBRIUM_ENV: prod
-  #     API_KEY: ${{ secrets.E2E_TEST_PRIVATE_API_KEY }}
-  #     PROJECT_ID: ${{ vars.E2E_TEST_PROJECT_ID }}
-  #     ACCESS_TOKEN: ${{ secrets.E2E_TEST_ACCESS_TOKEN }}
-  #     REFRESH_TOKEN: ${{ secrets.E2E_TEST_REFRESH_TOKEN }}
-  #   steps:
-  #     - name: Checkout code
-  #       uses: actions/checkout@v5
+  smoke-test:
+    name: Smoke test before release
+    # Run smoke tests for non-prerelease versions or when manually triggered without skip
+    if: |
+      (github.event_name == 'push' && !contains(github.ref_name, '-RC') && !contains(github.ref_name, '-rc') && !contains(github.ref_name, '-beta') && !contains(github.ref_name, '-alpha')) ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.skip-tests == 'false')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
 
-  #     - name: Set up Go
-  #       uses: actions/setup-go@v6
-  #       with:
-  #         go-version: "1.25"
-  #         cache: true
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: "1.25"
+          cache: true
 
-  #     - name: Install jq
-  #       run: sudo apt-get install jq
+      - name: Build CLI
+        run: |
+          # Strip 'v' prefix from tag to get version (e.g., v1.2.3 -> 1.2.3)
+          VERSION="${GITHUB_REF_NAME#v}"
+          COMMIT=$(git rev-parse --short HEAD)
+          BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
-  #     - name: Build CLI
-  #       run: go build -o bin/cerebrium ./cmd/cerebrium
+          go build -ldflags "\
+            -X github.com/cerebriumai/cerebrium/internal/version.Version=${VERSION} \
+            -X github.com/cerebriumai/cerebrium/internal/version.Commit=${COMMIT} \
+            -X github.com/cerebriumai/cerebrium/internal/version.BuildDate=${BUILD_DATE}" \
+            -o bin/cerebrium ./cmd/cerebrium
 
-  #     - name: Add bin to PATH
-  #       run: echo "$GITHUB_WORKSPACE/bin" >> $GITHUB_PATH
+          # Save build metadata for verification
+          echo "VERSION=${VERSION}" >> $GITHUB_ENV
+          echo "COMMIT=${COMMIT}" >> $GITHUB_ENV
+          echo "BUILD_DATE=${BUILD_DATE}" >> $GITHUB_ENV
 
-  #     - name: Create Cerebrium config
-  #       run: |
-  #         mkdir -p ~/.cerebrium
-  #         # For prod, config keys have no prefix. For dev/local, they have the env prefix
-  #         if [ "${{ env.CEREBRIUM_ENV }}" = "prod" ] || [ -z "${{ env.CEREBRIUM_ENV }}" ]; then
-  #           cat > ~/.cerebrium/config.yaml << EOF
-  #         project: ${{ env.PROJECT_ID }}
-  #         accesstoken: ${{ env.ACCESS_TOKEN }}
-  #         refreshtoken: ${{ env.REFRESH_TOKEN }}
-  #         EOF
-  #         else
-  #           cat > ~/.cerebrium/config.yaml << EOF
-  #         ${{ env.CEREBRIUM_ENV }}-project: ${{ env.PROJECT_ID }}
-  #         ${{ env.CEREBRIUM_ENV }}-accesstoken: ${{ env.ACCESS_TOKEN }}
-  #         ${{ env.CEREBRIUM_ENV }}-refreshtoken: ${{ env.REFRESH_TOKEN }}
-  #         EOF
-  #         fi
+      - name: Add bin to PATH
+        run: echo "$GITHUB_WORKSPACE/bin" >> $GITHUB_PATH
 
-  #     - name: Run smoke tests
-  #       run: |
-  #         cerebrium version
-  #         cerebrium project list
-  #         cerebrium app list
-  #         cerebrium region get
+      - name: Create Cerebrium config
+        run: |
+          mkdir -p ~/.cerebrium
+          cat > ~/.cerebrium/config.yaml << EOF
+          project: test-project-id
+          EOF
+
+      - name: Run smoke tests
+        run: |
+          EXPECTED_OUTPUT="cerebrium ${VERSION} (commit: ${COMMIT}, built: ${BUILD_DATE})"
+
+          # Verify version output matches exactly
+          VERSION_OUTPUT=$(cerebrium version)
+          echo "Version output: $VERSION_OUTPUT"
+          echo "Expected:       $EXPECTED_OUTPUT"
+          if [[ "$VERSION_OUTPUT" != "$EXPECTED_OUTPUT" ]]; then
+            echo "ERROR: Version output doesn't match expected"
+            exit 1
+          fi
+
+          # Verify projects current shows our configured project
+          PROJECT_OUTPUT=$(cerebrium projects current)
+          echo "Project output: $PROJECT_OUTPUT"
+          if [[ ! "$PROJECT_OUTPUT" =~ "test-project-id" ]]; then
+            echo "ERROR: Project output doesn't contain expected project ID"
+            exit 1
+          fi
+
+  pip-smoke-test:
+    name: Pip smoke test before release
+    # Run on all releases (including prereleases) since PyPI supports them
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.skip-tests == 'false')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: "1.25"
+          cache: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build Go binary
+        run: |
+          # Strip 'v' prefix from tag to get version (e.g., v1.2.3 -> 1.2.3)
+          VERSION="${GITHUB_REF_NAME#v}"
+          COMMIT=$(git rev-parse --short HEAD)
+          BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+          go build -ldflags "\
+            -X github.com/cerebriumai/cerebrium/internal/version.Version=${VERSION} \
+            -X github.com/cerebriumai/cerebrium/internal/version.Commit=${COMMIT} \
+            -X github.com/cerebriumai/cerebrium/internal/version.BuildDate=${BUILD_DATE}" \
+            -o bin/cerebrium ./cmd/cerebrium
+
+          # Save build metadata for verification
+          echo "VERSION=${VERSION}" >> $GITHUB_ENV
+          echo "COMMIT=${COMMIT}" >> $GITHUB_ENV
+          echo "BUILD_DATE=${BUILD_DATE}" >> $GITHUB_ENV
+
+      - name: Pre-install Go binary for pip wrapper
+        run: |
+          # Extract VERSION from cerebrium_cli.py (GitHub/semver format)
+          PIP_VERSION=$(grep "^VERSION = " python-wrapper/cerebrium_cli.py | sed 's/VERSION = "\(.*\)"/\1/')
+          echo "Pip wrapper version: $PIP_VERSION"
+
+          # Install binary where pip wrapper expects it
+          mkdir -p ~/.cerebrium/bin
+          cp bin/cerebrium ~/.cerebrium/bin/cerebrium
+          chmod +x ~/.cerebrium/bin/cerebrium
+
+          # Write version file so pip wrapper doesn't try to download
+          echo "$PIP_VERSION" > ~/.cerebrium/bin/.version
+
+      - name: Build pip wheel
+        working-directory: python-wrapper
+        run: |
+          pip install build
+          python -m build
+
+      - name: Install pip wheel
+        working-directory: python-wrapper
+        run: pip install dist/cerebrium-*.whl
+
+      - name: Run pip smoke tests
+        run: |
+          EXPECTED_OUTPUT="cerebrium ${VERSION} (commit: ${COMMIT}, built: ${BUILD_DATE})"
+
+          # Verify cerebrium runs through pip wrapper with correct version
+          VERSION_OUTPUT=$(cerebrium version)
+          echo "Version output: $VERSION_OUTPUT"
+          echo "Expected:       $EXPECTED_OUTPUT"
+          if [[ "$VERSION_OUTPUT" != "$EXPECTED_OUTPUT" ]]; then
+            echo "ERROR: Version output doesn't match expected"
+            exit 1
+          fi
 
   goreleaser:
     name: Release
-    needs: [test] # removed smoke-test dependency
-    # Always run if tests were skipped, otherwise wait for test to pass
-    if: always() && (needs.test.result == 'success' || needs.test.result == 'skipped')
+    needs: [test, smoke-test, pip-smoke-test]
+    # Always run if tests were skipped, otherwise wait for tests to pass
+    if: always() && (needs.test.result == 'success' || needs.test.result == 'skipped') && (needs.smoke-test.result == 'success' || needs.smoke-test.result == 'skipped') && (needs.pip-smoke-test.result == 'success' || needs.pip-smoke-test.result == 'skipped')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
