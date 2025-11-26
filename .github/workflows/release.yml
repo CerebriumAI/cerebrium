@@ -63,7 +63,22 @@ jobs:
           cache: true
 
       - name: Build CLI
-        run: go build -o bin/cerebrium ./cmd/cerebrium
+        run: |
+          # Strip 'v' prefix from tag to get version (e.g., v1.2.3 -> 1.2.3)
+          VERSION="${GITHUB_REF_NAME#v}"
+          COMMIT=$(git rev-parse --short HEAD)
+          BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+          go build -ldflags "\
+            -X github.com/cerebriumai/cerebrium/internal/version.Version=${VERSION} \
+            -X github.com/cerebriumai/cerebrium/internal/version.Commit=${COMMIT} \
+            -X github.com/cerebriumai/cerebrium/internal/version.BuildDate=${BUILD_DATE}" \
+            -o bin/cerebrium ./cmd/cerebrium
+
+          # Save build metadata for verification
+          echo "VERSION=${VERSION}" >> $GITHUB_ENV
+          echo "COMMIT=${COMMIT}" >> $GITHUB_ENV
+          echo "BUILD_DATE=${BUILD_DATE}" >> $GITHUB_ENV
 
       - name: Add bin to PATH
         run: echo "$GITHUB_WORKSPACE/bin" >> $GITHUB_PATH
@@ -77,11 +92,14 @@ jobs:
 
       - name: Run smoke tests
         run: |
-          # Verify version outputs something reasonable
+          EXPECTED_OUTPUT="cerebrium ${VERSION} (commit: ${COMMIT}, built: ${BUILD_DATE})"
+
+          # Verify version output matches exactly
           VERSION_OUTPUT=$(cerebrium version)
           echo "Version output: $VERSION_OUTPUT"
-          if [[ ! "$VERSION_OUTPUT" =~ ^v[0-9] ]]; then
-            echo "ERROR: Version output doesn't match expected format"
+          echo "Expected:       $EXPECTED_OUTPUT"
+          if [[ "$VERSION_OUTPUT" != "$EXPECTED_OUTPUT" ]]; then
+            echo "ERROR: Version output doesn't match expected"
             exit 1
           fi
 
@@ -114,13 +132,28 @@ jobs:
           python-version: "3.12"
 
       - name: Build Go binary
-        run: go build -o bin/cerebrium ./cmd/cerebrium
+        run: |
+          # Strip 'v' prefix from tag to get version (e.g., v1.2.3 -> 1.2.3)
+          VERSION="${GITHUB_REF_NAME#v}"
+          COMMIT=$(git rev-parse --short HEAD)
+          BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+          go build -ldflags "\
+            -X github.com/cerebriumai/cerebrium/internal/version.Version=${VERSION} \
+            -X github.com/cerebriumai/cerebrium/internal/version.Commit=${COMMIT} \
+            -X github.com/cerebriumai/cerebrium/internal/version.BuildDate=${BUILD_DATE}" \
+            -o bin/cerebrium ./cmd/cerebrium
+
+          # Save build metadata for verification
+          echo "VERSION=${VERSION}" >> $GITHUB_ENV
+          echo "COMMIT=${COMMIT}" >> $GITHUB_ENV
+          echo "BUILD_DATE=${BUILD_DATE}" >> $GITHUB_ENV
 
       - name: Pre-install Go binary for pip wrapper
         run: |
           # Extract VERSION from cerebrium_cli.py (GitHub/semver format)
-          VERSION=$(grep "^VERSION = " python-wrapper/cerebrium_cli.py | sed 's/VERSION = "\(.*\)"/\1/')
-          echo "Extracted version: $VERSION"
+          PIP_VERSION=$(grep "^VERSION = " python-wrapper/cerebrium_cli.py | sed 's/VERSION = "\(.*\)"/\1/')
+          echo "Pip wrapper version: $PIP_VERSION"
 
           # Install binary where pip wrapper expects it
           mkdir -p ~/.cerebrium/bin
@@ -128,7 +161,7 @@ jobs:
           chmod +x ~/.cerebrium/bin/cerebrium
 
           # Write version file so pip wrapper doesn't try to download
-          echo "$VERSION" > ~/.cerebrium/bin/.version
+          echo "$PIP_VERSION" > ~/.cerebrium/bin/.version
 
       - name: Build pip wheel
         working-directory: python-wrapper
@@ -142,11 +175,14 @@ jobs:
 
       - name: Run pip smoke tests
         run: |
-          # Verify cerebrium runs through pip wrapper
+          EXPECTED_OUTPUT="cerebrium ${VERSION} (commit: ${COMMIT}, built: ${BUILD_DATE})"
+
+          # Verify cerebrium runs through pip wrapper with correct version
           VERSION_OUTPUT=$(cerebrium version)
           echo "Version output: $VERSION_OUTPUT"
-          if [[ ! "$VERSION_OUTPUT" =~ ^v[0-9] ]]; then
-            echo "ERROR: Version output doesn't match expected format"
+          echo "Expected:       $EXPECTED_OUTPUT"
+          if [[ "$VERSION_OUTPUT" != "$EXPECTED_OUTPUT" ]]; then
+            echo "ERROR: Version output doesn't match expected"
             exit 1
           fi
 
