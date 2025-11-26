@@ -25,13 +25,14 @@ cerebrium deploy
 
 ## About
 
-This Python package is a wrapper that downloads and manages the Cerebrium Go CLI binary. When you install this package, it will:
+This Python package is a wrapper that downloads and manages the Cerebrium Go CLI binary. On first run, it will:
 
 1. Detect your operating system and architecture
 2. Download the appropriate pre-compiled binary from GitHub releases
 3. Verify checksums for security
 4. Install it to `~/.cerebrium/bin/`
-5. Make it available as the `cerebrium` command
+
+Subsequent runs use the cached binary.
 
 ## Supported Platforms
 

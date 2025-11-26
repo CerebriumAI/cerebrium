@@ -3,5 +3,4 @@ dist/
 build/
 *.pyc
 __pycache__/
-build_env/
-test_env/
+.venv/

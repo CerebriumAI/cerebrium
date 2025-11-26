@@ -4,7 +4,9 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cerebrium"
-version = "2.0.0"
+# DO NOT EDIT: This version is automatically updated by the GitHub Action
+# (.github/workflows/pypi-publish.yml) during release. Uses PEP 440 format.
+version = "2.1.0b1"
 description = "CLI for deploying and managing Cerebrium apps"
 readme = "README.md"
 authors = [
@@ -42,7 +44,3 @@ cerebrium = "cerebrium_cli:main"
 
 [tool.setuptools]
 py-modules = ["cerebrium_cli"]
-
-[tool.setuptools.packages.find]
-where = ["."]
-include = ["cerebrium_cli*"]

@@ -27,25 +27,24 @@ jobs:
 
       - name: Update version in Python package
         run: |
-          VERSION="${{ github.event.release.tag_name }}"
-          VERSION="${VERSION#v}"  # Remove 'v' prefix if present
+          # Get version from tag (e.g., "v2.1.0" or "v2.1.0-beta.1")
+          GITHUB_VERSION="${{ github.event.release.tag_name }}"
+          GITHUB_VERSION="${GITHUB_VERSION#v}"  # Remove 'v' prefix
 
-          # Check if it's a prerelease and add beta suffix
-          if [[ "${{ github.event.release.prerelease }}" == "true" ]]; then
-            # Add beta suffix if not already present
-            if [[ ! "$VERSION" =~ (a|b|rc|RC) ]]; then
-              VERSION="${VERSION}b1"
-              echo "Converting to beta version: $VERSION"
-            fi
-          fi
+          # Update VERSION in cerebrium_cli.py (stores GitHub/semver format)
+          sed -i "s/^VERSION = \".*\"/VERSION = \"$GITHUB_VERSION\"/" python-wrapper/cerebrium_cli.py
 
-          # Update version in setup.py
-          sed -i "s/VERSION = \".*\"/VERSION = \"$VERSION\"/" python-wrapper/setup.py
+          echo "Updated VERSION in cerebrium_cli.py to: $GITHUB_VERSION"
 
-          # Update version in pyproject.toml
-          sed -i "s/version = \".*\"/version = \"$VERSION\"/" python-wrapper/pyproject.toml
+          # Convert to PEP 440 format for pyproject.toml
+          cd python-wrapper
+          PYPI_VERSION=$(python -c "from cerebrium_cli import github_to_pypi_version; print(github_to_pypi_version('$GITHUB_VERSION'))")
+          cd ..
 
-          echo "Updated Python package version to $VERSION"
+          # Update version in pyproject.toml (stores PEP 440 format)
+          sed -i "s/^version = \".*\"/version = \"$PYPI_VERSION\"/" python-wrapper/pyproject.toml
+
+          echo "Updated version in pyproject.toml to: $PYPI_VERSION"
 
       - name: Build Python package
         working-directory: python-wrapper
@@ -65,10 +64,11 @@ jobs:
           skip-existing: true
 
       - name: Test installation from PyPI
-        if: ${{ !github.event.release.prerelease }}
         run: |
-          VERSION="${{ github.event.release.tag_name }}"
-          VERSION="${VERSION#v}"  # Remove 'v' prefix if present
+          # Get the PEP 440 version for pip install
+          cd python-wrapper
+          PYPI_VERSION=$(python -c "from cerebrium_cli import __version__; print(__version__)")
+          cd ..
 
           # Create a clean virtual environment
           python -m venv test_env
@@ -82,11 +82,12 @@ jobs:
           while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
             echo "Attempt $ATTEMPT of $MAX_ATTEMPTS..."
 
-            if pip install cerebrium==$VERSION; then
-              echo "✓ Successfully installed cerebrium $VERSION from PyPI"
+            if pip install cerebrium==$PYPI_VERSION; then
+              echo "Successfully installed cerebrium $PYPI_VERSION from PyPI"
 
-              # Test that it works
-              cerebrium version
+              # Test that the wrapper runs (will download binary on first run)
+              echo "Testing cerebrium command..."
+              cerebrium version && echo "Binary download and execution successful!"
               exit 0
             else
               if [ $ATTEMPT -lt $MAX_ATTEMPTS ]; then
@@ -99,5 +100,5 @@ jobs:
             ATTEMPT=$((ATTEMPT + 1))
           done
 
-          echo "ERROR: Failed to install cerebrium $VERSION from PyPI after $MAX_ATTEMPTS attempts"
+          echo "ERROR: Failed to install cerebrium $PYPI_VERSION from PyPI after $MAX_ATTEMPTS attempts"
           exit 1
