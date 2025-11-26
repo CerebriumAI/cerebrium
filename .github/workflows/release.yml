@@ -87,7 +87,7 @@ jobs:
         run: |
           mkdir -p ~/.cerebrium
           cat > ~/.cerebrium/config.yaml << EOF
-          project: test-project-id
+          project: p-12345678
           EOF
 
       - name: Run smoke tests
@@ -106,7 +106,7 @@ jobs:
           # Verify projects current shows our configured project
           PROJECT_OUTPUT=$(cerebrium projects current)
           echo "Project output: $PROJECT_OUTPUT"
-          if [[ ! "$PROJECT_OUTPUT" =~ "test-project-id" ]]; then
+          if [[ ! "$PROJECT_OUTPUT" =~ "p-12345678" ]]; then
             echo "ERROR: Project output doesn't contain expected project ID"
             exit 1
           fi
