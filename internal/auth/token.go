@@ -15,36 +15,37 @@ import (
 )
 
 // GetOrRefreshToken returns a valid access token, refreshing if necessary
+// Token precedence:
+// 1. ServiceAccountToken (from save-auth-config with JWT or --service-account-token flag)
+// 2. AccessToken + RefreshToken (from login)
 func GetOrRefreshToken(ctx context.Context, cfg *config.Config) (string, error) {
-	// Check if we have an access token
+	// Check service account token first (highest priority after CLI flag)
+	if cfg.ServiceAccountToken != "" {
+		valid, err := isTokenValid(cfg.ServiceAccountToken)
+		if err != nil {
+			return "", fmt.Errorf("failed to validate service account token: %w", err)
+		}
+		if valid {
+			return cfg.ServiceAccountToken, nil
+		}
+		// Service account token has expired - cannot be refreshed
+		return "", fmt.Errorf("service account token has expired. Please generate a new one or run 'cerebrium save-auth-config' with a fresh token")
+	}
+
+	// Fall back to regular access token
 	if cfg.AccessToken == "" {
-		return "", fmt.Errorf("no access token found. Please run 'cerebrium login'")
+		return "", fmt.Errorf("no access token found. Please run 'cerebrium login' or provide a service account token")
 	}
 
-	// Parse the token without verification to check expiration
-	token, _, err := new(jwt.Parser).ParseUnverified(cfg.AccessToken, jwt.MapClaims{})
+	valid, err := isTokenValid(cfg.AccessToken)
 	if err != nil {
-		return "", fmt.Errorf("failed to parse JWT token: %w", err)
+		return "", fmt.Errorf("failed to validate access token: %w", err)
 	}
-
-	claims, ok := token.Claims.(jwt.MapClaims)
-	if !ok {
-		return "", fmt.Errorf("failed to parse JWT claims")
-	}
-
-	// Check expiration
-	exp, ok := claims["exp"].(float64)
-	if !ok {
-		return "", fmt.Errorf("missing or invalid exp claim in JWT")
-	}
-
-	expirationTime := time.Unix(int64(exp), 0)
-	if time.Now().Before(expirationTime) {
-		// Token is still valid
+	if valid {
 		return cfg.AccessToken, nil
 	}
 
-	// Token has expired, refresh it
+	// Token has expired, try to refresh it
 	if cfg.RefreshToken == "" {
 		return "", fmt.Errorf("access token has expired and no refresh token available. Please run 'cerebrium login'")
 	}
@@ -61,6 +62,27 @@ func GetOrRefreshToken(ctx context.Context, cfg *config.Config) (string, error) 
 	}
 
 	return newToken, nil
+}
+
+// isTokenValid checks if a JWT token is not expired
+func isTokenValid(tokenString string) (bool, error) {
+	token, _, err := new(jwt.Parser).ParseUnverified(tokenString, jwt.MapClaims{})
+	if err != nil {
+		return false, fmt.Errorf("failed to parse JWT token: %w", err)
+	}
+
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return false, fmt.Errorf("failed to parse JWT claims")
+	}
+
+	exp, ok := claims["exp"].(float64)
+	if !ok {
+		return false, fmt.Errorf("missing or invalid exp claim in JWT")
+	}
+
+	expirationTime := time.Unix(int64(exp), 0)
+	return time.Now().Before(expirationTime), nil
 }
 
 // refreshToken exchanges a refresh token for a new access token

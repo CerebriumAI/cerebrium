@@ -52,6 +52,14 @@ func NewRootCmd() *cobra.Command {
 				os.Exit(1)
 			}
 
+			// Override service account token if provided via CLI flag
+			// This takes precedence over environment variable and stored tokens
+			serviceAccountToken, _ := cmd.Flags().GetString("service-account-token")
+			if serviceAccountToken != "" {
+				cfg.ServiceAccountToken = serviceAccountToken
+				slog.Debug("Using service account token from CLI flag")
+			}
+
 			// Setup logger with configured log level
 			if verbose {
 				// Use configured log level (defaults to info if not set)
@@ -89,9 +97,12 @@ func NewRootCmd() *cobra.Command {
 	rootCmd.PersistentFlags().BoolP("verbose", "v", false, "Enable verbose logging")
 	rootCmd.PersistentFlags().Bool("no-color", false, "Disable colored output and animations")
 	rootCmd.PersistentFlags().Bool("no-ansi", false, "Disable colored output and animations (equivalent to --no-color)")
+	rootCmd.PersistentFlags().Bool("disable-animation", false, "Disable animations (equivalent to --no-color)")
+	rootCmd.PersistentFlags().String("service-account-token", "", "Service account token for authentication. Takes precedence over environment variable and stored session token.")
 
 	// Add subcommands
 	rootCmd.AddCommand(NewLoginCmd())
+	rootCmd.AddCommand(NewSaveAuthConfigCmd())
 	rootCmd.AddCommand(NewInitCmd())
 	rootCmd.AddCommand(NewDeployCmd())
 	rootCmd.AddCommand(NewRunCmd())

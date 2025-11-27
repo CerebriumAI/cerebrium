@@ -18,15 +18,16 @@ const (
 
 // Config holds the CLI configuration
 type Config struct {
-	environment      Environment
-	envConfig        *EnvConfig
-	ProjectID        string
-	AccessToken      string
-	RefreshToken     string
-	DefaultRegion    string
-	SkipVersionCheck bool
-	LogLevel         string
-	TelemetryEnabled *bool // Pointer to distinguish between unset (nil) and explicitly set (true/false)
+	environment         Environment
+	envConfig           *EnvConfig
+	ProjectID           string
+	AccessToken         string
+	RefreshToken        string
+	ServiceAccountToken string // JWT token from save-auth-config, takes precedence over AccessToken
+	DefaultRegion       string
+	SkipVersionCheck    bool
+	LogLevel            string
+	TelemetryEnabled    *bool // Pointer to distinguish between unset (nil) and explicitly set (true/false)
 }
 
 // ValidUserFacingConfigKeys lists config keys that users should interact with
@@ -122,14 +123,15 @@ func Load() (*Config, error) {
 	prefix := getKeyPrefix(env)
 
 	config := &Config{
-		environment:      env,
-		envConfig:        envConfig,
-		ProjectID:        viper.GetString(prefix + "project"),
-		AccessToken:      viper.GetString(prefix + "accesstoken"),
-		RefreshToken:     viper.GetString(prefix + "refreshtoken"),
-		DefaultRegion:    viper.GetString(prefix + "defaultregion"),
-		SkipVersionCheck: viper.GetBool("skipversioncheck"), // Global setting (not env-specific)
-		LogLevel:         viper.GetString("loglevel"),       // Global setting (not env-specific)
+		environment:         env,
+		envConfig:           envConfig,
+		ProjectID:           viper.GetString(prefix + "project"),
+		AccessToken:         viper.GetString(prefix + "accesstoken"),
+		RefreshToken:        viper.GetString(prefix + "refreshtoken"),
+		ServiceAccountToken: viper.GetString(prefix + "serviceaccounttoken"),
+		DefaultRegion:       viper.GetString(prefix + "defaultregion"),
+		SkipVersionCheck:    viper.GetBool("skipversioncheck"), // Global setting (not env-specific)
+		LogLevel:            viper.GetString("loglevel"),       // Global setting (not env-specific)
 	}
 
 	// Handle telemetry setting - use pointer to distinguish unset from false
@@ -165,6 +167,7 @@ func Save(config *Config) error {
 	viper.Set(prefix+"project", config.ProjectID)
 	viper.Set(prefix+"accesstoken", config.AccessToken)
 	viper.Set(prefix+"refreshtoken", config.RefreshToken)
+	viper.Set(prefix+"serviceaccounttoken", config.ServiceAccountToken)
 	viper.Set(prefix+"defaultregion", config.DefaultRegion)
 	viper.Set("skipversioncheck", config.SkipVersionCheck) // Global setting
 	viper.Set("loglevel", config.LogLevel)                 // Global setting

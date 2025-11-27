@@ -56,6 +56,7 @@ type DeployConfig struct {
 	DisableBuildLogs    bool
 	DisableConfirmation bool
 	LogLevel            string
+	Detach              bool // Exit after upload without waiting for build completion
 }
 
 // DeployView is the Bubbletea model for the deployment flow
@@ -148,6 +149,17 @@ func (m *DeployView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case ui.SignalCancelMsg:
 		// Handle termination signal (SIGINT, SIGTERM)
 		// This is especially important for non-TTY environments
+
+		// In detach mode, don't cancel the build - just exit cleanly
+		if m.conf.Detach {
+			if m.conf.SimpleOutput() {
+				fmt.Printf("\nCtrl+C detected. Build continues in detached mode.\n")
+				fmt.Println("Check the dashboard for build status.")
+			}
+			m.err = ui.NewUserCancelledError()
+			return m, tea.Quit
+		}
+
 		if m.conf.SimpleOutput() {
 			fmt.Printf("\nReceived termination signal, cancelling deployment...\n")
 		}
@@ -259,6 +271,20 @@ func (m *DeployView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.printSimpleProgress(100)
 			}
 			fmt.Println("✓ Uploaded to Cerebrium")
+		}
+
+		// In detach mode, exit immediately after upload
+		if m.conf.Detach {
+			if m.conf.SimpleOutput() {
+				fmt.Println("✓ Build started in detached mode")
+				fmt.Printf("  Build ID: %s\n", m.buildID)
+				fmt.Println("  Check the dashboard for build status.")
+			}
+			m.state = StateDeploySuccess
+			return m, tea.Quit
+		}
+
+		if m.conf.SimpleOutput() {
 			fmt.Println("Building app...")
 		}
 
@@ -585,6 +611,12 @@ func (m *DeployView) onKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 
 	if msg.String() == tea.KeyCtrlC.String() {
+		// In detach mode, don't cancel the build - just exit cleanly
+		if m.conf.Detach {
+			m.err = ui.NewUserCancelledError()
+			return m, tea.Quit
+		}
+
 		// User cancelled - clean up if build is in progress
 		if m.state >= StateBuildingApp && m.buildID != "" {
 			m.state = StateCancelling
