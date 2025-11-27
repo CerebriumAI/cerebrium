@@ -32,6 +32,7 @@ func NewDisplayConfig(cmd *cobra.Command, verbose bool) (DisplayConfig, error) {
 	// Get persistent flags (these are inherited from root command)
 	noColor, _ := cmd.Flags().GetBool("no-color")
 	noAnsi, _ := cmd.Flags().GetBool("no-ansi")
+	disableAnimationFlag, _ := cmd.Flags().GetBool("disable-animation")
 
 	// Detect if stdout is a TTY
 	// We only check stdout because that's where the TUI output goes
@@ -47,7 +48,7 @@ func NewDisplayConfig(cmd *cobra.Command, verbose bool) (DisplayConfig, error) {
 	}
 
 	// Determine if animations should be disabled
-	disableAnimation := noColor || noAnsi
+	disableAnimation := noColor || noAnsi || disableAnimationFlag
 
 	// Verbose mode only forces simple output if stderr and stdout are the same
 	// If they're redirected to different places (e.g., --verbose 2>stderr.log),
@@ -70,6 +71,7 @@ func NewDisplayConfig(cmd *cobra.Command, verbose bool) (DisplayConfig, error) {
 		"command", cmd.Name(),
 		"no-color-flag", noColor,
 		"no-ansi-flag", noAnsi,
+		"disable-animation-flag", disableAnimationFlag,
 		"verbose-flag", verbose,
 		"stdout-is-tty", stdoutIsTTY,
 		"stderr-is-tty", isatty.IsTerminal(os.Stderr.Fd()),

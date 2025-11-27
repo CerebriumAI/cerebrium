@@ -23,6 +23,7 @@ func NewDeployCmd() *cobra.Command {
 		configFile          string
 		disableConfirmation bool
 		disableBuildLogs    bool
+		detach              bool
 	)
 
 	cmd := &cobra.Command{
@@ -47,16 +48,19 @@ Example:
 				logLevel:           logLevel,
 				configFile:         configFile,
 				disableBuildLogs:   disableBuildLogs,
+				detach:             detach,
 			}, disableConfirmation)
 		},
 	}
 
 	// Add flags (note: --no-color and --no-ansi are global flags from root command)
+	cmd.Flags().StringVar(&name, "name", "", "Name of the App. Overrides the value in the TOML file if provided.")
 	cmd.Flags().BoolVar(&disableSyntaxCheck, "disable-syntax-check", false, "Flag to disable syntax check")
 	cmd.Flags().StringVar(&logLevel, "log-level", "INFO", "Log level for deployment (DEBUG or INFO)")
 	cmd.Flags().StringVar(&configFile, "config-file", "./cerebrium.toml", "Path to the cerebrium config TOML file")
 	cmd.Flags().BoolVarP(&disableConfirmation, "disable-confirmation", "y", false, "Disable confirmation prompt")
 	cmd.Flags().BoolVar(&disableBuildLogs, "disable-build-logs", false, "Disable build logs during deployment")
+	cmd.Flags().BoolVar(&detach, "detach", false, "Kick off deployment and exit without waiting for build completion. The build will continue on the server and Ctrl+C will not cancel it.")
 
 	return cmd
 }
@@ -67,6 +71,7 @@ type deployOptions struct {
 	logLevel           string
 	configFile         string
 	disableBuildLogs   bool
+	detach             bool
 }
 
 func runDeploy(cmd *cobra.Command, opts deployOptions, disableConfirmation bool) error {
@@ -140,6 +145,7 @@ func runDeploy(cmd *cobra.Command, opts deployOptions, disableConfirmation bool)
 		DisableBuildLogs:    opts.disableBuildLogs,
 		DisableConfirmation: disableConfirmation,
 		LogLevel:            opts.logLevel,
+		Detach:              opts.detach,
 	})
 
 	// Configure Bubbletea based on display options
