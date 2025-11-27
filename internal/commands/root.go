@@ -52,13 +52,11 @@ func NewRootCmd() *cobra.Command {
 				os.Exit(1)
 			}
 
-			// Override access token with service account token if provided
-			// This takes precedence over environment variable and stored session token
+			// Override service account token if provided via CLI flag
+			// This takes precedence over environment variable and stored tokens
 			serviceAccountToken, _ := cmd.Flags().GetString("service-account-token")
 			if serviceAccountToken != "" {
-				cfg.AccessToken = serviceAccountToken
-				// Clear refresh token since service account tokens don't use refresh flow
-				cfg.RefreshToken = ""
+				cfg.ServiceAccountToken = serviceAccountToken
 				slog.Debug("Using service account token from CLI flag")
 			}
 

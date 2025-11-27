@@ -57,55 +57,71 @@ func runSaveAuthConfig(cmd *cobra.Command, args []string, projectIDFlag string) 
 	var refreshToken string
 	var projectID string
 
-	// Parse arguments based on how many were provided
-	switch len(args) {
-	case 1:
-		// JWT mode - extract project_id from token
-		projectID, err = extractProjectIDFromJWT(accessToken)
-		if err != nil {
-			return ui.NewValidationError(fmt.Errorf("failed to extract project_id from JWT: %w", err))
-		}
-	case 2:
-		// Two args: access_token + refresh_token (still extract project_id from JWT)
+	// Parse arguments
+	if len(args) >= 2 {
 		refreshToken = args[1]
-		projectID, err = extractProjectIDFromJWT(accessToken)
-		if err != nil {
-			return ui.NewValidationError(fmt.Errorf("failed to extract project_id from JWT: %w", err))
-		}
-	case 3:
-		// Classic mode - all three provided
-		refreshToken = args[1]
+	}
+	if len(args) >= 3 {
 		projectID = args[2]
 	}
 
-	// Flag overrides positional argument and JWT extraction
+	// Flag overrides positional argument
 	if projectIDFlag != "" {
 		projectID = projectIDFlag
 	}
 
-	// Validate project ID
-	if projectID == "" {
-		return ui.NewValidationError(fmt.Errorf("project_id is required. Provide it as an argument, via --project-id flag, or use a JWT with project_id claim"))
-	}
+	// Determine mode based on Python's logic:
+	// If refresh_token AND project_id are provided → classic mode
+	// Otherwise → JWT mode (service account token)
+	isClassicMode := refreshToken != "" && projectID != ""
 
-	if !config.IsValidProjectID(projectID) {
-		return ui.NewValidationError(fmt.Errorf("invalid project ID: %s. Project ID should start with 'p-'", projectID))
-	}
+	if isClassicMode {
+		// Classic mode: save to accessToken + refreshToken
+		if !config.IsValidProjectID(projectID) {
+			return ui.NewValidationError(fmt.Errorf("invalid project ID: %s. Project ID should start with 'p-'", projectID))
+		}
 
-	// Update config
-	cfg.AccessToken = accessToken
-	cfg.RefreshToken = refreshToken
-	cfg.ProjectID = projectID
+		cfg.AccessToken = accessToken
+		cfg.RefreshToken = refreshToken
+		cfg.ProjectID = projectID
+		// Clear service account token when using classic mode
+		cfg.ServiceAccountToken = ""
 
-	// Save config
-	if err := config.Save(cfg); err != nil {
-		return ui.NewFileSystemError(fmt.Errorf("failed to save config: %w", err))
-	}
+		if err := config.Save(cfg); err != nil {
+			return ui.NewFileSystemError(fmt.Errorf("failed to save config: %w", err))
+		}
 
-	fmt.Printf("✓ Authentication credentials saved successfully\n")
-	fmt.Printf("  Project ID: %s\n", projectID)
-	if refreshToken != "" {
+		fmt.Printf("✓ Authentication credentials saved successfully\n")
+		fmt.Printf("  Project ID: %s\n", projectID)
 		fmt.Printf("  Refresh token: saved\n")
+	} else {
+		// JWT mode: save to serviceAccountToken, extract project_id from JWT
+		extractedProjectID, err := extractProjectIDFromJWT(accessToken)
+		if err != nil {
+			return ui.NewValidationError(fmt.Errorf("failed to extract project_id from JWT: %w", err))
+		}
+
+		// Use extracted project_id, but allow override via flag
+		if projectID == "" {
+			projectID = extractedProjectID
+		}
+
+		if !config.IsValidProjectID(projectID) {
+			return ui.NewValidationError(fmt.Errorf("invalid project ID: %s. Project ID should start with 'p-'", projectID))
+		}
+
+		cfg.ServiceAccountToken = accessToken
+		cfg.ProjectID = projectID
+		// Clear regular tokens when using service account
+		cfg.AccessToken = ""
+		cfg.RefreshToken = ""
+
+		if err := config.Save(cfg); err != nil {
+			return ui.NewFileSystemError(fmt.Errorf("failed to save config: %w", err))
+		}
+
+		fmt.Printf("✓ Service account token saved successfully\n")
+		fmt.Printf("  Project ID: %s\n", projectID)
 	}
 
 	return nil
