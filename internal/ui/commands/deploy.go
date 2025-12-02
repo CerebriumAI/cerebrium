@@ -38,6 +38,7 @@ const (
 	StateCreatingApp
 	StateUploadingZip
 	StateBuildingApp
+	StateDrainingLogs // Waiting for remaining logs to arrive after build completes
 	StateCancelling
 	StateCancelled
 	StateDeploySuccess
@@ -332,6 +333,20 @@ func (m *DeployView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.scheduleNextBuildPoll()
 
 	case buildCompleteMsg:
+		// Build is complete, but we need to wait for logs to drain
+		// Don't cancel context yet - let log viewer continue fetching
+		m.buildStatus = msg.status
+		m.state = StateDrainingLogs
+
+		slog.Debug("Build complete, draining logs", "status", msg.status)
+
+		// Wait 2 seconds to allow remaining logs to arrive
+		return m, tea.Tick(2*time.Second, func(t time.Time) tea.Msg {
+			return logDrainCompleteMsg{status: msg.status}
+		})
+
+	case logDrainCompleteMsg:
+		// Logs have had time to drain, now complete the deployment
 		m.ctxCancel() // Stop all subprocesses
 		m.buildStatus = msg.status
 		if msg.status == "success" || msg.status == "ready" {
@@ -447,8 +462,8 @@ func (m *DeployView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		}
 
-		// Update log viewer if active
-		if m.logViewer != nil && m.state == StateBuildingApp {
+		// Update log viewer if active (during building or draining logs)
+		if m.logViewer != nil && (m.state == StateBuildingApp || m.state == StateDrainingLogs) {
 			updated, logCmd := m.logViewer.Update(msg)
 			m.logViewer = updated.(*logging.LogViewerModel) //nolint:errcheck // Type assertion guaranteed by LogViewerModel structure
 
@@ -546,11 +561,13 @@ func (m *DeployView) View() string {
 			spinnerText = idleMessages[m.idleMsgIdx-1]
 		}
 		output.WriteString(formatStateLine(m.spinner.View(), spinnerText, ui.ActiveStyle.Render))
+	case m.state == StateDrainingLogs:
+		output.WriteString(formatStateLine(m.spinner.View(), "Finishing up...", ui.ActiveStyle.Render))
 	case m.state == StateCancelling:
 		output.WriteString(formatStateLine(m.spinner.View(), "Cancelling build...", ui.YellowStyle.Render))
 	case m.state == StateCancelled:
 		output.WriteString(formatStateLine("⚠", "Build cancelled", ui.YellowStyle.Render))
-	case m.state > StateBuildingApp && m.state != StateCancelling && m.state != StateCancelled:
+	case m.state > StateDrainingLogs && m.state != StateCancelling && m.state != StateCancelled:
 		output.WriteString(formatStateLine("✓", "Built app", ui.SuccessStyle.Render))
 	default:
 		output.WriteString(formatStateLine("-", "Build app", ui.PendingStyle.Render))
@@ -672,6 +689,10 @@ type buildStatusPollErrorMsg struct {
 
 type buildCompleteMsg struct {
 	status string
+}
+
+type logDrainCompleteMsg struct {
+	status string // Final build status to use for completion
 }
 
 type buildCancelledMsg struct {

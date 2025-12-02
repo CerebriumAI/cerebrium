@@ -186,7 +186,7 @@ func (m *LogViewerModel) View() string {
 		}
 		var output strings.Builder
 		output.WriteString("\n")
-		output.WriteString(ui.CyanStyle.Render(fmt.Sprintf("Build Logs (%d lines)", len(m.logs))))
+		output.WriteString(ui.CyanStyle.Render("Build Logs"))
 		output.WriteString("\n")
 		for _, log := range m.logs {
 			timestamp := log.Timestamp.Local().Format("15:04:05")
