@@ -87,9 +87,14 @@ func (m *ListView) onLoaded(projects []api.Project) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	}
 
-	// Create styled table and quit (non-interactive)
+	// Interactive mode: create fancy scrollable table
 	m.table = m.createTable()
-	return m, tea.Quit
+
+	// Auto-quit if table fits on screen (no scrolling needed)
+	if !ui.TableBiggerThanView(m.table) {
+		return m, tea.Quit
+	}
+	return m, nil
 }
 
 // onError handles *ui.UIError
@@ -107,21 +112,98 @@ func (m *ListView) onError(err *ui.UIError) (tea.Model, tea.Cmd) {
 
 // onKey handles tea.KeyMsg
 func (m *ListView) onKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	// Handle quit keys only
+	// Only handle keyboard input in interactive mode
+	if m.conf.SimpleOutput() {
+		return m, nil
+	}
+
+	// Handle quit keys (ctrl+c is handled by SignalCancelMsg)
 	switch msg.String() {
 	case "ctrl+c", "q", "esc":
 		return m, tea.Quit
+	case "J":
+		return m.scrollToBottom()
+	case "K":
+		return m.scrollToTop()
+	case "j":
+		return m.scrollDown()
+	case "k":
+		return m.scrollUp()
+	case "ctrl+d":
+		return m.pageDown()
+	case "ctrl+u":
+		return m.pageUp()
 	}
-	return m, nil
+
+	// Let table handle navigation (j/k, arrows)
+	return m.delegateToTable(msg)
 }
 
 // onDefault handles default messages (e.g., spinner ticks)
 func (m *ListView) onDefault(msg tea.Msg) (tea.Model, tea.Cmd) {
-	// Update spinner while loading
-	if m.loading {
+	// Update spinner only in interactive mode while loading
+	if !m.conf.SimpleOutput() && m.loading {
 		var cmd tea.Cmd
 		spinnerModel, cmd := m.spinner.Update(msg)
 		m.spinner = spinnerModel.(*ui.SpinnerModel) //nolint:errcheck // Type assertion guaranteed by SpinnerModel structure
+		return m, cmd
+	}
+	return m, nil
+}
+
+// scrollToBottom scrolls the table to the bottom
+func (m *ListView) scrollToBottom() (tea.Model, tea.Cmd) {
+	if !m.loading && len(m.table.Rows()) > 0 {
+		m.table.GotoBottom()
+	}
+	return m, nil
+}
+
+// scrollToTop scrolls the table to the top
+func (m *ListView) scrollToTop() (tea.Model, tea.Cmd) {
+	if !m.loading && len(m.table.Rows()) > 0 {
+		m.table.GotoTop()
+	}
+	return m, nil
+}
+
+// scrollDown scrolls the table down
+func (m *ListView) scrollDown() (tea.Model, tea.Cmd) {
+	if !m.loading && len(m.table.Rows()) > 0 {
+		m.table.MoveDown(1)
+	}
+	return m, nil
+}
+
+// scrollUp scrolls the table up
+func (m *ListView) scrollUp() (tea.Model, tea.Cmd) {
+	if !m.loading && len(m.table.Rows()) > 0 {
+		m.table.MoveUp(1)
+	}
+	return m, nil
+}
+
+// pageDown scrolls the table down by page
+func (m *ListView) pageDown() (tea.Model, tea.Cmd) {
+	if !m.loading && len(m.table.Rows()) > 0 {
+		m.table.MoveDown(10)
+	}
+	return m, nil
+}
+
+// pageUp scrolls the table up by page
+func (m *ListView) pageUp() (tea.Model, tea.Cmd) {
+	if !m.loading && len(m.table.Rows()) > 0 {
+		m.table.MoveUp(10)
+	}
+	return m, nil
+}
+
+// delegateToTable passes navigation keys to the table
+func (m *ListView) delegateToTable(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if !m.loading && len(m.projects) > 0 {
+		var cmd tea.Cmd
+		m.table, cmd = m.table.Update(msg)
 		return m, cmd
 	}
 	return m, nil
@@ -178,7 +260,13 @@ func (m *ListView) View() string {
 	output.WriteString(m.table.View())
 	output.WriteString("\n\n")
 
-	output.WriteString(ui.HelpStyle.Render("You can set your current project by running `cerebrium projects set {project_id}`\n"))
+	if ui.TableBiggerThanView(m.table) {
+		// Add navigation help (indented by one space to distinguish from regular output)
+		navHelp := " j/k scroll • J/K scroll to bottom/top • ctrl+d/ctrl+u page up/down • <esc> or q to quit"
+		output.WriteString(ui.HelpStyle.Render(navHelp))
+		output.WriteString("\n")
+	}
+	output.WriteString(ui.HelpStyle.Render("You can set your current projects by running `cerebrium projects set {project_id}`\n"))
 
 	return output.String()
 }
@@ -256,18 +344,16 @@ func newTable(rows []table.Row) table.Model {
 		BorderBottom(true).
 		Bold(true).
 		Padding(0, 1)
-	// No selection highlighting for non-interactive table
+	// Keep selected row subtle since we're just browsing, not selecting
 	s.Selected = s.Selected.
-		Foreground(lipgloss.NoColor{}).
-		Background(lipgloss.NoColor{}).
 		Bold(false)
 
-	// Create table with styling (not focused since non-interactive)
+	// Create table with styling
 	t := table.New(
 		table.WithColumns(columns),
 		table.WithRows(rows),
-		table.WithHeight(len(rows)+1), // Show all rows
-		table.WithFocused(false),
+		table.WithHeight(min(len(rows)+1, ui.MAX_TABLE_HEIGHT)),
+		table.WithFocused(true), // Make it interactive/scrollable
 	)
 	t.SetStyles(s)
 

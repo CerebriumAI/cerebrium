@@ -3,6 +3,7 @@ package files
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"sort"
 	"strings"
 	"time"
@@ -90,9 +91,16 @@ func (m *ListView) onLoaded(files []api.FileInfo) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	}
 
-	// Interactive mode: create styled table and quit (non-interactive)
+	// Interactive mode: create fancy scrollable table
 	m.table = m.createTable()
-	return m, tea.Quit
+
+	// Auto-quit if all files fit on screen (no scrolling needed)
+	if len(m.table.Rows()) <= ui.MAX_TABLE_HEIGHT {
+		return m, tea.Quit
+	}
+
+	// More files than fit - let user scroll and interact
+	return m, nil
 }
 
 // onError handles *ui.UIError
@@ -110,12 +118,23 @@ func (m *ListView) onError(err *ui.UIError) (tea.Model, tea.Cmd) {
 
 // onKey handles tea.KeyMsg
 func (m *ListView) onKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	// Handle quit keys only
+	// Only handle keyboard input in interactive mode
+	if m.conf.SimpleOutput() {
+		return m, nil
+	}
+
+	// Handle quit keys (ctrl+c is handled by SignalCancelMsg)
 	switch msg.String() {
 	case "ctrl+c", "q", "esc":
 		return m, tea.Quit
+	case "J":
+		return m.scrollToBottom()
+	case "K":
+		return m.scrollToTop()
 	}
-	return m, nil
+
+	// Let table handle navigation (j/k, arrows)
+	return m.delegateToTable(msg)
 }
 
 // onDefault handles default messages (e.g., spinner ticks)
@@ -130,6 +149,32 @@ func (m *ListView) onDefault(msg tea.Msg) (tea.Model, tea.Cmd) {
 	spinnerModel, cmd = m.spinner.Update(msg)
 	m.spinner = spinnerModel.(*ui.SpinnerModel) //nolint:errcheck // Type assertion guaranteed by SpinnerModel structure
 	return m, cmd
+}
+
+// scrollToBottom scrolls the table to the bottom
+func (m *ListView) scrollToBottom() (tea.Model, tea.Cmd) {
+	if !m.loading && len(m.files) > 0 {
+		m.table.GotoBottom()
+	}
+	return m, nil
+}
+
+// scrollToTop scrolls the table to the top
+func (m *ListView) scrollToTop() (tea.Model, tea.Cmd) {
+	if !m.loading && len(m.files) > 0 {
+		m.table.GotoTop()
+	}
+	return m, nil
+}
+
+// delegateToTable passes navigation keys to the table
+func (m *ListView) delegateToTable(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if !m.loading && len(m.files) > 0 {
+		var cmd tea.Cmd
+		m.table, cmd = m.table.Update(msg)
+		return m, cmd
+	}
+	return m, nil
 }
 
 // createTable creates the interactive table from files
@@ -193,7 +238,13 @@ func (m *ListView) View() string {
 	output.WriteString(ui.TitleStyle.Render(title))
 	output.WriteString("\n\n")
 	output.WriteString(m.table.View())
-	output.WriteString("\n")
+	output.WriteString("\n\n")
+
+	if ui.TableBiggerThanView(m.table) {
+		// Add navigation help (indented by one space to distinguish from regular output)
+		navHelp := " Use ↑/↓ or j/k to scroll • J/K to scroll to bottom/top • <esc> or q to quit"
+		output.WriteString(ui.HelpStyle.Render(navHelp))
+	}
 
 	return output.String()
 }
@@ -259,7 +310,7 @@ func newTable(rows []table.Row) table.Model {
 		{Title: "Last Modified", Width: 20},
 	}
 
-	// Style the table (non-interactive, no selection highlighting)
+	// Style the table
 	s := table.DefaultStyles()
 	s.Header = s.Header.
 		BorderStyle(lipgloss.NormalBorder()).
@@ -267,20 +318,21 @@ func newTable(rows []table.Row) table.Model {
 		BorderBottom(true).
 		Bold(true).
 		Padding(0, 1)
-	// Remove selection highlighting for non-interactive mode
+	// Keep selected row subtle since we're just browsing, not selecting
 	s.Selected = s.Selected.
-		Foreground(lipgloss.NoColor{}).
-		Background(lipgloss.NoColor{}).
+		Foreground(lipgloss.Color("11")).
 		Bold(false)
 
-	// Create table with styling - show all rows, not focused
+	// Create table with styling
 	t := table.New(
 		table.WithColumns(columns),
 		table.WithRows(rows),
-		table.WithHeight(len(rows)+1), // Show all rows
-		table.WithFocused(false),
+		table.WithHeight(min(len(rows)+1, ui.MAX_TABLE_HEIGHT)),
+		table.WithFocused(true), // Make it interactive/scrollable
 	)
 	t.SetStyles(s)
+
+	slog.Info("table", "table", t.Rows())
 
 	return t
 }

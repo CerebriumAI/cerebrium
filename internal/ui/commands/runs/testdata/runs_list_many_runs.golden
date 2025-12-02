@@ -16,14 +16,5 @@ Runs for test-app
  run-14          predict                success          2025-01-01 12:13:00          No            
  run-13          predict                success          2025-01-01 12:12:00          Yes           
  run-12          predict                success          2025-01-01 12:11:00          No            
- run-11          predict                success          2025-01-01 12:10:00          Yes           
- run-10          predict                success          2025-01-01 12:09:00          No            
- run-09          predict                success          2025-01-01 12:08:00          Yes           
- run-08          predict                success          2025-01-01 12:07:00          No            
- run-07          predict                success          2025-01-01 12:06:00          Yes           
- run-06          predict                success          2025-01-01 12:05:00          No            
- run-05          predict                success          2025-01-01 12:04:00          Yes           
- run-04          predict                success          2025-01-01 12:03:00          No            
- run-03          predict                success          2025-01-01 12:02:00          Yes           
- run-02          predict                success          2025-01-01 12:01:00          No            
- run-01          predict                success          2025-01-01 12:00:00          Yes
+
+  j/k scroll • J/K scroll to bottom/top • ctrl+d/ctrl+u page up/down • <esc> or q to quit
