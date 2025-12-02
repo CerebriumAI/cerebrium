@@ -159,6 +159,12 @@ func runDeploy(cmd *cobra.Command, opts deployOptions, disableConfirmation bool)
 		)
 	}
 
+	// Print a newline to preserve the command line in terminal history
+	// This prevents Bubbletea's renderer from overwriting the "cerebrium deploy" line
+	if displayOpts.IsInteractive {
+		fmt.Println()
+	}
+
 	// Run Bubbletea program (it handles its own cleanup)
 	p := tea.NewProgram(model, programOpts...)
 

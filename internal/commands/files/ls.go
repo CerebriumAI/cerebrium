@@ -1,14 +1,13 @@
 package files
 
 import (
-	"errors"
 	"fmt"
+	"sort"
+	"time"
 
 	"github.com/cerebriumai/cerebrium/internal/api"
 	"github.com/cerebriumai/cerebrium/internal/ui"
-	uiFiles "github.com/cerebriumai/cerebrium/internal/ui/commands/files"
 	"github.com/cerebriumai/cerebrium/pkg/config"
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
 )
 
@@ -36,9 +35,7 @@ Examples:
 }
 
 func runLs(cmd *cobra.Command, args []string, region string) error {
-	// Suppress Cobra's default error handling
 	cmd.SilenceUsage = true
-	cmd.SilenceErrors = true
 
 	// Default path is root
 	path := "/"
@@ -46,24 +43,15 @@ func runLs(cmd *cobra.Command, args []string, region string) error {
 		path = args[0]
 	}
 
-	// Get display options from context (loaded once in root command)
-	displayOpts, err := ui.GetDisplayConfigFromContext(cmd)
-	if err != nil {
-		return fmt.Errorf("failed to get display options: %w", err)
-	}
-
-	// Use command context (not Background) for proper cancellation support
-	ctx := cmd.Context()
-
 	// Load config
 	cfg, err := config.GetConfigFromContext(cmd)
 	if err != nil {
-		return fmt.Errorf("failed to load config: %w", err)
+		return ui.NewValidationError(fmt.Errorf("failed to load config: %w", err))
 	}
 
 	// Verify we have a project configured
 	if _, err := cfg.GetCurrentProject(); err != nil {
-		return fmt.Errorf("failed to get current project: %w", err)
+		return ui.NewValidationError(fmt.Errorf("failed to get current project: %w", err))
 	}
 
 	// Use provided region or fall back to default
@@ -75,51 +63,93 @@ func runLs(cmd *cobra.Command, args []string, region string) error {
 	// Create API client
 	client, err := api.NewClient(cfg)
 	if err != nil {
-		return fmt.Errorf("failed to create API client: %w", err)
+		return ui.NewValidationError(fmt.Errorf("failed to create API client: %w", err))
 	}
 
-	// Create Bubbletea model with display options
-	model := uiFiles.NewListView(ctx, uiFiles.ListConfig{
-		DisplayConfig: displayOpts,
-		Client:        client,
-		Config:        cfg,
-		Path:          path,
-		Region:        actualRegion,
+	// Show spinner while fetching
+	spinner := ui.NewSimpleSpinner("Loading files...")
+	spinner.Start()
+
+	// Fetch files
+	files, err := client.ListFiles(cmd.Context(), cfg.ProjectID, path, actualRegion)
+	spinner.Stop()
+	if err != nil {
+		return ui.NewAPIError(err)
+	}
+
+	// Sort: directories first, then by name
+	sort.Slice(files, func(i, j int) bool {
+		if files[i].IsFolder && !files[j].IsFolder {
+			return true
+		} else if !files[i].IsFolder && files[j].IsFolder {
+			return false
+		}
+		return files[i].Name < files[j].Name
 	})
 
-	// Configure Bubbletea based on display options
-	var programOpts []tea.ProgramOption
+	// Print results
+	if len(files) == 0 {
+		fmt.Println("No files found")
+		return nil
+	}
 
-	if !displayOpts.IsInteractive {
-		// Non-interactive mode: disable renderer and input
-		programOpts = append(programOpts,
-			tea.WithoutRenderer(),
-			tea.WithInput(nil),
+	// Calculate max name width
+	maxNameWidth := len("NAME")
+	for _, file := range files {
+		if len(file.Name) > maxNameWidth {
+			maxNameWidth = len(file.Name)
+		}
+	}
+	nameWidth := maxNameWidth + 2
+
+	// Print table header and rows
+	fmt.Printf("%-*s %-15s %-20s\n", nameWidth, "NAME", "SIZE", "LAST MODIFIED")
+	for _, file := range files {
+		fmt.Printf("%-*s %-15s %-20s\n",
+			nameWidth,
+			file.Name,
+			formatFileSize(file),
+			formatLastModified(file.LastModified),
 		)
 	}
 
-	// Run Bubbletea program
-	p := tea.NewProgram(model, programOpts...)
-	doneCh := ui.SetupSignalHandling(p, 0)
-	defer close(doneCh)
-
-	finalModel, err := p.Run()
-	if err != nil {
-		return fmt.Errorf("ui error: %w", err)
-	}
-
-	// Extract model
-	m, ok := finalModel.(*uiFiles.ListView)
-	if !ok {
-		return fmt.Errorf("unexpected model type")
-	}
-
-	// Check if there were any errors during execution
-	// Handle UIError - check if it should be silent
-	var uiErr *ui.UIError
-	if errors.As(m.Error(), &uiErr) && !uiErr.SilentExit {
-		return uiErr
-	}
-
 	return nil
+}
+
+// formatFileSize formats file size for display
+func formatFileSize(file api.FileInfo) string {
+	if file.IsFolder {
+		return "Directory"
+	}
+
+	size := float64(file.SizeBytes)
+	units := []string{"B", "KB", "MB", "GB", "TB"}
+	unitIndex := 0
+
+	for size >= 1024 && unitIndex < len(units)-1 {
+		size /= 1024
+		unitIndex++
+	}
+
+	if unitIndex == 0 {
+		return fmt.Sprintf("%d %s", int(size), units[unitIndex])
+	}
+	return fmt.Sprintf("%.2f %s", size, units[unitIndex])
+}
+
+// formatLastModified formats the last modified timestamp
+func formatLastModified(timestamp string) string {
+	if timestamp == "" || timestamp == "0001-01-01T00:00:00Z" {
+		return "N/A"
+	}
+
+	t, err := time.Parse(time.RFC3339, timestamp)
+	if err != nil {
+		t, err = time.Parse("2006-01-02T15:04:05Z", timestamp)
+		if err != nil {
+			return timestamp
+		}
+	}
+
+	return t.Format("2006-01-02 15:04:05")
 }

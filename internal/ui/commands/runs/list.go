@@ -3,16 +3,14 @@ package runs
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"sort"
 	"strings"
 
-	"github.com/cerebriumai/cerebrium/internal/ui"
-	"github.com/charmbracelet/lipgloss"
-
 	"github.com/cerebriumai/cerebrium/internal/api"
+	"github.com/cerebriumai/cerebrium/internal/ui"
 	"github.com/charmbracelet/bubbles/table"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 // ListConfig configures the runs list view
@@ -144,98 +142,16 @@ func (m *ListView) View() string {
 	output.WriteString(m.table.View())
 	output.WriteString("\n\n")
 
-	if ui.TableBiggerThanView(m.table) {
-		// Add navigation help (indented by one space to distinguish from regular output)
-		navHelp := " j/k scroll • J/K scroll to bottom/top • ctrl+d/ctrl+u page up/down • <esc> or q to quit"
-		output.WriteString(ui.HelpStyle.Render(navHelp))
-		output.WriteString("\n")
-	}
 	return output.String()
 }
 
 // Commands
 
 func (m *ListView) onKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	if m.conf.SimpleOutput() {
-		return m, nil
-	}
-	slog.Debug("key pressed", "key", msg.String())
-
+	// Handle quit keys only
 	switch msg.String() {
-	case "q", "esc":
+	case "ctrl+c", "q", "esc":
 		return m, tea.Quit
-	case "J":
-		return m.scrollToBottom()
-	case "K":
-		return m.scrollToTop()
-	case "j":
-		return m.scrollDown()
-	case "k":
-		return m.scrollUp()
-	case "ctrl+d":
-		return m.pageDown()
-	case "ctrl+u":
-		return m.pageUp()
-	}
-
-	// Let table handle navigation (j/k, arrows)
-	return m.delegateToTable(msg)
-}
-
-// scrollToBottom scrolls the table to the bottom
-func (m *ListView) scrollToBottom() (tea.Model, tea.Cmd) {
-	if !m.loading && len(m.table.Rows()) > 0 {
-		m.table.GotoBottom()
-	}
-	return m, nil
-}
-
-// scrollToTop scrolls the table to the top
-func (m *ListView) scrollToTop() (tea.Model, tea.Cmd) {
-	if !m.loading && len(m.table.Rows()) > 0 {
-		m.table.GotoTop()
-	}
-	return m, nil
-}
-
-// scrollDown scrolls the table to the bottom
-func (m *ListView) scrollDown() (tea.Model, tea.Cmd) {
-	if !m.loading && len(m.table.Rows()) > 0 {
-		m.table.MoveDown(1)
-	}
-	return m, nil
-}
-
-// scrollUp scrolls the table to the top
-func (m *ListView) scrollUp() (tea.Model, tea.Cmd) {
-	if !m.loading && len(m.table.Rows()) > 0 {
-		m.table.MoveUp(1)
-	}
-	return m, nil
-}
-
-// pageDown scrolls the table to the bottom
-func (m *ListView) pageDown() (tea.Model, tea.Cmd) {
-	if !m.loading && len(m.table.Rows()) > 0 {
-		m.table.MoveDown(10)
-	}
-	return m, nil
-}
-
-// pageUp scrolls the table to the top
-func (m *ListView) pageUp() (tea.Model, tea.Cmd) {
-	if !m.loading && len(m.table.Rows()) > 0 {
-		m.table.MoveUp(10)
-	}
-	return m, nil
-}
-
-// delegateToTable passes navigation keys to the table
-func (m *ListView) delegateToTable(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	if !m.loading && len(m.table.Rows()) > 0 {
-		var cmd tea.Cmd
-		m.table, cmd = m.table.Update(msg)
-		return m, cmd
 	}
 	return m, nil
 }
@@ -257,7 +173,9 @@ func (m *ListView) onLoaded(runs []api.Run) (tea.Model, tea.Cmd) {
 			// Print simple table format
 			fmt.Print(m.formatRunsTable())
 		}
+		return m, tea.Quit
 	}
+
 	// Interactive mode: create fancy table with colors and styling
 	var rows []table.Row
 	for _, run := range m.runs {
@@ -269,14 +187,10 @@ func (m *ListView) onLoaded(runs []api.Run) (tea.Model, tea.Cmd) {
 			m.formatAsyncStatus(run.Async),
 		})
 	}
-	// Create styled table
-	m.table = newTable(rows)
 
-	// Auto-quit if table fits on screen (no scrolling needed)
-	if !ui.TableBiggerThanView(m.table) {
-		return m, tea.Quit
-	}
-	return m, nil
+	// Create styled table and quit (non-interactive)
+	m.table = newTable(rows)
+	return m, tea.Quit
 }
 
 // formatRunsTable formats runs for non-TTY output
@@ -416,7 +330,7 @@ func newTable(rows []table.Row) table.Model {
 		{Title: "Async", Width: widths[4] + padding},
 	}
 
-	// Style the table (matching app list styling)
+	// Style the table (non-interactive, no selection highlighting)
 	s := table.DefaultStyles()
 	s.Header = s.Header.
 		BorderStyle(lipgloss.NormalBorder()).
@@ -424,13 +338,17 @@ func newTable(rows []table.Row) table.Model {
 		BorderBottom(true).
 		Bold(true).
 		Padding(0, 1)
-	s.Selected = s.Selected.Bold(true)
+	// Remove selection highlighting for non-interactive mode
+	s.Selected = s.Selected.
+		Foreground(lipgloss.NoColor{}).
+		Background(lipgloss.NoColor{}).
+		Bold(false)
 
-	// Create table with styling
+	// Create table with styling - show all rows, not focused
 	t := table.New(
 		table.WithColumns(columns),
 		table.WithRows(rows),
-		table.WithHeight(min(len(rows)+1, ui.MAX_TABLE_HEIGHT)), // Include header
+		table.WithHeight(len(rows)+1), // Show all rows
 		table.WithFocused(false),
 	)
 	t.SetStyles(s)

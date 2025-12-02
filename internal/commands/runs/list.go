@@ -1,14 +1,13 @@
 package runs
 
 import (
-	"errors"
 	"fmt"
+	"sort"
+	"strings"
 
 	"github.com/cerebriumai/cerebrium/internal/api"
 	"github.com/cerebriumai/cerebrium/internal/ui"
-	"github.com/cerebriumai/cerebrium/internal/ui/commands/runs"
 	"github.com/cerebriumai/cerebrium/pkg/config"
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
 )
 
@@ -22,8 +21,7 @@ func newListCmd() *cobra.Command {
 
 Examples:
   cerebrium runs list myapp
-  cerebrium runs list myapp --async  # Only show async runs
-  cerebrium runs list myapp --no-color  # Disable animations and colors`,
+  cerebrium runs list myapp --async  # Only show async runs`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runList(cmd, args[0], asyncOnly)
@@ -36,76 +34,79 @@ Examples:
 }
 
 func runList(cmd *cobra.Command, appName string, asyncOnly bool) error {
-	// Suppress Cobra's default error handling - we control it in main.go
 	cmd.SilenceUsage = true
-	cmd.SilenceErrors = true
 
-	// Get display options from context (loaded once in root command)
-	displayOpts, err := ui.GetDisplayConfigFromContext(cmd)
-	if err != nil {
-		return fmt.Errorf("failed to get display options: %w", err)
-	}
-
-	// Get config from context (loaded once in root command)
+	// Get config from context
 	cfg, err := config.GetConfigFromContext(cmd)
 	if err != nil {
-		return fmt.Errorf("failed to get config: %w", err)
+		return ui.NewValidationError(fmt.Errorf("failed to get config: %w", err))
 	}
 
 	// Get current project
 	projectID, err := cfg.GetCurrentProject()
 	if err != nil {
-		return fmt.Errorf("no project found. Please run 'cerebrium project set PROJECT_ID' to set the current project")
+		return ui.NewValidationError(fmt.Errorf("no project found. Please run 'cerebrium project set PROJECT_ID' to set the current project"))
 	}
 
 	// Create API client
 	client, err := api.NewClient(cfg)
 	if err != nil {
-		return fmt.Errorf("failed to create API client: %w", err)
+		return ui.NewValidationError(fmt.Errorf("failed to create API client: %w", err))
 	}
 
-	// Create Bubbletea model with display options
-	model := runs.NewListView(cmd.Context(), runs.ListConfig{
-		DisplayConfig: displayOpts,
-		Client:        client,
-		ProjectID:     projectID,
-		AppName:       appName,
-		AsyncOnly:     asyncOnly,
+	// Construct the app ID
+	appID := normalizeAppID(projectID, appName)
+
+	// Show spinner while fetching
+	spinner := ui.NewSimpleSpinner("Loading runs...")
+	spinner.Start()
+
+	// Fetch runs
+	runs, err := client.GetRuns(cmd.Context(), projectID, appID, asyncOnly)
+	spinner.Stop()
+	if err != nil {
+		return ui.NewAPIError(err)
+	}
+
+	// Sort by created date (most recent first)
+	sort.Slice(runs, func(i, j int) bool {
+		return runs[i].CreatedAt.After(runs[j].CreatedAt)
 	})
 
-	// Configure Bubbletea based on display options
-	var programOpts []tea.ProgramOption
+	// Print results
+	if len(runs) == 0 {
+		if asyncOnly {
+			fmt.Printf("No async runs found for app: %s\n", appName)
+		} else {
+			fmt.Printf("No runs found for app: %s\n", appName)
+		}
+		return nil
+	}
 
-	if !displayOpts.IsInteractive {
-		// Non-interactive mode: disable renderer and input
-		programOpts = append(programOpts,
-			tea.WithoutRenderer(),
-			tea.WithInput(nil),
+	// Print table header and rows
+	fmt.Printf("%-40s %-30s %-15s %-25s %-10s\n", "RUN ID", "FUNCTION NAME", "STATUS", "CREATED AT", "ASYNC")
+	for _, run := range runs {
+		asyncStr := "No"
+		if run.Async {
+			asyncStr = "Yes"
+		}
+		fmt.Printf("%-40s %-30s %-15s %-25s %-10s\n",
+			run.ID,
+			run.FunctionName,
+			run.GetDisplayStatus(),
+			run.CreatedAt.Format("2006-01-02 15:04:05 MST"),
+			asyncStr,
 		)
 	}
 
-	// Run Bubbletea program
-	p := tea.NewProgram(model, programOpts...)
-	doneCh := ui.SetupSignalHandling(p, 0)
-	defer close(doneCh)
-
-	finalModel, err := p.Run()
-	if err != nil {
-		return fmt.Errorf("ui error: %w", err)
-	}
-
-	// Extract model
-	m, ok := finalModel.(*runs.ListView)
-	if !ok {
-		return fmt.Errorf("unexpected model type")
-	}
-
-	// Check if there were any errors during execution
-	// Handle UIError - check if it should be silent
-	var uiErr *ui.UIError
-	if errors.As(m.Error(), &uiErr) && !uiErr.SilentExit {
-		return uiErr
-	}
-
 	return nil
+}
+
+// normalizeAppID ensures the app ID has the correct format.
+func normalizeAppID(projectID, appName string) string {
+	expectedPrefix := projectID + "-"
+	if strings.HasPrefix(appName, expectedPrefix) {
+		return appName
+	}
+	return fmt.Sprintf("%s-%s", projectID, appName)
 }
