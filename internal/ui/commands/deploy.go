@@ -200,9 +200,14 @@ func (m *DeployView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Direct output in simple mode
 		if m.conf.SimpleOutput() {
 			fmt.Printf("✓ Loaded %d files\n", len(msg.fileList))
+			return m, m.zipFiles
 		}
 
-		return m, m.zipFiles
+		// Print completed step to scrollback in interactive mode
+		return m, tea.Batch(
+			tea.Println(ui.SuccessStyle.Render(fmt.Sprintf("✓  Loaded %d files", len(msg.fileList)))),
+			m.zipFiles,
+		)
 
 	case filesZippedMsg:
 		m.zipPath = msg.zipPath
@@ -211,9 +216,14 @@ func (m *DeployView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		if m.conf.SimpleOutput() {
 			fmt.Printf("✓ Created zip (%s)\n", ui.FormatSize(msg.zipSize))
+			return m, m.createApp
 		}
 
-		return m, m.createApp
+		// Print completed step to scrollback in interactive mode
+		return m, tea.Batch(
+			tea.Println(ui.SuccessStyle.Render(fmt.Sprintf("✓  Zipped files (%s)", ui.FormatSize(msg.zipSize)))),
+			m.createApp,
+		)
 
 	case appCreatedMsg:
 		m.appResponse = msg.response
@@ -226,9 +236,15 @@ func (m *DeployView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.conf.SimpleOutput() {
 			fmt.Printf("✓ Created app (Build ID: %s)\n", msg.response.BuildID)
 			fmt.Printf("Uploading to Cerebrium (%s)...\n", ui.FormatSize(m.zipSize))
+			return m, tea.Batch(
+				m.uploadZip,
+				m.tickUploadProgress(),
+			)
 		}
 
+		// Print completed step to scrollback in interactive mode
 		return m, tea.Batch(
+			tea.Println(ui.SuccessStyle.Render(fmt.Sprintf("✓  Created app (Build ID: %s)", msg.response.BuildID))),
 			m.uploadZip,
 			m.tickUploadProgress(),
 		)
@@ -280,6 +296,15 @@ func (m *DeployView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				fmt.Println("✓ Build started in detached mode")
 				fmt.Printf("  Build ID: %s\n", m.buildID)
 				fmt.Println("  Check the dashboard for build status.")
+			} else {
+				// Print detach message to scrollback in interactive mode
+				return m, tea.Sequence(
+					tea.Println(ui.SuccessStyle.Render("✓  Uploaded to Cerebrium")),
+					tea.Println(ui.SuccessStyle.Render("✓  Build started in detached mode")),
+					tea.Println(fmt.Sprintf("   Build ID: %s", m.buildID)),
+					tea.Println("   Check the dashboard for build status."),
+					tea.Quit,
+				)
 			}
 			m.state = StateDeploySuccess
 			return m, tea.Quit
@@ -307,6 +332,20 @@ func (m *DeployView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		})
 
 		// Start polling build status in parallel with log collection
+		// Print upload completion to scrollback in interactive mode
+		if !m.conf.SimpleOutput() {
+			// Use tea.Sequence for ordered prints, then Batch with parallel commands
+			printCmds := tea.Sequence(
+				tea.Println(ui.SuccessStyle.Render("✓  Uploaded to Cerebrium")),
+				tea.Println(""), // Empty line before logs
+			)
+			return m, tea.Batch(
+				printCmds,
+				m.logViewer.Init(),
+				m.pollBuildStatus,
+			)
+		}
+
 		return m, tea.Batch(
 			m.logViewer.Init(),
 			m.pollBuildStatus,
@@ -360,7 +399,22 @@ func (m *DeployView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				fmt.Printf("App Dashboard: %s\n", m.appResponse.DashboardURL)
 				fmt.Println("\nEndpoint:")
 				fmt.Printf("POST %s/{function_name}\n", m.appResponse.InternalEndpoint)
+				return m, tea.Quit
 			}
+
+			// Print success message to scrollback in interactive mode
+			return m, tea.Sequence(
+				tea.Println(""),
+				tea.Println(ui.SuccessStyle.Render("✓  Built app")),
+				tea.Println(""),
+				tea.Println(ui.GreenStyle.Render(fmt.Sprintf("✓ %s is now live!", m.conf.Config.Deployment.Name))),
+				tea.Println(""),
+				tea.Println(fmt.Sprintf("App Dashboard: %s", m.appResponse.DashboardURL)),
+				tea.Println(""),
+				tea.Println("Endpoint:"),
+				tea.Println(ui.CyanStyle.Render("POST")+" "+m.appResponse.InternalEndpoint+"/{function_name}"),
+				tea.Quit,
+			)
 		} else {
 			m.state = StateDeployError
 			err := ui.NewAPIError(fmt.Errorf("build failed with status: %s", msg.status))
@@ -384,9 +438,16 @@ func (m *DeployView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			if m.conf.SimpleOutput() {
 				fmt.Printf("✗ Build failed with status: %s\n", msg.status)
+				return m, tea.Quit
 			}
+
+			// Print error message to scrollback in interactive mode
+			return m, tea.Sequence(
+				tea.Println(""),
+				tea.Println(ui.ErrorStyle.Render(fmt.Sprintf("✗ Build failed with status: %s", msg.status))),
+				tea.Quit,
+			)
 		}
-		return m, tea.Quit
 
 	case confirmationResponseMsg:
 		// Handle non-TTY confirmation response
@@ -481,7 +542,8 @@ func (m *DeployView) View() string {
 		return ""
 	}
 
-	// Interactive mode: full UI experience
+	// Interactive mode: only render the ACTIVE state
+	// Completed states are printed to scrollback via tea.Println in Update()
 	var output strings.Builder
 
 	// Show confirmation prompt if in confirmation state
@@ -497,109 +559,83 @@ func (m *DeployView) View() string {
 		return fmt.Sprintf("%s  %s", icon, styleFunc(text))
 	}
 
-	// State 1: Loading files
-	switch {
-	case m.state == StateLoadingFiles:
+	// Show active state and pending states (completed states are printed via tea.Println)
+	switch m.state {
+	case StateLoadingFiles:
 		output.WriteString(formatStateLine(m.spinner.View(), "Loading files...", ui.ActiveStyle.Render))
-	case m.state > StateLoadingFiles:
-		output.WriteString(formatStateLine("✓", fmt.Sprintf("Loaded %d files", len(m.fileList)), ui.SuccessStyle.Render))
-	default:
-		output.WriteString(formatStateLine("-", "Load files", ui.PendingStyle.Render))
-	}
-	output.WriteString("\n")
-
-	// State 2: Zipping files
-	switch {
-	case m.state == StateZippingFiles:
-		output.WriteString(formatStateLine(m.spinner.View(), "Zipping files...", ui.ActiveStyle.Render))
-	case m.state > StateZippingFiles:
-		output.WriteString(formatStateLine("✓", fmt.Sprintf("Zipped files (%s)", ui.FormatSize(m.zipSize)), ui.SuccessStyle.Render))
-	default:
+		output.WriteString("\n")
 		output.WriteString(formatStateLine("-", "Zip files", ui.PendingStyle.Render))
-	}
-	output.WriteString("\n")
-
-	// State 3: Creating app
-	switch {
-	case m.state == StateCreatingApp:
-		output.WriteString(formatStateLine(m.spinner.View(), "Creating app...", ui.ActiveStyle.Render))
-	case m.state > StateCreatingApp:
-		output.WriteString(formatStateLine("✓", fmt.Sprintf("Created app (Build ID: %s)", m.buildID), ui.SuccessStyle.Render))
-	default:
+		output.WriteString("\n")
 		output.WriteString(formatStateLine("-", "Create app", ui.PendingStyle.Render))
-	}
-	output.WriteString("\n")
+		output.WriteString("\n")
+		output.WriteString(formatStateLine("-", "Upload to Cerebrium", ui.PendingStyle.Render))
+		output.WriteString("\n")
+		output.WriteString(formatStateLine("-", "Build app", ui.PendingStyle.Render))
+		output.WriteString("\n")
 
-	// State 4: Uploading zip
-	switch {
-	case m.state == StateUploadingZip:
+	case StateZippingFiles:
+		output.WriteString(formatStateLine(m.spinner.View(), "Zipping files...", ui.ActiveStyle.Render))
+		output.WriteString("\n")
+		output.WriteString(formatStateLine("-", "Create app", ui.PendingStyle.Render))
+		output.WriteString("\n")
+		output.WriteString(formatStateLine("-", "Upload to Cerebrium", ui.PendingStyle.Render))
+		output.WriteString("\n")
+		output.WriteString(formatStateLine("-", "Build app", ui.PendingStyle.Render))
+		output.WriteString("\n")
+
+	case StateCreatingApp:
+		output.WriteString(formatStateLine(m.spinner.View(), "Creating app...", ui.ActiveStyle.Render))
+		output.WriteString("\n")
+		output.WriteString(formatStateLine("-", "Upload to Cerebrium", ui.PendingStyle.Render))
+		output.WriteString("\n")
+		output.WriteString(formatStateLine("-", "Build app", ui.PendingStyle.Render))
+		output.WriteString("\n")
+
+	case StateUploadingZip:
 		output.WriteString(formatStateLine(m.spinner.View(), "Uploading to Cerebrium...", ui.ActiveStyle.Render))
 		output.WriteString("\n")
-		// Show progress bar underneath
 		output.WriteString(m.renderUploadProgress())
-	case m.state > StateUploadingZip:
-		output.WriteString(formatStateLine("✓", "Uploaded to Cerebrium", ui.SuccessStyle.Render))
+		output.WriteString(formatStateLine("-", "Build app", ui.PendingStyle.Render))
 		output.WriteString("\n")
-		output.WriteString(m.renderUploadProgress())
-	default:
-		output.WriteString(formatStateLine("-", "Uploading to Cerebrium", ui.PendingStyle.Render))
+
+	case StateBuildingApp:
+		// Show log viewer waiting message if no logs yet
+		if m.logViewer != nil {
+			logViewerOutput := m.logViewer.View()
+			if logViewerOutput != "" {
+				output.WriteString(logViewerOutput)
+			}
+		}
+		// Add spacing between logs (printed above) and spinner
 		output.WriteString("\n")
-	}
-
-	// Show log viewer if initialized (before build status so status appears below logs)
-	if m.logViewer != nil {
-		output.WriteString(m.logViewer.View())
-	}
-
-	// State 5: Building app (shown below logs)
-	switch {
-	case m.state == StateBuildingApp:
 		// Show spinner message
-		// Idle index is updated in Update() to keep View() pure
 		spinnerText := "Building app..."
 		if m.idleMsgIdx > 0 && m.idleMsgIdx-1 < len(idleMessages) {
 			spinnerText = idleMessages[m.idleMsgIdx-1]
 		}
 		output.WriteString(formatStateLine(m.spinner.View(), spinnerText, ui.ActiveStyle.Render))
-	case m.state == StateDrainingLogs:
-		output.WriteString(formatStateLine(m.spinner.View(), "Finishing up...", ui.ActiveStyle.Render))
-	case m.state == StateCancelling:
-		output.WriteString(formatStateLine(m.spinner.View(), "Cancelling build...", ui.YellowStyle.Render))
-	case m.state == StateCancelled:
-		output.WriteString(formatStateLine("⚠", "Build cancelled", ui.YellowStyle.Render))
-	case m.state > StateDrainingLogs && m.state != StateCancelling && m.state != StateCancelled:
-		output.WriteString(formatStateLine("✓", "Built app", ui.SuccessStyle.Render))
-	default:
-		output.WriteString(formatStateLine("-", "Build app", ui.PendingStyle.Render))
-	}
-	output.WriteString("\n")
-
-	// Show success message
-	if m.state == StateDeploySuccess {
 		output.WriteString("\n")
-		output.WriteString(ui.GreenStyle.Render(fmt.Sprintf("✓ %s is now live!", m.conf.Config.Deployment.Name)))
-		output.WriteString("\n\n")
-		output.WriteString(fmt.Sprintf("App Dashboard: %s\n", m.appResponse.DashboardURL))
-		output.WriteString("\nEndpoint:\n")
-		output.WriteString(ui.CyanStyle.Render("POST") + " " + m.appResponse.InternalEndpoint + "/{function_name}")
-		output.WriteString("\n")
-	}
-
-	// Show error
-	if m.state == StateDeployError && m.err != nil {
-		output.WriteString("\n")
-		output.WriteString(ui.FormatError(m.err))
-	}
-
-	// Show warning/message (e.g., cancellation warnings)
-	if m.message != "" && (m.state == StateCancelled || m.state == StateCancelling) {
-		output.WriteString("\n")
-		output.WriteString(m.message)
-	}
-
-	// Show help text
-	if m.state >= StateCreatingApp && m.state <= StateCancelling {
 		output.WriteString(m.renderHelpText())
+
+	case StateDrainingLogs:
+		output.WriteString(formatStateLine(m.spinner.View(), "Finishing up...", ui.ActiveStyle.Render))
+		output.WriteString("\n")
+
+	case StateCancelling:
+		output.WriteString(formatStateLine(m.spinner.View(), "Cancelling build...", ui.YellowStyle.Render))
+		output.WriteString("\n")
+
+	case StateCancelled:
+		output.WriteString(formatStateLine("⚠", "Build cancelled", ui.YellowStyle.Render))
+		output.WriteString("\n")
+		if m.message != "" {
+			output.WriteString(m.message)
+			output.WriteString("\n")
+		}
+
+	case StateDeploySuccess, StateDeployError:
+		// These states print via tea.Println and then quit, so View() returns empty
+		return ""
 	}
 
 	return output.String()
