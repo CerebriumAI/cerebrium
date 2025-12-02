@@ -29,6 +29,7 @@ type LogViewerConfig struct {
 	TickInterval time.Duration // UI refresh interval (default: 500ms)
 	ShowHelp     bool
 	ViewSize     int
+	AutoExpand   bool // If true, show all logs without box (for deploy/run)
 }
 
 // LogViewerModel is a reusable component for viewing logs
@@ -177,7 +178,26 @@ func (m *LogViewerModel) View() string {
 	if m.config.SimpleOutput() {
 		return ""
 	}
-	// Show waiting message
+
+	// AutoExpand mode: show all logs without box
+	if m.config.AutoExpand {
+		if len(m.logs) == 0 {
+			return "\n" + ui.PendingStyle.Render("Waiting for logs...") + "\n\n"
+		}
+		var output strings.Builder
+		output.WriteString("\n")
+		output.WriteString(ui.CyanStyle.Render(fmt.Sprintf("Build Logs (%d lines)", len(m.logs))))
+		output.WriteString("\n")
+		for _, log := range m.logs {
+			timestamp := log.Timestamp.Local().Format("15:04:05")
+			styledTimestamp := ui.TimestampStyle.Render(timestamp)
+			output.WriteString(fmt.Sprintf("%s %s\n", styledTimestamp, log.Content))
+		}
+		output.WriteString("\n")
+		return output.String()
+	}
+
+	// Show waiting message (only for non-AutoExpand mode)
 	if len(m.logs) == 0 || m.state == viewerStateInitialising {
 		emptyContent := ui.PendingStyle.Render("Waiting for logs...")
 		emptyBox := lipgloss.NewStyle().
