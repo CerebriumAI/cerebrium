@@ -43,8 +43,10 @@ type LogViewerModel struct {
 	doneChan chan error
 	logs     []Log // Accumulated logs for display
 
-	scrollOffset int
-	anchorBottom bool // Auto-scroll to show latest logs
+	scrollOffset    int
+	anchorBottom    bool // Auto-scroll to show latest logs
+	printedLogCount int  // Number of logs already printed (for AutoExpand mode)
+	headerPrinted   bool // Whether the "Build Logs" header has been printed
 
 	err error
 }
@@ -133,6 +135,34 @@ func (m *LogViewerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.logs[i].Timestamp.Before(m.logs[j].Timestamp)
 		})
 
+		// In AutoExpand mode (interactive), print new logs via tea.Println
+		// so they go into permanent scrollback
+		if m.config.AutoExpand && !m.config.SimpleOutput() && m.printedLogCount < len(m.logs) {
+			// Build print commands for header and new logs
+			var printCmds []tea.Cmd
+
+			// Add header if this is the first log
+			if !m.headerPrinted {
+				printCmds = append(printCmds, tea.Println(ui.CyanStyle.Render("Build Logs")))
+				m.headerPrinted = true
+			}
+
+			// Add any new logs that haven't been printed yet
+			for i := m.printedLogCount; i < len(m.logs); i++ {
+				log := m.logs[i]
+				timestamp := log.Timestamp.Local().Format("15:04:05")
+				styledTimestamp := ui.TimestampStyle.Render(timestamp)
+				printCmds = append(printCmds, tea.Println(fmt.Sprintf("%s %s", styledTimestamp, log.Content)))
+			}
+			m.printedLogCount = len(m.logs)
+
+			// Use tea.Sequence for prints (ordered), then Batch with other parallel commands
+			return m, tea.Batch(
+				tea.Sequence(printCmds...),
+				waitForLogBatch(m.logChan),
+			)
+		}
+
 		// Keep listening for more logs
 		return m, waitForLogBatch(m.logChan)
 
@@ -152,9 +182,6 @@ func (m *LogViewerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyMsg:
 		return m.onKey(msg)
-
-	case tea.MouseMsg:
-		return m.onMouse(msg)
 
 	case ui.SignalCancelMsg:
 		m.state = viewerStateFinished
@@ -179,22 +206,14 @@ func (m *LogViewerModel) View() string {
 		return ""
 	}
 
-	// AutoExpand mode: show all logs without box
+	// AutoExpand mode: logs are printed via tea.Println in Update()
+	// Only show waiting message if no logs yet
 	if m.config.AutoExpand {
 		if len(m.logs) == 0 {
-			return "\n" + ui.PendingStyle.Render("Waiting for logs...") + "\n\n"
+			return "\n" + ui.PendingStyle.Render("Waiting for logs...") + "\n"
 		}
-		var output strings.Builder
-		output.WriteString("\n")
-		output.WriteString(ui.CyanStyle.Render("Build Logs"))
-		output.WriteString("\n")
-		for _, log := range m.logs {
-			timestamp := log.Timestamp.Local().Format("15:04:05")
-			styledTimestamp := ui.TimestampStyle.Render(timestamp)
-			output.WriteString(fmt.Sprintf("%s %s\n", styledTimestamp, log.Content))
-		}
-		output.WriteString("\n")
-		return output.String()
+		// Logs have been printed via tea.Println, return empty
+		return ""
 	}
 
 	// Show waiting message (only for non-AutoExpand mode)
@@ -316,23 +335,6 @@ func (m *LogViewerModel) onKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// Page down - scroll down 10 lines
 		maxOffset := max(0, len(m.logs)-m.config.ViewSize)
 		m.scrollOffset = min(maxOffset, m.scrollOffset+10)
-		m.anchorBottom = m.scrollOffset+m.config.ViewSize >= len(m.logs)
-	}
-
-	return m, nil
-}
-
-func (m *LogViewerModel) onMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
-	switch msg.Button {
-	case tea.MouseButtonWheelUp:
-		// Scroll up 1 line
-		m.scrollOffset = max(0, m.scrollOffset-1)
-		m.anchorBottom = m.scrollOffset+m.config.ViewSize >= len(m.logs)
-
-	case tea.MouseButtonWheelDown:
-		// Scroll down 1 line
-		maxOffset := max(0, len(m.logs)-m.config.ViewSize)
-		m.scrollOffset = min(maxOffset, m.scrollOffset+1)
 		m.anchorBottom = m.scrollOffset+m.config.ViewSize >= len(m.logs)
 	}
 

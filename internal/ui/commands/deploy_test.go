@@ -915,7 +915,8 @@ func TestDeployView_View(t *testing.T) {
 
 		view := model.View()
 		assert.Contains(t, view, "Zipping files")
-		assert.Contains(t, view, "2 files")
+		// Note: file count is no longer shown in View() - it's printed via tea.Println
+		// when transitioning from StateLoadingFiles to StateZippingFiles
 	})
 
 	t.Run("view during app creation", func(t *testing.T) {
@@ -987,7 +988,9 @@ func TestDeployView_View(t *testing.T) {
 		model.err = ui.NewAPIError(errors.New("deployment failed"))
 
 		view := model.View()
-		assert.Contains(t, view, "deployment failed")
+		// Note: Error messages are now printed via tea.Println in Update(),
+		// so View() returns empty for StateDeployError
+		assert.Empty(t, view, "View should return empty for error state - errors are printed via tea.Println")
 	})
 
 	t.Run("view in simple mode", func(t *testing.T) {
