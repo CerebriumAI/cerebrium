@@ -342,7 +342,7 @@ func (m *DeployView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// Wait 2 seconds to allow remaining logs to arrive
 		return m, tea.Tick(2*time.Second, func(t time.Time) tea.Msg {
-			return logDrainCompleteMsg{status: msg.status}
+			return logDrainCompleteMsg(msg)
 		})
 
 	case logDrainCompleteMsg:
