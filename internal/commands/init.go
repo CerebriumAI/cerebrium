@@ -22,12 +22,6 @@ const exampleMain = `def run(prompt: str):
 # cerebrium deploy
 `
 
-const exampleRequirements = `# Add your Python dependencies here
-# Example:
-# numpy==1.24.0
-# requests>=2.28.0
-`
-
 // NewInitCmd creates a new init command
 func NewInitCmd() *cobra.Command {
 	var dir string
@@ -107,7 +101,6 @@ func runInit(cmd *cobra.Command, name string, dir string) error {
 	projectPath := filepath.Join(dir, name)
 	tomlPath := filepath.Join(projectPath, "cerebrium.toml")
 	mainPath := filepath.Join(projectPath, "main.py")
-	requirementsPath := filepath.Join(projectPath, "requirements.txt")
 
 	// Verify the resulting path is safe (no path traversal)
 	absDir, err := filepath.Abs(dir)
@@ -147,11 +140,6 @@ func runInit(cmd *cobra.Command, name string, dir string) error {
 		return ui.NewFileSystemError(fmt.Errorf("failed to create main.py: %w", err))
 	}
 
-	// Create requirements.txt file
-	if err := os.WriteFile(requirementsPath, []byte(exampleRequirements), 0644); err != nil { //nolint:gosec // Project files need to be readable
-		return ui.NewFileSystemError(fmt.Errorf("failed to create requirements.txt: %w", err))
-	}
-
 	// Create cerebrium.toml with sensible defaults
 	if err := createDefaultConfig(tomlPath, name); err != nil {
 		return ui.NewFileSystemError(fmt.Errorf("failed to create cerebrium.toml: %w", err))
@@ -179,7 +167,6 @@ exclude = ['.*']
 cpu = 2.0
 memory = 2.0
 compute = "CPU"
-provider = "aws"
 region = "us-east-1"
 
 [cerebrium.scaling]
@@ -189,8 +176,8 @@ cooldown = 30
 replica_concurrency = 1
 scaling_metric = "concurrency_utilization"
 
-[cerebrium.dependencies.paths]
-pip = "requirements.txt"
+[cerebrium.dependencies.pip]
+numpy = "latest"
 `, name)
 
 	// Write to file

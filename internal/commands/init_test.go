@@ -43,11 +43,10 @@ func TestRunInit(t *testing.T) {
 				assert.Contains(t, string(mainContent), "Running on Cerebrium")
 				assert.Contains(t, string(mainContent), "cerebrium deploy")
 
-				// Check requirements.txt exists
+				// Check requirements.txt does NOT exist (dependencies are in cerebrium.toml)
 				requirementsPath := filepath.Join(projectPath, "requirements.txt")
-				requirementsContent, err := os.ReadFile(requirementsPath)
-				require.NoError(t, err)
-				assert.Contains(t, string(requirementsContent), "Add your Python dependencies here")
+				_, err = os.Stat(requirementsPath)
+				assert.True(t, os.IsNotExist(err), "requirements.txt should not be created")
 
 				// Check cerebrium.toml exists and has correct structure
 				tomlPath := filepath.Join(projectPath, "cerebrium.toml")
@@ -84,8 +83,9 @@ func TestRunInit(t *testing.T) {
 				assert.Equal(t, 2.0, hardware["cpu"])
 				assert.Equal(t, 2.0, hardware["memory"])
 				assert.Equal(t, "CPU", hardware["compute"])
-				assert.Equal(t, "aws", hardware["provider"])
 				assert.Equal(t, "us-east-1", hardware["region"])
+				// provider should NOT be in the template - it defaults to "aws" when loaded
+				assert.NotContains(t, hardware, "provider")
 				// gpu_count should NOT be present when compute is CPU
 				assert.NotContains(t, hardware, "gpu_count")
 
@@ -98,12 +98,12 @@ func TestRunInit(t *testing.T) {
 				assert.Equal(t, int64(1), scaling["replica_concurrency"])
 				assert.Equal(t, "concurrency_utilization", scaling["scaling_metric"])
 
-				// Check dependencies config exists with paths
+				// Check dependencies config exists with pip section
 				dependencies, ok := cerebrium["dependencies"].(map[string]any)
 				require.True(t, ok, "dependencies section should exist")
-				paths, ok := dependencies["paths"].(map[string]any)
-				require.True(t, ok, "dependencies.paths section should exist")
-				assert.Equal(t, "requirements.txt", paths["pip"], "pip path should be requirements.txt")
+				pip, ok := dependencies["pip"].(map[string]any)
+				require.True(t, ok, "dependencies.pip section should exist")
+				assert.Equal(t, "latest", pip["numpy"], "numpy should be set to latest")
 			},
 		},
 		{
@@ -298,7 +298,8 @@ func TestCreateDefaultConfig(t *testing.T) {
 				assert.NotNil(t, hardware["cpu"])
 				assert.NotNil(t, hardware["memory"])
 				assert.NotNil(t, hardware["compute"])
-				assert.NotNil(t, hardware["provider"])
+				// provider should NOT be in the template - it defaults to "aws" when loaded
+				assert.Nil(t, hardware["provider"])
 				assert.NotNil(t, hardware["region"])
 
 				scaling, ok := cerebrium["scaling"].(map[string]any)
@@ -309,12 +310,12 @@ func TestCreateDefaultConfig(t *testing.T) {
 				assert.NotNil(t, scaling["replica_concurrency"])
 				assert.NotNil(t, scaling["scaling_metric"])
 
-				// Dependencies section should exist with paths
+				// Dependencies section should exist with pip
 				dependencies, ok := cerebrium["dependencies"].(map[string]any)
 				require.True(t, ok, "dependencies section should exist")
-				paths, ok := dependencies["paths"].(map[string]any)
-				require.True(t, ok, "dependencies.paths section should exist")
-				assert.Equal(t, "requirements.txt", paths["pip"], "pip path should be requirements.txt")
+				pip, ok := dependencies["pip"].(map[string]any)
+				require.True(t, ok, "dependencies.pip section should exist")
+				assert.Equal(t, "latest", pip["numpy"], "numpy should be set to latest")
 			},
 		},
 		{

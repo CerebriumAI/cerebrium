@@ -18,6 +18,7 @@ var (
 	DefaultPort                = 8000
 	DefaultHealthcheckEndpoint = ""
 	DefaultReadycheckEndpoint  = ""
+	DefaultProvider            = "aws"
 )
 
 // Load reads and parses the cerebrium.toml configuration file
@@ -118,6 +119,11 @@ func applyDefaults(config *ProjectConfig) {
 	}
 	if len(config.Deployment.Exclude) == 0 {
 		config.Deployment.Exclude = DefaultExclude
+	}
+
+	// Apply hardware defaults
+	if config.Hardware.Provider == nil {
+		config.Hardware.Provider = &DefaultProvider
 	}
 
 	// Apply custom runtime defaults
