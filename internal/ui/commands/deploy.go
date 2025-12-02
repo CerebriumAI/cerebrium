@@ -302,6 +302,7 @@ func (m *DeployView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			Provider:      provider,
 			TickInterval:  200 * time.Millisecond,
 			ShowHelp:      true,
+			AutoExpand:    true, // Show all logs without box for deploy
 		})
 
 		// Start polling build status in parallel with log collection
