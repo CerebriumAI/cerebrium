@@ -43,10 +43,10 @@ type LogViewerModel struct {
 	doneChan chan error
 	logs     []Log // Accumulated logs for display
 
-	scrollOffset    int
-	anchorBottom    bool // Auto-scroll to show latest logs
-	printedLogCount int  // Number of logs already printed (for AutoExpand mode)
-	headerPrinted   bool // Whether the "Build Logs" header has been printed
+	scrollOffset   int
+	anchorBottom   bool              // Auto-scroll to show latest logs
+	printedLogIDs  map[string]struct{} // Set of log IDs already printed (for AutoExpand mode)
+	headerPrinted  bool              // Whether the "Build Logs" header has been printed
 
 	err error
 }
@@ -68,13 +68,14 @@ func NewLogViewer(ctx context.Context, config LogViewerConfig) *LogViewerModel {
 	// TODO: Allow 'infinite' size for --no-follow
 
 	return &LogViewerModel{
-		ctx:          ctx,
-		config:       config,
-		state:        viewerStateInitialising,
-		spinner:      ui.NewSpinner(),
-		logChan:      make(chan []Log, 10), // Buffered to prevent blocking provider
-		doneChan:     make(chan error),
-		anchorBottom: true, // Auto-scroll to bottom by default
+		ctx:           ctx,
+		config:        config,
+		state:         viewerStateInitialising,
+		spinner:       ui.NewSpinner(),
+		logChan:       make(chan []Log, 10), // Buffered to prevent blocking provider
+		doneChan:      make(chan error),
+		anchorBottom:  true,                      // Auto-scroll to bottom by default
+		printedLogIDs: make(map[string]struct{}), // Track printed logs by ID
 	}
 }
 
@@ -137,30 +138,33 @@ func (m *LogViewerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// In AutoExpand mode (interactive), print new logs via tea.Println
 		// so they go into permanent scrollback
-		if m.config.AutoExpand && !m.config.SimpleOutput() && m.printedLogCount < len(m.logs) {
+		if m.config.AutoExpand && !m.config.SimpleOutput() {
 			// Build print commands for header and new logs
 			var printCmds []tea.Cmd
 
 			// Add header if this is the first log
-			if !m.headerPrinted {
+			if !m.headerPrinted && len(m.logs) > 0 {
 				printCmds = append(printCmds, tea.Println(ui.CyanStyle.Render("Build Logs")))
 				m.headerPrinted = true
 			}
 
-			// Add any new logs that haven't been printed yet
-			for i := m.printedLogCount; i < len(m.logs); i++ {
-				log := m.logs[i]
-				timestamp := log.Timestamp.Local().Format("15:04:05")
-				styledTimestamp := ui.TimestampStyle.Render(timestamp)
-				printCmds = append(printCmds, tea.Println(fmt.Sprintf("%s %s", styledTimestamp, log.Content)))
+			// Add any new logs that haven't been printed yet (check by ID to handle reordering from sort)
+			for _, log := range m.logs {
+				if _, printed := m.printedLogIDs[log.ID]; !printed {
+					timestamp := log.Timestamp.Local().Format("15:04:05")
+					styledTimestamp := ui.TimestampStyle.Render(timestamp)
+					printCmds = append(printCmds, tea.Println(fmt.Sprintf("%s %s", styledTimestamp, log.Content)))
+					m.printedLogIDs[log.ID] = struct{}{}
+				}
 			}
-			m.printedLogCount = len(m.logs)
 
 			// Use tea.Sequence for prints (ordered), then Batch with other parallel commands
-			return m, tea.Batch(
-				tea.Sequence(printCmds...),
-				waitForLogBatch(m.logChan),
-			)
+			if len(printCmds) > 0 {
+				return m, tea.Batch(
+					tea.Sequence(printCmds...),
+					waitForLogBatch(m.logChan),
+				)
+			}
 		}
 
 		// Keep listening for more logs
