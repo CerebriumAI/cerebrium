@@ -3,7 +3,6 @@ package files
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/cerebriumai/cerebrium/pkg/projectconfig"
@@ -30,7 +29,7 @@ func TestGenerateDependencyFiles(t *testing.T) {
 				},
 			},
 			expectedFiles: map[string]string{
-				"requirements.txt": "numpy==1.24.0\nrequests>=2.28.0\nflask\n",
+				"requirements.txt": "flask\nnumpy==1.24.0\nrequests>=2.28.0\n",
 			},
 		},
 		{
@@ -38,13 +37,16 @@ func TestGenerateDependencyFiles(t *testing.T) {
 			config: &projectconfig.ProjectConfig{
 				Dependencies: projectconfig.DependenciesConfig{
 					Apt: map[string]string{
-						"git":  "",
-						"curl": "latest",
+						"git":    "",
+						"curl":   "latest",
+						"wget":   "*",
+						"vim":    "",
+						"ffmpeg": "latest",
 					},
 				},
 			},
 			expectedFiles: map[string]string{
-				"pkglist.txt": "git\ncurl\n",
+				"pkglist.txt": "curl\nffmpeg\ngit\nvim\nwget\n",
 			},
 		},
 		{
@@ -52,12 +54,34 @@ func TestGenerateDependencyFiles(t *testing.T) {
 			config: &projectconfig.ProjectConfig{
 				Dependencies: projectconfig.DependenciesConfig{
 					Conda: map[string]string{
-						"pandas": "2.0.0",
+						"pandas":     "2.0.0",
+						"numpy":      "1.24.0",
+						"matplotlib": ">=3.7.0",
+						"scipy":      "latest",
+						"jupyterlab": "*",
 					},
 				},
 			},
 			expectedFiles: map[string]string{
-				"conda_pkglist.txt": "pandas==2.0.0\n",
+				"conda_pkglist.txt": "jupyterlab\nmatplotlib>=3.7.0\nnumpy==1.24.0\npandas==2.0.0\nscipy\n",
+			},
+		},
+		{
+			name: "generates pip requirements with git URLs",
+			config: &projectconfig.ProjectConfig{
+				Dependencies: projectconfig.DependenciesConfig{
+					Pip: map[string]string{
+						"numpy": "1.24.0",
+						"git+https://github.com/huggingface/accelerate.git": "latest",
+						"flask": "2.0.0",
+						"git+https://github.com/openai/whisper.git":                   "",
+						"git+https://github.com/facebookresearch/detectron2.git@v0.6": "*",
+						"requests": ">=2.28.0",
+					},
+				},
+			},
+			expectedFiles: map[string]string{
+				"requirements.txt": "flask==2.0.0\ngit+https://github.com/facebookresearch/detectron2.git@v0.6\ngit+https://github.com/huggingface/accelerate.git\ngit+https://github.com/openai/whisper.git\nnumpy==1.24.0\nrequests>=2.28.0\n",
 			},
 		},
 		{
@@ -86,23 +110,8 @@ func TestGenerateDependencyFiles(t *testing.T) {
 				actualContent, ok := files[expectedFile]
 				assert.True(t, ok, "expected file %s to be generated", expectedFile)
 
-				// Since maps are unordered, check that all expected lines are present
-				expectedLines := strings.Split(strings.TrimSpace(expectedContent), "\n")
-				actualLines := strings.Split(strings.TrimSpace(actualContent), "\n")
-
-				assert.Equal(t, len(expectedLines), len(actualLines), "number of lines should match for %s", expectedFile)
-
-				// Check each expected line is in the actual content
-				for _, expectedLine := range expectedLines {
-					found := false
-					for _, actualLine := range actualLines {
-						if actualLine == expectedLine {
-							found = true
-							break
-						}
-					}
-					assert.True(t, found, "expected line '%s' not found in %s", expectedLine, expectedFile)
-				}
+				// With sorted output, we can now check for exact matches
+				assert.Equal(t, expectedContent, actualContent, "content mismatch for %s", expectedFile)
 			}
 		})
 	}

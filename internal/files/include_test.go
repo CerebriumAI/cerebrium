@@ -146,7 +146,7 @@ func Test_normalizePatterns(t *testing.T) {
 func TestDetermineIncludes_DirectoryWithSubdirectories(t *testing.T) {
 	// Create a temporary directory structure
 	tmpDir := t.TempDir()
-	
+
 	// Change to temp directory for the test
 	originalDir, err := os.Getwd()
 	require.NoError(t, err)
@@ -204,14 +204,14 @@ func TestDetermineIncludes_DirectoryWithSubdirectories(t *testing.T) {
 		"src/utils/helper.py",
 	}
 
-	assert.ElementsMatch(t, expected, result, 
+	assert.ElementsMatch(t, expected, result,
 		"Directory patterns should include all files in subdirectories")
 }
 
 func TestDetermineIncludes_ExcludeSubdirectory(t *testing.T) {
 	// Create a temporary directory structure
 	tmpDir := t.TempDir()
-	
+
 	// Change to temp directory for the test
 	originalDir, err := os.Getwd()
 	require.NoError(t, err)

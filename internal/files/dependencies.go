@@ -3,6 +3,7 @@ package files
 import (
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 
 	"github.com/cerebriumai/cerebrium/pkg/projectconfig"
@@ -74,8 +75,16 @@ func generateDependencyFile(files map[string]string, fileName string, deps map[s
 
 // generateRequirementsContent creates content for a requirements file
 func generateRequirementsContent(deps map[string]string) string {
+	// Sort package names for deterministic output
+	packages := make([]string, 0, len(deps))
+	for pkg := range deps {
+		packages = append(packages, pkg)
+	}
+	sort.Strings(packages)
+
 	var lines []string
-	for pkg, version := range deps {
+	for _, pkg := range packages {
+		version := deps[pkg]
 		// Treat empty, "*", and "latest" as package without version
 		if version == "" || version == "*" || version == "latest" {
 			lines = append(lines, pkg)
