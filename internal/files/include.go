@@ -85,9 +85,10 @@ func normalizePatterns(patterns []string) []string {
 		// Remove leading "./"
 		p = strings.TrimPrefix(p, "./")
 
-		// If pattern ends with /, append * for directory matching
+		// If pattern ends with /, append ** for recursive directory matching
+		// e.g., "assets/" becomes "assets/**" to include all files in subdirectories
 		if strings.HasSuffix(p, "/") {
-			p = p + "*"
+			p = p + "**"
 		}
 
 		normalized = append(normalized, p)
