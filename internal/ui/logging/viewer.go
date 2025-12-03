@@ -43,10 +43,10 @@ type LogViewerModel struct {
 	doneChan chan error
 	logs     []Log // Accumulated logs for display
 
-	scrollOffset   int
-	anchorBottom   bool              // Auto-scroll to show latest logs
-	printedLogIDs  map[string]struct{} // Set of log IDs already printed (for AutoExpand mode)
-	headerPrinted  bool              // Whether the "Build Logs" header has been printed
+	scrollOffset  int
+	anchorBottom  bool                // Auto-scroll to show latest logs
+	printedLogIDs map[string]struct{} // Set of log IDs already printed (for AutoExpand mode)
+	headerPrinted bool                // Whether the "Build Logs" header has been printed
 
 	err error
 }
