@@ -484,7 +484,7 @@ func (m *DeployView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case *ui.UIError:
 		// Structured error from async operations
 		m.ctxCancel()         // Stop all subprocesses
-		msg.SilentExit = true // Will be shown in View()
+		msg.SilentExit = true // Will be shown below
 		m.err = msg
 		m.state = StateDeployError
 
@@ -507,10 +507,16 @@ func (m *DeployView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		if m.conf.SimpleOutput() {
-			fmt.Printf("Error: %s\n", msg.Error())
+			fmt.Printf("✗ %s\n", msg.Error())
+			return m, tea.Quit
 		}
 
-		return m, tea.Quit
+		// Print error message to scrollback in interactive mode
+		return m, tea.Sequence(
+			tea.Println(""),
+			tea.Println(ui.ErrorStyle.Render(fmt.Sprintf("✗ %s", msg.Error()))),
+			tea.Quit,
+		)
 
 	default:
 		// Update spinner only in interactive mode
