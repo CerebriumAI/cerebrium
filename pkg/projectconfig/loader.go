@@ -120,6 +120,10 @@ func applyDefaults(config *ProjectConfig) {
 	if len(config.Deployment.Exclude) == 0 {
 		config.Deployment.Exclude = DefaultExclude
 	}
+	if config.Deployment.DisableAuth == nil {
+		disableAuth := DefaultDisableAuth
+		config.Deployment.DisableAuth = &disableAuth
+	}
 
 	// Apply hardware defaults
 	if config.Hardware.Provider == nil {
@@ -142,6 +146,4 @@ func applyDefaults(config *ProjectConfig) {
 		}
 	}
 
-	// Note: DisableAuth defaults to false (Go zero value), matching Python's True is intentional difference
-	// The Python default of True is for backwards compatibility
 }
