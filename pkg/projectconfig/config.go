@@ -19,7 +19,7 @@ type DeploymentConfig struct {
 	Exclude                         []string `mapstructure:"exclude" toml:"exclude,omitempty"`
 	ShellCommands                   []string `mapstructure:"shell_commands" toml:"shell_commands,omitempty"`
 	PreBuildCommands                []string `mapstructure:"pre_build_commands" toml:"pre_build_commands,omitempty"`
-	DisableAuth                     bool     `mapstructure:"disable_auth" toml:"disable_auth,omitempty"`
+	DisableAuth                     *bool    `mapstructure:"disable_auth" toml:"disable_auth,omitempty"`
 	UseUv                           *bool    `mapstructure:"use_uv" toml:"use_uv,omitempty"`
 	DeploymentInitializationTimeout *int     `mapstructure:"deployment_initialization_timeout" toml:"deployment_initialization_timeout,omitempty"`
 }
@@ -90,8 +90,10 @@ func (pc *ProjectConfig) ToPayload() map[string]any {
 	payload["exclude"] = pc.Deployment.Exclude
 	payload["shellCommands"] = pc.Deployment.ShellCommands
 	payload["preBuildCommands"] = pc.Deployment.PreBuildCommands
-	payload["disableAuth"] = pc.Deployment.DisableAuth
 
+	if pc.Deployment.DisableAuth != nil {
+		payload["disableAuth"] = *pc.Deployment.DisableAuth
+	}
 	if pc.Deployment.UseUv != nil {
 		payload["useUv"] = *pc.Deployment.UseUv
 	}
