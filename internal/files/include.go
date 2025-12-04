@@ -82,13 +82,18 @@ func normalizePatterns(patterns []string) []string {
 		// Convert to forward slashes for consistency
 		p = filepath.ToSlash(p)
 
-		// Remove leading "./"
-		p = strings.TrimPrefix(p, "./")
+		// Handle "./*" and "*" as "include everything recursively"
+		if p == "./*" || p == "*" {
+			p = "**/*"
+		} else {
+			// Remove leading "./"
+			p = strings.TrimPrefix(p, "./")
 
-		// If pattern ends with /, append ** for recursive directory matching
-		// e.g., "assets/" becomes "assets/**" to include all files in subdirectories
-		if strings.HasSuffix(p, "/") {
-			p = p + "**"
+			// If pattern ends with /, append ** for recursive directory matching
+			// e.g., "assets/" becomes "assets/**" to include all files in subdirectories
+			if strings.HasSuffix(p, "/") {
+				p = p + "**"
+			}
 		}
 
 		normalized = append(normalized, p)
