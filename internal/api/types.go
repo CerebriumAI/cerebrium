@@ -358,3 +358,17 @@ type AppBuild struct {
 	CreatedAt string `json:"createdAt"`
 	UpdatedAt string `json:"updatedAt"`
 }
+
+// BaseImagePayload represents the payload for creating a base image
+type BaseImagePayload struct {
+	Dependencies     map[string]any `json:"dependencies"`
+	PreBuildCommands []string       `json:"preBuildCommands"`
+	ShellCommands    []string       `json:"shellCommands"`
+	BaseImageURI     string         `json:"baseImageURI,omitempty"`
+}
+
+// BaseImageResponse represents the response from creating a base image
+type BaseImageResponse struct {
+	Status string `json:"status"`
+	Digest string `json:"digest"`
+}

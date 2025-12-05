@@ -263,8 +263,8 @@ func (_c *MockClient_CreateApp_Call) RunAndReturn(run func(ctx context.Context, 
 }
 
 // CreateBaseImage provides a mock function for the type MockClient
-func (_mock *MockClient) CreateBaseImage(ctx context.Context, projectID string, region string, dependencies map[string]any) (string, error) {
-	ret := _mock.Called(ctx, projectID, region, dependencies)
+func (_mock *MockClient) CreateBaseImage(ctx context.Context, projectID string, appID string, region string, payload api.BaseImagePayload) (string, error) {
+	ret := _mock.Called(ctx, projectID, appID, region, payload)
 
 	if len(ret) == 0 {
 		panic("no return value specified for CreateBaseImage")
@@ -272,16 +272,16 @@ func (_mock *MockClient) CreateBaseImage(ctx context.Context, projectID string, 
 
 	var r0 string
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, map[string]any) (string, error)); ok {
-		return returnFunc(ctx, projectID, region, dependencies)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, string, api.BaseImagePayload) (string, error)); ok {
+		return returnFunc(ctx, projectID, appID, region, payload)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, map[string]any) string); ok {
-		r0 = returnFunc(ctx, projectID, region, dependencies)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, string, api.BaseImagePayload) string); ok {
+		r0 = returnFunc(ctx, projectID, appID, region, payload)
 	} else {
 		r0 = ret.Get(0).(string)
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string, map[string]any) error); ok {
-		r1 = returnFunc(ctx, projectID, region, dependencies)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string, string, api.BaseImagePayload) error); ok {
+		r1 = returnFunc(ctx, projectID, appID, region, payload)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -296,13 +296,14 @@ type MockClient_CreateBaseImage_Call struct {
 // CreateBaseImage is a helper method to define mock.On call
 //   - ctx context.Context
 //   - projectID string
+//   - appID string
 //   - region string
-//   - dependencies map[string]any
-func (_e *MockClient_Expecter) CreateBaseImage(ctx interface{}, projectID interface{}, region interface{}, dependencies interface{}) *MockClient_CreateBaseImage_Call {
-	return &MockClient_CreateBaseImage_Call{Call: _e.mock.On("CreateBaseImage", ctx, projectID, region, dependencies)}
+//   - payload api.BaseImagePayload
+func (_e *MockClient_Expecter) CreateBaseImage(ctx interface{}, projectID interface{}, appID interface{}, region interface{}, payload interface{}) *MockClient_CreateBaseImage_Call {
+	return &MockClient_CreateBaseImage_Call{Call: _e.mock.On("CreateBaseImage", ctx, projectID, appID, region, payload)}
 }
 
-func (_c *MockClient_CreateBaseImage_Call) Run(run func(ctx context.Context, projectID string, region string, dependencies map[string]any)) *MockClient_CreateBaseImage_Call {
+func (_c *MockClient_CreateBaseImage_Call) Run(run func(ctx context.Context, projectID string, appID string, region string, payload api.BaseImagePayload)) *MockClient_CreateBaseImage_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -316,15 +317,20 @@ func (_c *MockClient_CreateBaseImage_Call) Run(run func(ctx context.Context, pro
 		if args[2] != nil {
 			arg2 = args[2].(string)
 		}
-		var arg3 map[string]any
+		var arg3 string
 		if args[3] != nil {
-			arg3 = args[3].(map[string]any)
+			arg3 = args[3].(string)
+		}
+		var arg4 api.BaseImagePayload
+		if args[4] != nil {
+			arg4 = args[4].(api.BaseImagePayload)
 		}
 		run(
 			arg0,
 			arg1,
 			arg2,
 			arg3,
+			arg4,
 		)
 	})
 	return _c
@@ -335,7 +341,7 @@ func (_c *MockClient_CreateBaseImage_Call) Return(s string, err error) *MockClie
 	return _c
 }
 
-func (_c *MockClient_CreateBaseImage_Call) RunAndReturn(run func(ctx context.Context, projectID string, region string, dependencies map[string]any) (string, error)) *MockClient_CreateBaseImage_Call {
+func (_c *MockClient_CreateBaseImage_Call) RunAndReturn(run func(ctx context.Context, projectID string, appID string, region string, payload api.BaseImagePayload) (string, error)) *MockClient_CreateBaseImage_Call {
 	_c.Call.Return(run)
 	return _c
 }

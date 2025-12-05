@@ -833,25 +833,43 @@ func (c *client) FetchRunLogs(ctx context.Context, projectID, appName, runID, ne
 	return &logs, nil
 }
 
-// CreateBaseImage creates a base image with dependencies
-func (c *client) CreateBaseImage(ctx context.Context, projectID, region string, dependencies map[string]any) (string, error) {
+// CreateBaseImage creates a base image with dependencies, polling until ready
+func (c *client) CreateBaseImage(ctx context.Context, projectID, appID, region string, payload BaseImagePayload) (string, error) {
 	queryParams := url.Values{}
 	queryParams.Add("region", region)
-	path := fmt.Sprintf("v3/projects/%s/base-images?%s", projectID, queryParams.Encode())
+	path := fmt.Sprintf("v3/projects/%s/apps/%s/base-image?%s", projectID, appID, queryParams.Encode())
 
-	body, err := c.request(ctx, "POST", path, dependencies, true)
-	if err != nil {
-		return "", err
+	const maxAttempts = 10
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
+
+	for attempt := 0; attempt < maxAttempts; attempt++ {
+		body, err := c.request(ctx, "POST", path, payload, true)
+		if err != nil {
+			return "", err
+		}
+
+		var resp BaseImageResponse
+		if err := json.Unmarshal(body, &resp); err != nil {
+			return "", fmt.Errorf("failed to parse base image response: %w", err)
+		}
+
+		if resp.Status == "ready" && resp.Digest != "" {
+			return resp.Digest, nil
+		}
+
+		// Wait for next tick (except on last attempt)
+		if attempt < maxAttempts-1 {
+			select {
+			case <-ctx.Done():
+				return "", ctx.Err()
+			case <-ticker.C:
+				// Continue to next attempt
+			}
+		}
 	}
 
-	var resp struct {
-		ImageDigest string `json:"imageDigest"`
-	}
-	if err := json.Unmarshal(body, &resp); err != nil {
-		return "", fmt.Errorf("failed to parse base image response: %w", err)
-	}
-
-	return resp.ImageDigest, nil
+	return "", fmt.Errorf("base image not ready after %d attempts", maxAttempts)
 }
 
 // GetRuns retrieves the list of runs for a specific app
