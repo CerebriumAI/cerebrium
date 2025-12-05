@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"context"
 	_ "embed"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -724,17 +725,34 @@ func (m *RunView) createBaseImage() tea.Msg {
 		return ui.NewValidationError(fmt.Errorf("dependency list size (%dKB) exceeds 380KB limit for cerebrium run", len(depsBytes)/1024))
 	}
 
+	payload := api.BaseImagePayload{
+		Dependencies:     depsJSON,
+		PreBuildCommands: encodeBase64Strings(m.conf.Config.Deployment.PreBuildCommands),
+		ShellCommands:    encodeBase64Strings(m.conf.Config.Deployment.ShellCommands),
+		BaseImageURI:     m.conf.Config.Deployment.DockerBaseImageURL,
+	}
+
 	imageDigest, err := m.conf.Client.CreateBaseImage(
 		m.ctx,
 		m.conf.ProjectID,
+		m.appID,
 		m.region,
-		depsJSON,
+		payload,
 	)
 	if err != nil {
 		return ui.NewAPIError(fmt.Errorf("failed to create base image: %w", err))
 	}
 
 	return baseImageCreatedMsg{imageDigest: imageDigest}
+}
+
+// encodeBase64Strings encodes each string in the slice to base64
+func encodeBase64Strings(commands []string) []string {
+	encoded := make([]string, len(commands))
+	for i, cmd := range commands {
+		encoded[i] = base64.StdEncoding.EncodeToString([]byte(cmd))
+	}
+	return encoded
 }
 
 func (m *RunView) createApp() tea.Msg {

@@ -24,7 +24,7 @@ type Client interface {
 	RunApp(ctx context.Context, projectID, appID, region, filename string, functionName *string, imageDigest *string, hardwareConfig map[string]any, tarPath string, data map[string]any) (*RunResponse, error)
 	GetRunStatus(ctx context.Context, projectID, appName, runID string) (*RunStatus, error)
 	FetchRunLogs(ctx context.Context, projectID, appName, runID, nextToken string) (*RunLogsResponse, error)
-	CreateBaseImage(ctx context.Context, projectID, region string, dependencies map[string]any) (string, error)
+	CreateBaseImage(ctx context.Context, projectID, appID, region string, payload BaseImagePayload) (string, error)
 
 	// File operations (persistent storage)
 	ListFiles(ctx context.Context, projectID, path, region string) ([]FileInfo, error)
