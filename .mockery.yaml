@@ -16,3 +16,8 @@ packages:
       Client:
         config:
           filename: "client_gen.go"
+  github.com/cerebriumai/cerebrium/internal/wsapi:
+    interfaces:
+      Client:
+        config:
+          filename: "client_gen.go"

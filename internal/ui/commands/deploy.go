@@ -21,6 +21,7 @@ import (
 	"github.com/cerebriumai/cerebrium/internal/files"
 	"github.com/cerebriumai/cerebrium/internal/ui"
 	"github.com/cerebriumai/cerebrium/internal/ui/logging"
+	"github.com/cerebriumai/cerebrium/internal/wsapi"
 	cerebrium_bugsnag "github.com/cerebriumai/cerebrium/pkg/bugsnag"
 	"github.com/cerebriumai/cerebrium/pkg/projectconfig"
 	"github.com/charmbracelet/bubbles/progress"
@@ -52,6 +53,7 @@ type DeployConfig struct {
 	Config    *projectconfig.ProjectConfig
 	ProjectID string
 	Client    api.Client
+	WSClient  wsapi.Client
 
 	// Display config
 	DisableBuildLogs    bool
@@ -314,13 +316,11 @@ func (m *DeployView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			fmt.Println("Building app...")
 		}
 
-		// Initialize log viewer with polling provider
-		provider := logging.NewPollingBuildLogProvider(logging.PollingBuildLogProviderConfig{
-			Client:       m.conf.Client,
-			ProjectID:    m.conf.ProjectID,
-			AppName:      m.conf.Config.Deployment.Name,
-			BuildID:      m.buildID,
-			PollInterval: ui.LOG_POLL_INTERVAL,
+		// Initialize log viewer with streaming provider
+		provider := logging.NewStreamingBuildLogProvider(logging.StreamingBuildLogProviderConfig{
+			Client:    m.conf.WSClient,
+			ProjectID: m.conf.ProjectID,
+			BuildID:   m.buildID,
 		})
 
 		m.logViewer = logging.NewLogViewer(m.ctx, logging.LogViewerConfig{
