@@ -90,12 +90,6 @@ func (m *LogViewerModel) Init() tea.Cmd {
 				return m.ctx.Err()
 			}
 
-			if len(logs) > 0 {
-				for _, log := range logs {
-					tea.Println("Viewer collected log:", log.Content)
-				}
-			}
-
 			// Write new logs to channel (non-blocking due to buffer)
 			m.logChan <- logs
 			return nil
