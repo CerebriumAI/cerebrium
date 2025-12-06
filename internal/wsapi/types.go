@@ -28,12 +28,18 @@ type BuildLogMessage struct {
 
 // rawBuildLogMessage is the JSON structure received from the websocket server.
 type rawBuildLogMessage struct {
-	BuildID    string `json:"build_id"`
-	AppID      string `json:"app_id"`
-	Timestamp  string `json:"timestamp"`
+	BuildID     string `json:"build_id"`
+	LogID       string `json:"log_id"`
+	AppID       string `json:"app_id"`
+	ContainerID string `json:"container_id"`
+
+	Timestamp string `json:"timestamp"`
+	Log       string `json:"log"`
+
+	Namespace  string `json:"k8s_namespace"`
 	Stream     string `json:"stream"`
-	Log        string `json:"log"`
-	LineNumber int    `json:"line_number"`
+	Region     string `json:"region"`
+	LineNumber int    `json:"log_line_number"`
 	Stage      string `json:"stage"`
 }
 
