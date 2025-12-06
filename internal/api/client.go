@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"mime/multipart"
 	"net/http"
+	"net/textproto"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -19,6 +20,7 @@ import (
 	"github.com/avast/retry-go/v4"
 	"github.com/bugsnag/bugsnag-go/v2"
 	"github.com/cerebriumai/cerebrium/internal/auth"
+	"github.com/cerebriumai/cerebrium/internal/version"
 	cerebrium_bugsnag "github.com/cerebriumai/cerebrium/pkg/bugsnag"
 	"github.com/cerebriumai/cerebrium/pkg/config"
 )
@@ -105,6 +107,7 @@ func (c *client) request(ctx context.Context, method, path string, body any, req
 			// Set headers
 			req.Header.Set("Content-Type", "application/json")
 			req.Header.Set("X-Source", "cli")
+			req.Header.Set("X-CLI-Version", version.Version)
 
 			// Add authentication if required
 			if requiresAuth {
@@ -443,8 +446,29 @@ func (c *client) FetchAppLogs(ctx context.Context, projectID, appID string, opts
 
 	// Add query parameters if provided
 	params := url.Values{}
+	if opts.ContainerID != "" {
+		params.Set("container", opts.ContainerID)
+	}
+	if opts.BeforeDate != "" {
+		params.Set("beforeDate", opts.BeforeDate)
+	}
 	if opts.AfterDate != "" {
 		params.Set("afterDate", opts.AfterDate)
+	}
+	if opts.PageSize > 0 {
+		params.Set("pageSize", fmt.Sprintf("%d", opts.PageSize))
+	}
+	if opts.NextToken != "" {
+		params.Set("nextToken", opts.NextToken)
+	}
+	if opts.Direction != "" {
+		params.Set("direction", opts.Direction)
+	}
+	if opts.SearchTerm != "" {
+		params.Set("search", opts.SearchTerm)
+	}
+	if opts.Stream != "" {
+		params.Set("stream", opts.Stream)
 	}
 	if opts.RunID != "" {
 		params.Set("runId", opts.RunID)
@@ -663,20 +687,38 @@ func (c *client) RunApp(ctx context.Context, projectID, appID, region, filename 
 
 	// Add hardware parameters
 	for key, value := range hardwareConfig {
-		queryParams.Add(key, fmt.Sprintf("%v", value))
+		// Format float64 values to match Python CLI behavior (e.g., "2.0" not "2")
+		if f, ok := value.(float64); ok {
+			s := fmt.Sprintf("%g", f)
+			// Ensure at least one decimal place for whole numbers
+			if !strings.Contains(s, ".") {
+				s += ".0"
+			}
+			queryParams.Add(key, s)
+		} else {
+			queryParams.Add(key, fmt.Sprintf("%v", value))
+		}
 	}
 
 	// Create multipart form
 	var b bytes.Buffer
 	w := multipart.NewWriter(&b)
 
-	// Add data JSON
+	// Add projectId form field (matching Python CLI which sends data={"projectId": ...})
+	if err := w.WriteField("projectId", projectID); err != nil {
+		return nil, fmt.Errorf("failed to write projectId field: %w", err)
+	}
+
+	// Add data JSON with Content-Type: application/json (matching Python CLI)
 	dataJSON, err := json.Marshal(data)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal data: %w", err)
 	}
 
-	dataWriter, err := w.CreateFormFile("data", "data.json")
+	dataHeader := make(textproto.MIMEHeader)
+	dataHeader.Set("Content-Disposition", `form-data; name="data"; filename="data.json"`)
+	dataHeader.Set("Content-Type", "application/json")
+	dataWriter, err := w.CreatePart(dataHeader)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create data form field: %w", err)
 	}
@@ -684,14 +726,17 @@ func (c *client) RunApp(ctx context.Context, projectID, appID, region, filename 
 		return nil, fmt.Errorf("failed to write data: %w", err)
 	}
 
-	// Add tar file
+	// Add tar file with Content-Type: application/x-tar (matching Python CLI)
 	tarFile, err := os.Open(tarPath) //nolint:gosec // File path from user input (deployment artifact)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open tar file: %w", err)
 	}
 	defer tarFile.Close() //nolint:errcheck // Deferred close, error not actionable
 
-	tarWriter, err := w.CreateFormFile("file", filepath.Base(tarPath))
+	tarHeader := make(textproto.MIMEHeader)
+	tarHeader.Set("Content-Disposition", fmt.Sprintf(`form-data; name="file"; filename="%s"`, filepath.Base(tarPath)))
+	tarHeader.Set("Content-Type", "application/x-tar")
+	tarWriter, err := w.CreatePart(tarHeader)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create tar form field: %w", err)
 	}
@@ -715,6 +760,7 @@ func (c *client) RunApp(ctx context.Context, projectID, appID, region, filename 
 
 	req.Header.Set("Content-Type", w.FormDataContentType())
 	req.Header.Set("X-Source", "cli")
+	req.Header.Set("X-CLI-Version", version.Version)
 
 	// Add authentication
 	token, err := c.getAuthToken(ctx)

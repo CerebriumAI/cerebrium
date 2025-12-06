@@ -144,7 +144,7 @@ func (m *LogViewerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			// Add header if this is the first log
 			if !m.headerPrinted && len(m.logs) > 0 {
-				printCmds = append(printCmds, tea.Println(ui.CyanStyle.Render("Build Logs")))
+				printCmds = append(printCmds, tea.Println(ui.CyanStyle.Render("Logs")))
 				m.headerPrinted = true
 			}
 
