@@ -850,35 +850,6 @@ func (c *client) GetRunStatus(ctx context.Context, projectID, appName, runID str
 	return &status, nil
 }
 
-// FetchRunLogs retrieves logs for a run
-func (c *client) FetchRunLogs(ctx context.Context, projectID, appName, runID, nextToken string) (*RunLogsResponse, error) {
-	appID := fmt.Sprintf("%s-%s", projectID, appName)
-	queryParams := url.Values{}
-	queryParams.Add("direction", "forward")
-	if runID != "" {
-		queryParams.Add("runId", runID)
-	}
-	if nextToken != "" {
-		queryParams.Add("nextToken", nextToken)
-	}
-	path := fmt.Sprintf("v2/projects/%s/apps/%s/logs", projectID, appID)
-	if len(queryParams) > 0 {
-		path += "?" + queryParams.Encode()
-	}
-
-	body, err := c.request(ctx, "GET", path, nil, true)
-	if err != nil {
-		return nil, err
-	}
-
-	var logs RunLogsResponse
-	if err := json.Unmarshal(body, &logs); err != nil {
-		return nil, fmt.Errorf("failed to parse logs response: %w", err)
-	}
-
-	return &logs, nil
-}
-
 // CreateBaseImage creates a base image with dependencies, polling until ready
 func (c *client) CreateBaseImage(ctx context.Context, projectID, appID, region string, payload BaseImagePayload) (string, error) {
 	queryParams := url.Values{}
