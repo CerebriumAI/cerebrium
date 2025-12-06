@@ -322,7 +322,7 @@ func (m *RunView) handleRunStatus(msg runStatusMsg) (tea.Model, tea.Cmd) {
 
 		// Wait for remaining logs to arrive
 		return m, tea.Tick(10*time.Second, func(t time.Time) tea.Msg {
-			return runLogDrainCompleteMsg{status: msg.status}
+			return runLogDrainCompleteMsg(msg)
 		})
 	}
 
