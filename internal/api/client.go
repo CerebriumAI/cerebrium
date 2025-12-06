@@ -704,12 +704,12 @@ func (c *client) RunApp(ctx context.Context, projectID, appID, region, filename 
 	var b bytes.Buffer
 	w := multipart.NewWriter(&b)
 
-	// Add projectId form field (matching Python CLI which sends data={"projectId": ...})
+	// Add projectId form field
 	if err := w.WriteField("projectId", projectID); err != nil {
 		return nil, fmt.Errorf("failed to write projectId field: %w", err)
 	}
 
-	// Add data JSON with Content-Type: application/json (matching Python CLI)
+	// Add data JSON with Content-Type: application/json
 	dataJSON, err := json.Marshal(data)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal data: %w", err)
@@ -726,7 +726,7 @@ func (c *client) RunApp(ctx context.Context, projectID, appID, region, filename 
 		return nil, fmt.Errorf("failed to write data: %w", err)
 	}
 
-	// Add tar file with Content-Type: application/x-tar (matching Python CLI)
+	// Add tar file with Content-Type: application/x-tar
 	tarFile, err := os.Open(tarPath) //nolint:gosec // File path from user input (deployment artifact)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open tar file: %w", err)
