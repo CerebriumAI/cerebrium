@@ -8,6 +8,7 @@ import (
 	"github.com/cerebriumai/cerebrium/internal/files"
 	"github.com/cerebriumai/cerebrium/internal/ui"
 	uiCommands "github.com/cerebriumai/cerebrium/internal/ui/commands"
+	"github.com/cerebriumai/cerebrium/internal/wsapi"
 	"github.com/cerebriumai/cerebrium/pkg/config"
 	"github.com/cerebriumai/cerebrium/pkg/projectconfig"
 	tea "github.com/charmbracelet/bubbletea"
@@ -136,12 +137,16 @@ func runDeploy(cmd *cobra.Command, opts deployOptions, disableConfirmation bool)
 		return ui.NewValidationError(fmt.Errorf("failed to create API client: %w", err))
 	}
 
+	// Create websocket client for streaming build logs
+	wsClient := wsapi.NewClient(cfg)
+
 	// Create Bubbletea model for deploy
 	model := uiCommands.NewDeployView(cmd.Context(), uiCommands.DeployConfig{
 		DisplayConfig:       displayOpts,
 		Config:              projectConfig,
 		ProjectID:           cfg.ProjectID,
 		Client:              client,
+		WSClient:            wsClient,
 		DisableBuildLogs:    opts.disableBuildLogs,
 		DisableConfirmation: disableConfirmation,
 		LogLevel:            opts.logLevel,
