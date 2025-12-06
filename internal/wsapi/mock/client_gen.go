@@ -6,6 +6,7 @@ package mock
 
 import (
 	"context"
+	"time"
 
 	"github.com/cerebriumai/cerebrium/internal/wsapi"
 	mock "github.com/stretchr/testify/mock"
@@ -39,16 +40,16 @@ func (_m *MockClient) EXPECT() *MockClient_Expecter {
 }
 
 // StreamBuildLogs provides a mock function for the type MockClient
-func (_mock *MockClient) StreamBuildLogs(ctx context.Context, projectID string, buildID string, callback func(wsapi.BuildLogMessage) error) error {
-	ret := _mock.Called(ctx, projectID, buildID, callback)
+func (_mock *MockClient) StreamBuildLogs(ctx context.Context, projectID string, buildID string, from time.Time, callback func(wsapi.BuildLogMessage) error) error {
+	ret := _mock.Called(ctx, projectID, buildID, from, callback)
 
 	if len(ret) == 0 {
 		panic("no return value specified for StreamBuildLogs")
 	}
 
 	var r0 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, func(wsapi.BuildLogMessage) error) error); ok {
-		r0 = returnFunc(ctx, projectID, buildID, callback)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, time.Time, func(wsapi.BuildLogMessage) error) error); ok {
+		r0 = returnFunc(ctx, projectID, buildID, from, callback)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -64,12 +65,13 @@ type MockClient_StreamBuildLogs_Call struct {
 //   - ctx context.Context
 //   - projectID string
 //   - buildID string
+//   - from time.Time
 //   - callback func(wsapi.BuildLogMessage) error
-func (_e *MockClient_Expecter) StreamBuildLogs(ctx interface{}, projectID interface{}, buildID interface{}, callback interface{}) *MockClient_StreamBuildLogs_Call {
-	return &MockClient_StreamBuildLogs_Call{Call: _e.mock.On("StreamBuildLogs", ctx, projectID, buildID, callback)}
+func (_e *MockClient_Expecter) StreamBuildLogs(ctx interface{}, projectID interface{}, buildID interface{}, from interface{}, callback interface{}) *MockClient_StreamBuildLogs_Call {
+	return &MockClient_StreamBuildLogs_Call{Call: _e.mock.On("StreamBuildLogs", ctx, projectID, buildID, from, callback)}
 }
 
-func (_c *MockClient_StreamBuildLogs_Call) Run(run func(ctx context.Context, projectID string, buildID string, callback func(wsapi.BuildLogMessage) error)) *MockClient_StreamBuildLogs_Call {
+func (_c *MockClient_StreamBuildLogs_Call) Run(run func(ctx context.Context, projectID string, buildID string, from time.Time, callback func(wsapi.BuildLogMessage) error)) *MockClient_StreamBuildLogs_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -83,15 +85,20 @@ func (_c *MockClient_StreamBuildLogs_Call) Run(run func(ctx context.Context, pro
 		if args[2] != nil {
 			arg2 = args[2].(string)
 		}
-		var arg3 func(wsapi.BuildLogMessage) error
+		var arg3 time.Time
 		if args[3] != nil {
-			arg3 = args[3].(func(wsapi.BuildLogMessage) error)
+			arg3 = args[3].(time.Time)
+		}
+		var arg4 func(wsapi.BuildLogMessage) error
+		if args[4] != nil {
+			arg4 = args[4].(func(wsapi.BuildLogMessage) error)
 		}
 		run(
 			arg0,
 			arg1,
 			arg2,
 			arg3,
+			arg4,
 		)
 	})
 	return _c
@@ -102,7 +109,7 @@ func (_c *MockClient_StreamBuildLogs_Call) Return(err error) *MockClient_StreamB
 	return _c
 }
 
-func (_c *MockClient_StreamBuildLogs_Call) RunAndReturn(run func(ctx context.Context, projectID string, buildID string, callback func(wsapi.BuildLogMessage) error) error) *MockClient_StreamBuildLogs_Call {
+func (_c *MockClient_StreamBuildLogs_Call) RunAndReturn(run func(ctx context.Context, projectID string, buildID string, from time.Time, callback func(wsapi.BuildLogMessage) error) error) *MockClient_StreamBuildLogs_Call {
 	_c.Call.Return(run)
 	return _c
 }
