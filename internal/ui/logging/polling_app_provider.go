@@ -3,6 +3,7 @@ package logging
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/cerebriumai/cerebrium/internal/api"
@@ -16,10 +17,16 @@ type pollingAppLogProvider struct {
 	follow       bool
 	sinceTime    string
 	runID        string
+	direction    string
+	containerID  string
+	stream       string
+	searchTerm   string
+	pageSize     int32
 	pollInterval time.Duration
 
 	// State
-	lastTimestamp time.Time // Track as time.Time for proper comparison
+	nextToken     string    // Token for pagination (preferred method)
+	lastTimestamp time.Time // Track as time.Time for fallback comparison
 	hasFetched    bool
 	seenIDs       map[string]bool // Deduplication using log IDs
 }
@@ -32,6 +39,11 @@ type PollingAppLogProviderConfig struct {
 	Follow       bool          // If false, fetch once and complete (default: true)
 	SinceTime    string        // ISO timestamp to start from (optional)
 	RunID        string        // Filter by specific run (optional)
+	Direction    string        // "forward" or "backward" (optional, default: "forward" for follow mode)
+	ContainerID  string        // Filter by container (optional)
+	Stream       string        // "stdout" or "stderr" (optional)
+	SearchTerm   string        // Filter logs by search term (optional)
+	PageSize     int32         // Number of logs per page (optional)
 	PollInterval time.Duration // Default: 5 seconds
 }
 
@@ -39,6 +51,12 @@ type PollingAppLogProviderConfig struct {
 func NewPollingAppLogProvider(cfg PollingAppLogProviderConfig) LogProvider {
 	if cfg.PollInterval == 0 {
 		cfg.PollInterval = 5 * time.Second
+	}
+
+	// Default to "forward" direction for follow mode (matches Python CLI behavior)
+	direction := cfg.Direction
+	if direction == "" && cfg.Follow {
+		direction = "forward"
 	}
 
 	// Parse sinceTime to time.Time if provided
@@ -58,6 +76,11 @@ func NewPollingAppLogProvider(cfg PollingAppLogProviderConfig) LogProvider {
 		follow:        cfg.Follow,
 		sinceTime:     cfg.SinceTime,
 		runID:         cfg.RunID,
+		direction:     direction,
+		containerID:   cfg.ContainerID,
+		stream:        cfg.Stream,
+		searchTerm:    cfg.SearchTerm,
+		pageSize:      cfg.PageSize,
 		pollInterval:  cfg.PollInterval,
 		lastTimestamp: lastTimestamp,
 		seenIDs:       make(map[string]bool),
@@ -66,6 +89,22 @@ func NewPollingAppLogProvider(cfg PollingAppLogProviderConfig) LogProvider {
 
 // Collect fetches app logs by polling the API
 func (p *pollingAppLogProvider) Collect(ctx context.Context, callback func([]Log) error) error {
+	var afterDate string
+	if p.nextToken == "" && !p.lastTimestamp.IsZero() {
+		afterDate = p.lastTimestamp.Format(time.RFC3339)
+	}
+
+	slog.Info("polling app logs",
+		"projectID", p.projectID,
+		"appID", p.appID,
+		"runID", p.runID,
+		"direction", p.direction,
+		"nextToken", p.nextToken,
+		"afterDate", afterDate,
+		"lastTimestamp", p.lastTimestamp,
+		"seenIDsCount", len(p.seenIDs),
+	)
+
 	// If not following, fetch once and return
 	if !p.follow {
 		return p.fetchOnce(ctx, callback)
@@ -95,18 +134,40 @@ func (p *pollingAppLogProvider) Collect(ctx context.Context, callback func([]Log
 
 // fetchOnce fetches logs once from the API
 func (p *pollingAppLogProvider) fetchOnce(ctx context.Context, callback func([]Log) error) error {
-	// Convert lastTimestamp to string for API (empty string if zero value)
+	// Build API options
+	// Use nextToken if available (preferred), otherwise fall back to afterDate
 	var afterDate string
-	if !p.lastTimestamp.IsZero() {
+	if p.nextToken == "" && !p.lastTimestamp.IsZero() {
 		afterDate = p.lastTimestamp.Format(time.RFC3339)
 	}
 
 	resp, err := p.client.FetchAppLogs(ctx, p.projectID, p.appID, api.AppLogOptions{
-		AfterDate: afterDate,
-		RunID:     p.runID,
+		ContainerID: p.containerID,
+		AfterDate:   afterDate,
+		PageSize:    p.pageSize,
+		NextToken:   p.nextToken,
+		Direction:   p.direction,
+		SearchTerm:  p.searchTerm,
+		Stream:      p.stream,
+		RunID:       p.runID,
 	})
 	if err != nil {
+		slog.Error("failed to fetch app logs", "error", err)
 		return fmt.Errorf("failed to fetch app logs: %w", err)
+	}
+
+	// Update nextToken for next fetch (token-based pagination)
+	if resp.NextPageToken != nil {
+		p.nextToken = *resp.NextPageToken
+	}
+
+	if len(resp.Logs) > 0 {
+		slog.Info("received app logs from API",
+			"totalLogsFromAPI", len(resp.Logs),
+			"runID", p.runID,
+			"nextPageToken", resp.NextPageToken,
+			"hasMore", resp.HasMore,
+		)
 	}
 
 	p.hasFetched = true
@@ -114,10 +175,17 @@ func (p *pollingAppLogProvider) fetchOnce(ctx context.Context, callback func([]L
 	// Convert API logs to Log structs with deduplication
 	newLogs := make([]Log, 0, len(resp.Logs))
 	logIDsToAdd := make([]string, 0, len(resp.Logs)) // Track IDs to add for cleanup
+	duplicateCount := 0
 
 	for _, apiLog := range resp.Logs {
 		// Skip duplicates using log ID
 		if p.seenIDs[apiLog.LogID] {
+			slog.Info("filtering out duplicate log",
+				"logID", apiLog.LogID,
+				"runID", apiLog.RunID,
+				"timestamp", apiLog.Timestamp,
+			)
+			duplicateCount++
 			continue
 		}
 
@@ -141,6 +209,14 @@ func (p *pollingAppLogProvider) fetchOnce(ctx context.Context, callback func([]L
 			},
 		}
 
+		slog.Info("accepting new log",
+			"logID", apiLog.LogID,
+			"runID", apiLog.RunID,
+			"timestamp", apiLog.Timestamp,
+			"stream", apiLog.Stream,
+			"contentPreview", truncateString(apiLog.LogLine, 50),
+		)
+
 		newLogs = append(newLogs, log)
 		logIDsToAdd = append(logIDsToAdd, apiLog.LogID)
 
@@ -149,6 +225,12 @@ func (p *pollingAppLogProvider) fetchOnce(ctx context.Context, callback func([]L
 			p.lastTimestamp = timestamp
 		}
 	}
+
+	//slog.Info("fetchOnce complete",
+	//	"newLogsAccepted", len(newLogs),
+	//	"duplicatesFiltered", duplicateCount,
+	//	"updatedLastTimestamp", p.lastTimestamp,
+	//)
 
 	// Add new IDs to seenIDs and enforce memory limit
 	// We can't remove specific old IDs since we don't track which logs were evicted
@@ -177,4 +259,12 @@ func (p *pollingAppLogProvider) fetchOnce(ctx context.Context, callback func([]L
 	}
 
 	return nil
+}
+
+// truncateString truncates a string to maxLen characters, adding "..." if truncated
+func truncateString(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "..."
 }

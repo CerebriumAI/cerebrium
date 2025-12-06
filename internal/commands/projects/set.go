@@ -42,7 +42,7 @@ func runSet(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Print success message (matching Python CLI output)
+	// Print success message
 	fmt.Printf("Project context successfully set to %s\n", projectID)
 
 	return nil

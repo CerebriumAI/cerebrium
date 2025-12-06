@@ -205,8 +205,15 @@ type AppLogsResponse struct {
 
 // AppLogOptions contains optional parameters for fetching app logs
 type AppLogOptions struct {
-	AfterDate string // ISO timestamp (optional)
-	RunID     string // Filter by run (optional)
+	ContainerID string // Filter by container (optional)
+	BeforeDate  string // ISO timestamp - get logs before this time (optional)
+	AfterDate   string // ISO timestamp - get logs after this time (optional)
+	PageSize    int32  // Number of logs per page (optional, server default applies)
+	NextToken   string // Pagination token for next page (optional)
+	Direction   string // "forward" or "backward" (optional, affects log ordering)
+	SearchTerm  string // Filter logs by search term (optional)
+	Stream      string // "stdout" or "stderr" (optional)
+	RunID       string // Filter by run (optional)
 }
 
 // Notification represents a user notification

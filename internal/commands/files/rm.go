@@ -71,7 +71,7 @@ func runRm(cmd *cobra.Command, args []string, region string) error {
 		return ui.NewAPIError(err)
 	}
 
-	// Print success message (matching Python CLI output)
+	// Print success message
 	successMsg := fmt.Sprintf("%s removed successfully.", remotePath)
 	fmt.Println(ui.SuccessStyle.Render(successMsg))
 

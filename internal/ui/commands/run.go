@@ -16,10 +16,10 @@ import (
 	"github.com/cerebriumai/cerebrium/internal/api"
 	"github.com/cerebriumai/cerebrium/internal/files"
 	"github.com/cerebriumai/cerebrium/internal/ui"
+	"github.com/cerebriumai/cerebrium/internal/ui/logging"
 	"github.com/cerebriumai/cerebrium/pkg/config"
 	"github.com/cerebriumai/cerebrium/pkg/projectconfig"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 )
 
 // RunState represents the current state of the run execution
@@ -34,6 +34,7 @@ const (
 	RunStateUploadingRun
 	RunStateExecuting
 	RunStatePollingLogs
+	RunStateDrainingLogs // Waiting for remaining logs to arrive after run completes
 	RunStateSuccess
 	RunStateError
 )
@@ -43,10 +44,6 @@ const (
 	maxTarSize = 4 * 1024 * 1024
 	// maxDepsSize is the maximum allowed dependencies size (380KB)
 	maxDepsSize = 380 * 1024
-	// finalLogPollAttempts is the number of times to poll for final logs
-	finalLogPollAttempts = 20
-	// maxLogsToDisplay is the maximum number of logs to display in the UI
-	maxLogsToDisplay = 20
 )
 
 // RunConfig contains run configuration
@@ -69,25 +66,21 @@ type RunView struct {
 	state   RunState
 	spinner *ui.SpinnerModel
 	err     *ui.UIError
-	message string
 
-	fileList        []string
-	tarPath         string
-	tarSize         int64
-	imageDigest     *string
-	runID           string
-	appName         string
-	appID           string
-	logs            []string
-	seenLogIDs      map[string]bool
-	printedLogCount int // Track how many logs we've printed in non-TTY mode
-	runStatus       string
-	runCompleted    bool // Track if we've already handled completion
-	needsInjection  bool
-	region          string
-	hardwareInfo    string
-	jsonData        map[string]any
-	nextLogToken    string // Track pagination token for logs
+	fileList       []string
+	tarPath        string
+	tarSize        int64
+	imageDigest    *string
+	runID          string
+	appName        string
+	appID          string
+	logViewer      *logging.LogViewerModel
+	runStatus      string
+	runCompleted   bool // Track if we've already handled completion
+	needsInjection bool
+	region         string
+	hardwareInfo   string
+	jsonData       map[string]any
 
 	conf RunConfig
 }
@@ -95,11 +88,10 @@ type RunView struct {
 // NewRunView creates a new run view
 func NewRunView(ctx context.Context, conf RunConfig) *RunView {
 	return &RunView{
-		ctx:        ctx,
-		state:      RunStatePreparingFiles,
-		spinner:    ui.NewSpinner(),
-		seenLogIDs: make(map[string]bool),
-		conf:       conf,
+		ctx:     ctx,
+		state:   RunStatePreparingFiles,
+		spinner: ui.NewSpinner(),
+		conf:    conf,
 	}
 }
 
@@ -141,17 +133,11 @@ func (m *RunView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case runUploadedMsg:
 		return m.handleRunUploaded(msg)
 
-	case logsReceivedMsg:
-		return m.handleLogsReceived(msg)
-
 	case runStatusMsg:
 		return m.handleRunStatus(msg)
 
-	case finalLogsMsg:
-		return m.handleFinalLogs()
-
-	case pollFinalLogsMsg:
-		return m.handlePollFinalLogs()
+	case runLogDrainCompleteMsg:
+		return m.handleLogDrainComplete(msg)
 
 	case pollLogsTickMsg:
 		return m.handlePollLogsTick()
@@ -206,13 +192,25 @@ func (m *RunView) handleRunPrepared(msg runPreparedMsg) (tea.Model, tea.Cmd) {
 
 		if m.conf.SimpleOutput() {
 			fmt.Println("Checking dependencies...")
+			return m, m.createBaseImage
 		}
 
-		return m, m.createBaseImage
+		return m, tea.Sequence(
+			tea.Println(ui.SuccessStyle.Render(fmt.Sprintf("✓  Prepared %d files", len(msg.fileList)))),
+			m.createBaseImage,
+		)
 	}
 
 	m.state = RunStateCreatingApp
-	return m, m.createApp
+
+	if m.conf.SimpleOutput() {
+		return m, m.createApp
+	}
+
+	return m, tea.Sequence(
+		tea.Println(ui.SuccessStyle.Render(fmt.Sprintf("✓  Prepared %d files", len(msg.fileList)))),
+		m.createApp,
+	)
 }
 
 func (m *RunView) handleBaseImageCreated(msg baseImageCreatedMsg) (tea.Model, tea.Cmd) {
@@ -221,9 +219,13 @@ func (m *RunView) handleBaseImageCreated(msg baseImageCreatedMsg) (tea.Model, te
 
 	if m.conf.SimpleOutput() {
 		fmt.Printf("✓ Base image ready: %s\n", msg.imageDigest)
+		return m, m.createApp
 	}
 
-	return m, m.createApp
+	return m, tea.Sequence(
+		tea.Println(ui.SuccessStyle.Render(fmt.Sprintf("✓  Base image ready: %s", msg.imageDigest))),
+		m.createApp,
+	)
 }
 
 func (m *RunView) handleAppCreated() (tea.Model, tea.Cmd) {
@@ -231,9 +233,13 @@ func (m *RunView) handleAppCreated() (tea.Model, tea.Cmd) {
 
 	if m.conf.SimpleOutput() {
 		fmt.Printf("✓ Created run app: %s%s\n", m.appName, m.hardwareInfo)
+		return m, m.createTar
 	}
 
-	return m, m.createTar
+	return m, tea.Sequence(
+		tea.Println(ui.SuccessStyle.Render(fmt.Sprintf("✓  Created run app: %s%s", m.appName, m.hardwareInfo))),
+		m.createTar,
+	)
 }
 
 func (m *RunView) handleTarCreated(msg tarCreatedMsg) (tea.Model, tea.Cmd) {
@@ -242,44 +248,60 @@ func (m *RunView) handleTarCreated(msg tarCreatedMsg) (tea.Model, tea.Cmd) {
 	m.state = RunStateUploadingRun
 
 	if m.conf.SimpleOutput() {
-		fmt.Printf("✓ Created tar file (%s)\n", formatRunSize(msg.tarSize))
+		fmt.Printf("✓ Created archive (%s)\n", formatRunSize(msg.tarSize))
+		return m, m.uploadRun
 	}
 
-	return m, m.uploadRun
+	return m, tea.Sequence(
+		tea.Println(ui.SuccessStyle.Render(fmt.Sprintf("✓  Created archive (%s)", formatRunSize(msg.tarSize)))),
+		m.uploadRun,
+	)
 }
 
 func (m *RunView) handleRunUploaded(msg runUploadedMsg) (tea.Model, tea.Cmd) {
 	m.runID = msg.runID
 	m.state = RunStateExecuting
 
+	// Initialize log viewer with polling provider
+	provider := logging.NewPollingAppLogProvider(logging.PollingAppLogProviderConfig{
+		Client:       m.conf.Client,
+		ProjectID:    m.conf.ProjectID,
+		AppID:        m.appID,
+		Follow:       true,
+		RunID:        m.runID,
+		PollInterval: ui.LOG_POLL_INTERVAL,
+	})
+
+	m.logViewer = logging.NewLogViewer(m.ctx, logging.LogViewerConfig{
+		DisplayConfig: m.conf.DisplayConfig,
+		Provider:      provider,
+		TickInterval:  200 * time.Millisecond,
+		ShowHelp:      false,
+		AutoExpand:    true, // Stream logs via tea.Println
+	})
+
 	if m.conf.SimpleOutput() {
-		fmt.Println("✓ App uploaded successfully!")
+		fmt.Println("✓ Uploaded successfully")
 		fmt.Println("Executing...")
+		return m, tea.Batch(
+			m.logViewer.Init(),
+			m.checkRunStatus(),
+			tea.Tick(time.Second, func(t time.Time) tea.Msg {
+				return pollLogsTickMsg(t)
+			}),
+		)
 	}
 
-	return m, tea.Batch(
-		m.pollLogs(),
-		tea.Tick(time.Second, func(t time.Time) tea.Msg {
-			return pollLogsTickMsg(t)
-		}),
+	return m, tea.Sequence(
+		tea.Println(ui.SuccessStyle.Render("✓  Uploaded successfully")),
+		tea.Batch(
+			m.logViewer.Init(),
+			m.checkRunStatus(),
+			tea.Tick(time.Second, func(t time.Time) tea.Msg {
+				return pollLogsTickMsg(t)
+			}),
+		),
 	)
-}
-
-func (m *RunView) handleLogsReceived(msg logsReceivedMsg) (tea.Model, tea.Cmd) {
-	for _, log := range msg.logs {
-		if !m.seenLogIDs[log.LogID] {
-			m.seenLogIDs[log.LogID] = true
-			formattedLog := m.formatLog(log)
-			m.logs = append(m.logs, formattedLog)
-
-			// Don't print logs immediately in non-TTY mode
-			// We'll print them all at once after "Waiting for logs..." message
-		}
-	}
-
-	m.nextLogToken = msg.nextToken
-
-	return m, nil
 }
 
 func (m *RunView) handleRunStatus(msg runStatusMsg) (tea.Model, tea.Cmd) {
@@ -287,82 +309,57 @@ func (m *RunView) handleRunStatus(msg runStatusMsg) (tea.Model, tea.Cmd) {
 
 	if !m.runCompleted && (msg.status == "success" || msg.status == "failed" || msg.status == "fail") {
 		m.runCompleted = true // Mark as completed to avoid reprocessing
+		m.state = RunStateDrainingLogs
 
-		// Store the completion message but keep state as polling for logs
-		if msg.status == "success" {
-			m.message = "✓ Run completed successfully."
-
-			if m.conf.SimpleOutput() {
+		if m.conf.SimpleOutput() {
+			if msg.status == "success" {
 				fmt.Println("\n✓ Run completed successfully.")
-				fmt.Println("Waiting for logs... (Ctrl+C to exit)")
-			}
-		} else {
-			m.message = "✗ Run failed."
-
-			if m.conf.SimpleOutput() {
+			} else {
 				fmt.Println("\n✗ Run failed.")
-				fmt.Println("Waiting for logs... (Ctrl+C to exit)")
 			}
+			fmt.Println("Waiting for logs... (Ctrl+C to exit)")
 		}
 
-		return m, tea.Tick(2*time.Second, func(t time.Time) tea.Msg {
-			return finalLogsMsg{}
+		// Wait for remaining logs to arrive
+		return m, tea.Tick(10*time.Second, func(t time.Time) tea.Msg {
+			return runLogDrainCompleteMsg(msg)
 		})
 	}
 
 	return m, nil
 }
 
-func (m *RunView) handleFinalLogs() (tea.Model, tea.Cmd) {
-	// In non-TTY mode, print all buffered logs that haven't been printed yet
-	if m.conf.SimpleOutput() && m.printedLogCount < len(m.logs) {
-		for i := m.printedLogCount; i < len(m.logs); i++ {
-			fmt.Println(m.logs[i])
+func (m *RunView) handleLogDrainComplete(msg runLogDrainCompleteMsg) (tea.Model, tea.Cmd) {
+	if msg.status == "success" {
+		m.state = RunStateSuccess
+
+		if m.conf.SimpleOutput() {
+			fmt.Println("\n✓ Run completed successfully")
+			return m, tea.Quit
 		}
-		m.printedLogCount = len(m.logs)
+
+		return m, tea.Sequence(
+			tea.Println(""),
+			tea.Println(ui.SuccessStyle.Render("✓  Run completed successfully")),
+			tea.Quit,
+		)
 	}
 
-	// Fetch logs multiple times with delays to ensure we get all remaining logs
-	var cmds []tea.Cmd
-	// Poll multiple times like Python CLI
-	for range finalLogPollAttempts {
-		cmds = append(cmds, m.pollLogs())
-		cmds = append(cmds, tea.Tick(ui.LOG_POLL_INTERVAL, func(t time.Time) tea.Msg {
-			return pollFinalLogsMsg{}
-		}))
+	m.state = RunStateError
+	err := ui.NewAPIError(fmt.Errorf("run failed"))
+	err.SilentExit = true
+	m.err = err
+
+	if m.conf.SimpleOutput() {
+		fmt.Println("\n✗ Run failed")
+		return m, tea.Quit
 	}
 
-	// Set the final state only right before quitting
-	cmds = append(cmds, func() tea.Msg {
-		if m.runStatus == "success" {
-			m.state = RunStateSuccess
-		} else {
-			m.state = RunStateError
-			err := ui.NewAPIError(fmt.Errorf("run failed"))
-			err.SilentExit = true
-			m.err = err
-		}
-		return nil
-	})
-
-	// Give a moment to render the final state with all logs
-	cmds = append(cmds, tea.Tick(200*time.Millisecond, func(t time.Time) tea.Msg {
-		return tea.Quit()
-	}))
-
-	return m, tea.Sequence(cmds...)
-}
-
-func (m *RunView) handlePollFinalLogs() (tea.Model, tea.Cmd) {
-	// In non-TTY mode, print any new logs that have arrived
-	if m.conf.SimpleOutput() && m.printedLogCount < len(m.logs) {
-		for i := m.printedLogCount; i < len(m.logs); i++ {
-			fmt.Println(m.logs[i])
-		}
-		m.printedLogCount = len(m.logs)
-	}
-
-	return m, m.pollLogs()
+	return m, tea.Sequence(
+		tea.Println(""),
+		tea.Println(ui.ErrorStyle.Render("✗  Run failed")),
+		tea.Quit,
+	)
 }
 
 func (m *RunView) handlePollLogsTick() (tea.Model, tea.Cmd) {
@@ -390,8 +387,9 @@ func (m *RunView) handlePollLogsTick() (tea.Model, tea.Cmd) {
 	}
 
 	m.state = RunStatePollingLogs
+	// LogViewerModel handles log polling via its own ticker
+	// We only need to check run status periodically
 	return m, tea.Batch(
-		m.pollLogs(),
 		m.checkRunStatus(),
 		tea.Tick(time.Second, func(t time.Time) tea.Msg {
 			return pollLogsTickMsg(t)
@@ -404,29 +402,44 @@ func (m *RunView) handleError(msg *ui.UIError) (tea.Model, tea.Cmd) {
 	m.err = msg
 	m.state = RunStateError
 
-	if m.conf.SimpleOutput() {
-		fmt.Printf("Error: %s\n", msg.Error())
-	}
-
 	if m.tarPath != "" {
 		//nolint:errcheck,gosec // Best effort cleanup of temp file, error not actionable
 		os.Remove(m.tarPath)
 	}
 
-	return m, tea.Quit
+	if m.conf.SimpleOutput() {
+		fmt.Printf("Error: %s\n", msg.Error())
+		return m, tea.Quit
+	}
+
+	return m, tea.Sequence(
+		tea.Println(ui.ErrorStyle.Render(fmt.Sprintf("✗  Error: %s", msg.Error()))),
+		tea.Quit,
+	)
 }
 
 func (m *RunView) handleDefault(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var cmds []tea.Cmd
+
 	if !m.conf.SimpleOutput() {
-		var cmd tea.Cmd
-		spinnerModel, cmd := m.spinner.Update(msg)
+		var spinnerCmd tea.Cmd
+		spinnerModel, spinnerCmd := m.spinner.Update(msg)
 		m.spinner = spinnerModel.(*ui.SpinnerModel) //nolint:errcheck // Type assertion guaranteed by SpinnerModel structure
-		return m, cmd
+		cmds = append(cmds, spinnerCmd)
 	}
-	return m, nil
+
+	// Forward to log viewer if active
+	if m.logViewer != nil && (m.state == RunStateExecuting || m.state == RunStatePollingLogs || m.state == RunStateDrainingLogs) {
+		updated, logCmd := m.logViewer.Update(msg)
+		m.logViewer = updated.(*logging.LogViewerModel) //nolint:errcheck // Type assertion guaranteed by LogViewerModel structure
+		cmds = append(cmds, logCmd)
+	}
+
+	return m, tea.Batch(cmds...)
 }
 
 // View renders the run view
+// Only renders the ACTIVE state - completed states are printed to scrollback via tea.Println in Update()
 func (m *RunView) View() string {
 	if m.conf.SimpleOutput() {
 		return ""
@@ -439,140 +452,72 @@ func (m *RunView) View() string {
 		return fmt.Sprintf("%s  %s", icon, styleFunc(text))
 	}
 
-	// State 1: Preparing files
-	switch {
-	case m.state == RunStatePreparingFiles:
+	switch m.state {
+	case RunStatePreparingFiles:
 		output.WriteString(formatStateLine(m.spinner.View(), "Preparing files...", ui.ActiveStyle.Render))
-	case m.state > RunStatePreparingFiles:
-		output.WriteString(formatStateLine("✓", fmt.Sprintf("Prepared %d files", len(m.fileList)), ui.SuccessStyle.Render))
-	default:
-		output.WriteString(formatStateLine("-", "Preparing files", ui.PendingStyle.Render))
-	}
-	output.WriteString("\n")
-
-	// State 2: Dependencies (if needed)
-	if m.state >= RunStateCheckingDependencies && m.imageDigest != nil {
-		switch {
-		case m.state == RunStateCheckingDependencies:
-			output.WriteString(formatStateLine(m.spinner.View(), "Checking dependencies...", ui.ActiveStyle.Render))
-		case m.state == RunStateCreatingBaseImage:
-			output.WriteString(formatStateLine(m.spinner.View(), "Creating base image...", ui.ActiveStyle.Render))
-		case m.state > RunStateCreatingBaseImage:
-			output.WriteString(formatStateLine("✓", fmt.Sprintf("Base image ready: %s", *m.imageDigest), ui.SuccessStyle.Render))
-		default:
-			output.WriteString(formatStateLine("-", "Checking dependencies", ui.PendingStyle.Render))
-		}
 		output.WriteString("\n")
-	}
-
-	// State 3: Creating app
-	if m.state >= RunStateCreatingApp {
-		switch {
-		case m.state == RunStateCreatingApp:
-			output.WriteString(formatStateLine(m.spinner.View(), "Creating run app...", ui.ActiveStyle.Render))
-		case m.state > RunStateCreatingApp:
-			output.WriteString(formatStateLine("✓", fmt.Sprintf("Created run app: %s%s", m.appName, m.hardwareInfo), ui.SuccessStyle.Render))
-		default:
-			output.WriteString(formatStateLine("-", "Creating run app", ui.PendingStyle.Render))
-		}
+		output.WriteString(formatStateLine("-", "Check dependencies", ui.PendingStyle.Render))
 		output.WriteString("\n")
-	}
-
-	// State 4: Creating archive
-	if m.state >= RunStateCreatingTar {
-		switch {
-		case m.state == RunStateCreatingTar:
-			output.WriteString(formatStateLine(m.spinner.View(), "Creating archive...", ui.ActiveStyle.Render))
-		case m.state > RunStateCreatingTar && m.tarSize > 0:
-			output.WriteString(formatStateLine("✓", fmt.Sprintf("Created archive (%s)", formatRunSize(m.tarSize)), ui.SuccessStyle.Render))
-		default:
-			output.WriteString(formatStateLine("-", "Creating archive", ui.PendingStyle.Render))
-		}
+		output.WriteString(formatStateLine("-", "Create run app", ui.PendingStyle.Render))
 		output.WriteString("\n")
-	}
-
-	// State 5: Uploading
-	if m.state >= RunStateUploadingRun {
-		switch {
-		case m.state == RunStateUploadingRun:
-			output.WriteString(formatStateLine(m.spinner.View(), "Uploading to Cerebrium...", ui.ActiveStyle.Render))
-		case m.state > RunStateUploadingRun:
-			output.WriteString(formatStateLine("✓", "Uploaded successfully", ui.SuccessStyle.Render))
-		default:
-			output.WriteString(formatStateLine("-", "Uploading to Cerebrium", ui.PendingStyle.Render))
-		}
+		output.WriteString(formatStateLine("-", "Create archive", ui.PendingStyle.Render))
 		output.WriteString("\n")
-	}
-
-	// State 6: Executing and polling logs
-	if m.state >= RunStateExecuting {
-		switch m.state {
-		case RunStateExecuting:
-			output.WriteString(formatStateLine(m.spinner.View(), "Executing...", ui.ActiveStyle.Render))
-		case RunStatePollingLogs:
-			if m.runCompleted {
-				if m.runStatus == "success" {
-					output.WriteString(formatStateLine("✓", "Run completed successfully", ui.SuccessStyle.Render))
-					output.WriteString("\n")
-					output.WriteString(ui.HelpStyle.Render("Waiting for logs... (Ctrl+C to exit)"))
-				} else {
-					output.WriteString(formatStateLine("✗", "Run failed", ui.ErrorStyle.Render))
-					output.WriteString("\n")
-					output.WriteString(ui.HelpStyle.Render("Waiting for logs... (Ctrl+C to exit)"))
-				}
-			} else {
-				output.WriteString(formatStateLine(m.spinner.View(), "Running...", ui.ActiveStyle.Render))
-				output.WriteString("\n")
-				output.WriteString(ui.HelpStyle.Render("(Ctrl+C to exit)"))
-			}
-		case RunStateSuccess:
-			output.WriteString(formatStateLine("✓", "Run completed successfully", ui.SuccessStyle.Render))
-		case RunStateError:
-			output.WriteString(formatStateLine("✗", "Run failed", ui.ErrorStyle.Render))
-		default:
-			output.WriteString(formatStateLine("-", "Executing", ui.PendingStyle.Render))
-		}
+		output.WriteString(formatStateLine("-", "Upload to Cerebrium", ui.PendingStyle.Render))
 		output.WriteString("\n")
-	}
-
-	// Show logs only after run is completed in TTY mode
-	if len(m.logs) > 0 && m.runCompleted {
+		output.WriteString(formatStateLine("-", "Execute", ui.PendingStyle.Render))
 		output.WriteString("\n")
 
-		// Show last logs up to maxLogsToDisplay
-		startIdx := 0
-		if len(m.logs) > maxLogsToDisplay {
-			startIdx = len(m.logs) - maxLogsToDisplay
-		}
-
-		logBox := lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("14")).
-			Width(100).
-			Padding(0, 1)
-
-		var logContent strings.Builder
-		for i := startIdx; i < len(m.logs); i++ {
-			logContent.WriteString(m.logs[i])
-			if i < len(m.logs)-1 {
-				logContent.WriteString("\n")
-			}
-		}
-
-		output.WriteString(logBox.Render(logContent.String()))
+	case RunStateCheckingDependencies, RunStateCreatingBaseImage:
+		output.WriteString(formatStateLine(m.spinner.View(), "Checking dependencies...", ui.ActiveStyle.Render))
 		output.WriteString("\n")
-	}
-
-	// Error message
-	if m.state == RunStateError && m.err != nil {
+		output.WriteString(formatStateLine("-", "Create run app", ui.PendingStyle.Render))
 		output.WriteString("\n")
-		output.WriteString(ui.FormatError(m.err))
-	}
-
-	// Success message
-	if m.state == RunStateSuccess && m.message != "" {
+		output.WriteString(formatStateLine("-", "Create archive", ui.PendingStyle.Render))
 		output.WriteString("\n")
-		output.WriteString(ui.SuccessStyle.Render(m.message))
+		output.WriteString(formatStateLine("-", "Upload to Cerebrium", ui.PendingStyle.Render))
+		output.WriteString("\n")
+		output.WriteString(formatStateLine("-", "Execute", ui.PendingStyle.Render))
+		output.WriteString("\n")
+
+	case RunStateCreatingApp:
+		output.WriteString(formatStateLine(m.spinner.View(), "Creating run app...", ui.ActiveStyle.Render))
+		output.WriteString("\n")
+		output.WriteString(formatStateLine("-", "Create archive", ui.PendingStyle.Render))
+		output.WriteString("\n")
+		output.WriteString(formatStateLine("-", "Upload to Cerebrium", ui.PendingStyle.Render))
+		output.WriteString("\n")
+		output.WriteString(formatStateLine("-", "Execute", ui.PendingStyle.Render))
+		output.WriteString("\n")
+
+	case RunStateCreatingTar:
+		output.WriteString(formatStateLine(m.spinner.View(), "Creating archive...", ui.ActiveStyle.Render))
+		output.WriteString("\n")
+		output.WriteString(formatStateLine("-", "Upload to Cerebrium", ui.PendingStyle.Render))
+		output.WriteString("\n")
+		output.WriteString(formatStateLine("-", "Execute", ui.PendingStyle.Render))
+		output.WriteString("\n")
+
+	case RunStateUploadingRun:
+		output.WriteString(formatStateLine(m.spinner.View(), "Uploading to Cerebrium...", ui.ActiveStyle.Render))
+		output.WriteString("\n")
+		output.WriteString(formatStateLine("-", "Execute", ui.PendingStyle.Render))
+		output.WriteString("\n")
+
+	case RunStateExecuting, RunStatePollingLogs:
+		// LogViewer handles log printing via tea.Println
+		// Just show the running spinner below the logs
+		output.WriteString(formatStateLine(m.spinner.View(), "Running...", ui.ActiveStyle.Render))
+		output.WriteString("\n")
+		output.WriteString(ui.HelpStyle.Render("(Ctrl+C to exit)"))
+		output.WriteString("\n")
+
+	case RunStateDrainingLogs:
+		output.WriteString(formatStateLine(m.spinner.View(), "Finishing up...", ui.ActiveStyle.Render))
+		output.WriteString("\n")
+
+	case RunStateSuccess, RunStateError:
+		// Final states print via tea.Println and quit, so View() returns empty
+		return ""
 	}
 
 	return output.String()
@@ -610,20 +555,15 @@ type runUploadedMsg struct {
 	runID string
 }
 
-type logsReceivedMsg struct {
-	logs      []api.RunLog
-	nextToken string
-}
-
 type runStatusMsg struct {
 	status string
 }
 
 type pollLogsTickMsg time.Time
 
-type finalLogsMsg struct{}
-
-type pollFinalLogsMsg struct{}
+type runLogDrainCompleteMsg struct {
+	status string
+}
 
 func (m *RunView) prepareRun() tea.Msg {
 	jsonData := m.conf.DataMap
@@ -674,13 +614,13 @@ func (m *RunView) prepareRun() tea.Msg {
 		}
 	}
 
+	// Check if we need to inject main guard
+	// Inject if the file doesn't have "if __name__ == '__main__':"
 	needsInjection := false
-	if m.conf.FunctionName == nil {
-		content, err := os.ReadFile(m.conf.Filename)
-		if err == nil {
-			if !strings.Contains(string(content), `if __name__ == "__main__":`) {
-				needsInjection = true
-			}
+	content, err := os.ReadFile(m.conf.Filename)
+	if err == nil {
+		if !strings.Contains(string(content), `if __name__ == "__main__":`) {
+			needsInjection = true
 		}
 	}
 
@@ -929,27 +869,6 @@ func (m *RunView) uploadRun() tea.Msg {
 	return runUploadedMsg{runID: resp.RunID}
 }
 
-func (m *RunView) pollLogs() tea.Cmd {
-	return func() tea.Msg {
-		logs, err := m.conf.Client.FetchRunLogs(
-			m.ctx,
-			m.conf.ProjectID,
-			m.appName,
-			m.runID,
-			m.nextLogToken, // Use the stored pagination token
-		)
-		if err != nil {
-			// Log polling errors are not fatal
-			return nil
-		}
-
-		return logsReceivedMsg{
-			logs:      logs.Logs,
-			nextToken: logs.NextPageToken, // Return the next token for pagination
-		}
-	}
-}
-
 func (m *RunView) checkRunStatus() tea.Cmd {
 	return func() tea.Msg {
 		status, err := m.conf.Client.GetRunStatus(
@@ -968,22 +887,6 @@ func (m *RunView) checkRunStatus() tea.Cmd {
 }
 
 // Helper functions
-
-func (m *RunView) formatLog(log api.RunLog) string {
-	// Parse timestamp
-	t, err := time.Parse(time.RFC3339, log.Timestamp)
-	if err != nil {
-		// Try alternate formats
-		t, err = time.Parse("2006-01-02T15:04:05Z", log.Timestamp)
-		if err != nil {
-			// Use timestamp as-is
-			return fmt.Sprintf("[cyan]%s %s[/cyan]", log.Timestamp, log.LogLine)
-		}
-	}
-
-	formatted := t.Local().Format("15:04:05")
-	return fmt.Sprintf("%s %s", ui.CyanStyle.Render(formatted), log.LogLine)
-}
 
 func formatRunSize(bytes int64) string {
 	const unit = 1024

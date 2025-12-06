@@ -74,6 +74,10 @@ Note: You can pass custom arguments to your function using --key value format.`,
 	cmd.Flags().StringVar(&data, "data", "", "JSON data to pass to the app")
 	cmd.Flags().StringVarP(&region, "region", "r", "", "Region for the app execution")
 
+	// Stop flag parsing after the first positional argument (filename)
+	// This allows passing through --key value arguments for the function
+	cmd.Flags().SetInterspersed(false)
+
 	return cmd
 }
 
