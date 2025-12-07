@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -27,7 +28,7 @@ func TestDeployView(t *testing.T) {
 			},
 		}
 
-		model := NewDeployView(t.Context(), DeployConfig{
+		model := NewDeployView(context.Background(), DeployConfig{
 			DisplayConfig: ui.DisplayConfig{
 				IsInteractive:    true,
 				DisableAnimation: false,
@@ -64,7 +65,7 @@ func TestDeployView(t *testing.T) {
 			},
 		}
 
-		model := NewDeployView(t.Context(), DeployConfig{
+		model := NewDeployView(context.Background(), DeployConfig{
 			DisplayConfig: ui.DisplayConfig{
 				IsInteractive:    true,
 				DisableAnimation: false,
@@ -98,7 +99,7 @@ func TestDeployView(t *testing.T) {
 			},
 		}
 
-		model := NewDeployView(t.Context(), DeployConfig{
+		model := NewDeployView(context.Background(), DeployConfig{
 			DisplayConfig: ui.DisplayConfig{
 				IsInteractive:    true,
 				DisableAnimation: false,
@@ -171,7 +172,7 @@ func TestDeployView(t *testing.T) {
 			},
 		}
 
-		model := NewDeployView(t.Context(), DeployConfig{
+		model := NewDeployView(context.Background(), DeployConfig{
 			DisplayConfig: ui.DisplayConfig{
 				IsInteractive:    true,
 				DisableAnimation: false,
@@ -204,7 +205,7 @@ func TestDeployView(t *testing.T) {
 			},
 		}
 
-		model := NewDeployView(t.Context(), DeployConfig{
+		model := NewDeployView(context.Background(), DeployConfig{
 			DisplayConfig: ui.DisplayConfig{
 				IsInteractive:    true,
 				DisableAnimation: false,
@@ -238,7 +239,7 @@ func TestDeployView(t *testing.T) {
 			},
 		}
 
-		model := NewDeployView(t.Context(), DeployConfig{
+		model := NewDeployView(context.Background(), DeployConfig{
 			DisplayConfig: ui.DisplayConfig{
 				IsInteractive:    true,
 				DisableAnimation: false,
@@ -298,7 +299,7 @@ func TestDeployView(t *testing.T) {
 			},
 		}
 
-		model := NewDeployView(t.Context(), DeployConfig{
+		model := NewDeployView(context.Background(), DeployConfig{
 			DisplayConfig: ui.DisplayConfig{
 				IsInteractive:    true,
 				DisableAnimation: false,
@@ -340,7 +341,7 @@ func TestDeployView(t *testing.T) {
 			},
 		}
 
-		model := NewDeployView(t.Context(), DeployConfig{
+		model := NewDeployView(context.Background(), DeployConfig{
 			DisplayConfig: ui.DisplayConfig{
 				IsInteractive:    true,
 				DisableAnimation: false,
@@ -385,8 +386,11 @@ func TestDeployView(t *testing.T) {
 
 		// Mock StreamBuildLogs since zipUploadedMsg transitions to StateBuildingApp
 		// which initializes the log viewer and starts streaming logs
-		mockWsClient.On("StreamBuildLogs", mock.Anything, "test-project", "build-123", mock.Anything, mock.Anything).
+		mockWsClient.EXPECT().StreamBuildLogs(mock.Anything, "test-project", "build-123", mock.Anything, mock.Anything).
 			Return(nil).
+			Maybe()
+		mockClient.EXPECT().FetchBuildLogs(mock.Anything, "test-project", "test-app", "build-123").
+			Return(&api.BuildLogsResponse{Logs: []api.BuildLog{}, Status: "building"}, nil).
 			Maybe()
 
 		config := &projectconfig.ProjectConfig{
@@ -395,7 +399,7 @@ func TestDeployView(t *testing.T) {
 			},
 		}
 
-		model := NewDeployView(t.Context(), DeployConfig{
+		model := NewDeployView(context.Background(), DeployConfig{
 			DisplayConfig: ui.DisplayConfig{
 				IsInteractive:    true,
 				DisableAnimation: false,
@@ -432,7 +436,7 @@ func TestDeployView(t *testing.T) {
 			},
 		}
 
-		model := NewDeployView(t.Context(), DeployConfig{
+		model := NewDeployView(context.Background(), DeployConfig{
 			DisplayConfig: ui.DisplayConfig{
 				IsInteractive:    true,
 				DisableAnimation: false,
@@ -474,7 +478,7 @@ func TestDeployView(t *testing.T) {
 			},
 		}
 
-		model := NewDeployView(t.Context(), DeployConfig{
+		model := NewDeployView(context.Background(), DeployConfig{
 			DisplayConfig: ui.DisplayConfig{
 				IsInteractive:    true,
 				DisableAnimation: false,
@@ -514,7 +518,7 @@ func TestDeployView(t *testing.T) {
 			},
 		}
 
-		model := NewDeployView(t.Context(), DeployConfig{
+		model := NewDeployView(context.Background(), DeployConfig{
 			DisplayConfig: ui.DisplayConfig{
 				IsInteractive:    true,
 				DisableAnimation: false,
@@ -551,7 +555,7 @@ func TestDeployView(t *testing.T) {
 			},
 		}
 
-		model := NewDeployView(t.Context(), DeployConfig{
+		model := NewDeployView(context.Background(), DeployConfig{
 			DisplayConfig: ui.DisplayConfig{
 				IsInteractive:    true,
 				DisableAnimation: false,
@@ -585,7 +589,7 @@ func TestDeployView(t *testing.T) {
 			},
 		}
 
-		model := NewDeployView(t.Context(), DeployConfig{
+		model := NewDeployView(context.Background(), DeployConfig{
 			DisplayConfig: ui.DisplayConfig{
 				IsInteractive:    true,
 				DisableAnimation: false,
@@ -621,7 +625,7 @@ func TestDeployView(t *testing.T) {
 			},
 		}
 
-		model := NewDeployView(t.Context(), DeployConfig{
+		model := NewDeployView(context.Background(), DeployConfig{
 			DisplayConfig: ui.DisplayConfig{
 				IsInteractive:    true,
 				DisableAnimation: false,
@@ -658,7 +662,7 @@ func TestDeployView(t *testing.T) {
 			},
 		}
 
-		model := NewDeployView(t.Context(), DeployConfig{
+		model := NewDeployView(context.Background(), DeployConfig{
 			DisplayConfig: ui.DisplayConfig{
 				IsInteractive:    true,
 				DisableAnimation: false,
@@ -694,7 +698,7 @@ func TestDeployView(t *testing.T) {
 			},
 		}
 
-		model := NewDeployView(t.Context(), DeployConfig{
+		model := NewDeployView(context.Background(), DeployConfig{
 			DisplayConfig: ui.DisplayConfig{
 				IsInteractive:    true,
 				DisableAnimation: false,
@@ -735,7 +739,7 @@ func TestDeployView(t *testing.T) {
 			},
 		}
 
-		model := NewDeployView(t.Context(), DeployConfig{
+		model := NewDeployView(context.Background(), DeployConfig{
 			DisplayConfig: ui.DisplayConfig{
 				IsInteractive:    false,
 				DisableAnimation: true,
@@ -776,7 +780,7 @@ func TestDeployView(t *testing.T) {
 			},
 		}
 
-		model := NewDeployView(t.Context(), DeployConfig{
+		model := NewDeployView(context.Background(), DeployConfig{
 			DisplayConfig: ui.DisplayConfig{
 				IsInteractive:    false,
 				DisableAnimation: true,
