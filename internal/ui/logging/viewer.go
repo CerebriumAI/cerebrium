@@ -151,9 +151,7 @@ func (m *LogViewerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Add any new logs that haven't been printed yet (check by ID to handle reordering from sort)
 			for _, log := range m.logs {
 				if _, printed := m.printedLogIDs[log.ID]; !printed {
-					timestamp := log.Timestamp.Local().Format("15:04:05")
-					styledTimestamp := ui.TimestampStyle.Render(timestamp)
-					printCmds = append(printCmds, tea.Println(fmt.Sprintf("%s %s", styledTimestamp, log.Content)))
+					printCmds = append(printCmds, tea.Println(formatLogEntry(log)))
 					m.printedLogIDs[log.ID] = struct{}{}
 				}
 			}

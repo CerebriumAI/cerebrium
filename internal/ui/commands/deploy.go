@@ -3,6 +3,7 @@ package commands
 import (
 	"context"
 	"fmt"
+	"github.com/cerebriumai/cerebrium/pkg/config"
 	"io"
 	"log/slog"
 	"net/http"
@@ -21,6 +22,7 @@ import (
 	"github.com/cerebriumai/cerebrium/internal/files"
 	"github.com/cerebriumai/cerebrium/internal/ui"
 	"github.com/cerebriumai/cerebrium/internal/ui/logging"
+	"github.com/cerebriumai/cerebrium/internal/wsapi"
 	cerebrium_bugsnag "github.com/cerebriumai/cerebrium/pkg/bugsnag"
 	"github.com/cerebriumai/cerebrium/pkg/projectconfig"
 	"github.com/charmbracelet/bubbles/progress"
@@ -52,6 +54,7 @@ type DeployConfig struct {
 	Config    *projectconfig.ProjectConfig
 	ProjectID string
 	Client    api.Client
+	WSClient  wsapi.Client
 
 	// Display config
 	DisableBuildLogs    bool
@@ -314,19 +317,33 @@ func (m *DeployView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			fmt.Println("Building app...")
 		}
 
-		// Initialize log viewer with polling provider
-		provider := logging.NewPollingBuildLogProvider(logging.PollingBuildLogProviderConfig{
-			Client:       m.conf.Client,
-			ProjectID:    m.conf.ProjectID,
-			AppName:      m.conf.Config.Deployment.Name,
-			BuildID:      m.buildID,
-			PollInterval: ui.LOG_POLL_INTERVAL,
-		})
+		// Initialize log viewer with streaming provider
+		var (
+			provider     logging.LogProvider
+			tickInterval time.Duration
+		)
+		if config.GetEnvironment() == config.EnvProd {
+			provider = logging.NewPollingBuildLogProvider(logging.PollingBuildLogProviderConfig{
+				Client:       m.conf.Client,
+				ProjectID:    m.conf.ProjectID,
+				AppName:      m.conf.Config.Deployment.Name,
+				BuildID:      m.buildID,
+				PollInterval: ui.LOG_POLL_INTERVAL,
+			})
+			tickInterval = 200 * time.Millisecond // Polling we should go slower, each new log chunk is a big re-render
+		} else {
+			provider = logging.NewStreamingBuildLogProvider(logging.StreamingBuildLogProviderConfig{
+				Client:    m.conf.WSClient,
+				ProjectID: m.conf.ProjectID,
+				BuildID:   m.buildID,
+			})
+			tickInterval = 50 * time.Millisecond // Streaming we can be faster, each new log chunk should be very small
+		}
 
 		m.logViewer = logging.NewLogViewer(m.ctx, logging.LogViewerConfig{
 			DisplayConfig: m.conf.DisplayConfig,
 			Provider:      provider,
-			TickInterval:  200 * time.Millisecond,
+			TickInterval:  tickInterval,
 			ShowHelp:      true,
 			AutoExpand:    true, // Show all logs without box for deploy
 		})
