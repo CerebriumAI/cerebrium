@@ -162,6 +162,8 @@ func runDeploy(cmd *cobra.Command, opts deployOptions, disableConfirmation bool)
 			tea.WithoutRenderer(),
 			tea.WithInput(nil),
 		)
+	} else {
+		programOpts = append(programOpts, tea.WithMouseCellMotion())
 	}
 
 	// Print a newline to preserve the command line in terminal history
