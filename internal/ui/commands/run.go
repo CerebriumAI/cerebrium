@@ -78,6 +78,7 @@ type RunView struct {
 	runStatus      string
 	runCompleted   bool // Track if we've already handled completion
 	needsInjection bool
+	needsBaseImage bool // Track if we need to create a base image for dependencies
 	region         string
 	hardwareInfo   string
 	jsonData       map[string]any
@@ -181,26 +182,18 @@ func (m *RunView) handleRunPrepared(msg runPreparedMsg) (tea.Model, tea.Cmd) {
 	m.jsonData = msg.jsonData
 	m.needsInjection = msg.needsInjection
 
+	// Check if we need to create a base image for dependencies
+	// We track this here but create the app first (required for base-image API auth)
+	m.needsBaseImage = m.conf.Config != nil && (len(m.conf.Config.Dependencies.Pip) > 0 ||
+		len(m.conf.Config.Dependencies.Conda) > 0 ||
+		len(m.conf.Config.Dependencies.Apt) > 0)
+
 	if m.conf.SimpleOutput() {
 		fmt.Printf("✓ Prepared %d files\n", len(msg.fileList))
 	}
 
-	if m.conf.Config != nil && (len(m.conf.Config.Dependencies.Pip) > 0 ||
-		len(m.conf.Config.Dependencies.Conda) > 0 ||
-		len(m.conf.Config.Dependencies.Apt) > 0) {
-		m.state = RunStateCheckingDependencies
-
-		if m.conf.SimpleOutput() {
-			fmt.Println("Checking dependencies...")
-			return m, m.createBaseImage
-		}
-
-		return m, tea.Sequence(
-			tea.Println(ui.SuccessStyle.Render(fmt.Sprintf("✓  Prepared %d files", len(msg.fileList)))),
-			m.createBaseImage,
-		)
-	}
-
+	// Always create the app first - the base-image endpoint requires the app to exist
+	// for authorization (app-authorizer checks APPS_TABLE)
 	m.state = RunStateCreatingApp
 
 	if m.conf.SimpleOutput() {
@@ -215,24 +208,43 @@ func (m *RunView) handleRunPrepared(msg runPreparedMsg) (tea.Model, tea.Cmd) {
 
 func (m *RunView) handleBaseImageCreated(msg baseImageCreatedMsg) (tea.Model, tea.Cmd) {
 	m.imageDigest = &msg.imageDigest
-	m.state = RunStateCreatingApp
+	m.state = RunStateCreatingTar
 
 	if m.conf.SimpleOutput() {
 		fmt.Printf("✓ Base image ready: %s\n", msg.imageDigest)
-		return m, m.createApp
+		return m, m.createTar
 	}
 
 	return m, tea.Sequence(
 		tea.Println(ui.SuccessStyle.Render(fmt.Sprintf("✓  Base image ready: %s", msg.imageDigest))),
-		m.createApp,
+		m.createTar,
 	)
 }
 
 func (m *RunView) handleAppCreated() (tea.Model, tea.Cmd) {
+	if m.conf.SimpleOutput() {
+		fmt.Printf("✓ Created run app: %s%s\n", m.appName, m.hardwareInfo)
+	}
+
+	// If we need a base image for dependencies, create it now (after app exists)
+	if m.needsBaseImage {
+		m.state = RunStateCheckingDependencies
+
+		if m.conf.SimpleOutput() {
+			fmt.Println("Checking dependencies...")
+			return m, m.createBaseImage
+		}
+
+		return m, tea.Sequence(
+			tea.Println(ui.SuccessStyle.Render(fmt.Sprintf("✓  Created run app: %s%s", m.appName, m.hardwareInfo))),
+			m.createBaseImage,
+		)
+	}
+
+	// No dependencies, proceed directly to creating tar
 	m.state = RunStateCreatingTar
 
 	if m.conf.SimpleOutput() {
-		fmt.Printf("✓ Created run app: %s%s\n", m.appName, m.hardwareInfo)
 		return m, m.createTar
 	}
 
@@ -456,22 +468,12 @@ func (m *RunView) View() string {
 	case RunStatePreparingFiles:
 		output.WriteString(formatStateLine(m.spinner.View(), "Preparing files...", ui.ActiveStyle.Render))
 		output.WriteString("\n")
-		output.WriteString(formatStateLine("-", "Check dependencies", ui.PendingStyle.Render))
-		output.WriteString("\n")
 		output.WriteString(formatStateLine("-", "Create run app", ui.PendingStyle.Render))
 		output.WriteString("\n")
-		output.WriteString(formatStateLine("-", "Create archive", ui.PendingStyle.Render))
-		output.WriteString("\n")
-		output.WriteString(formatStateLine("-", "Upload to Cerebrium", ui.PendingStyle.Render))
-		output.WriteString("\n")
-		output.WriteString(formatStateLine("-", "Execute", ui.PendingStyle.Render))
-		output.WriteString("\n")
-
-	case RunStateCheckingDependencies, RunStateCreatingBaseImage:
-		output.WriteString(formatStateLine(m.spinner.View(), "Checking dependencies...", ui.ActiveStyle.Render))
-		output.WriteString("\n")
-		output.WriteString(formatStateLine("-", "Create run app", ui.PendingStyle.Render))
-		output.WriteString("\n")
+		if m.needsBaseImage {
+			output.WriteString(formatStateLine("-", "Check dependencies", ui.PendingStyle.Render))
+			output.WriteString("\n")
+		}
 		output.WriteString(formatStateLine("-", "Create archive", ui.PendingStyle.Render))
 		output.WriteString("\n")
 		output.WriteString(formatStateLine("-", "Upload to Cerebrium", ui.PendingStyle.Render))
@@ -481,6 +483,20 @@ func (m *RunView) View() string {
 
 	case RunStateCreatingApp:
 		output.WriteString(formatStateLine(m.spinner.View(), "Creating run app...", ui.ActiveStyle.Render))
+		output.WriteString("\n")
+		if m.needsBaseImage {
+			output.WriteString(formatStateLine("-", "Check dependencies", ui.PendingStyle.Render))
+			output.WriteString("\n")
+		}
+		output.WriteString(formatStateLine("-", "Create archive", ui.PendingStyle.Render))
+		output.WriteString("\n")
+		output.WriteString(formatStateLine("-", "Upload to Cerebrium", ui.PendingStyle.Render))
+		output.WriteString("\n")
+		output.WriteString(formatStateLine("-", "Execute", ui.PendingStyle.Render))
+		output.WriteString("\n")
+
+	case RunStateCheckingDependencies, RunStateCreatingBaseImage:
+		output.WriteString(formatStateLine(m.spinner.View(), "Checking dependencies...", ui.ActiveStyle.Render))
 		output.WriteString("\n")
 		output.WriteString(formatStateLine("-", "Create archive", ui.PendingStyle.Render))
 		output.WriteString("\n")

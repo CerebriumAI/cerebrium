@@ -856,7 +856,7 @@ func (c *client) CreateBaseImage(ctx context.Context, projectID, appID, region s
 	queryParams.Add("region", region)
 	path := fmt.Sprintf("v3/projects/%s/apps/%s/base-image?%s", projectID, appID, queryParams.Encode())
 
-	const maxAttempts = 10
+	const maxAttempts = 15
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
 
