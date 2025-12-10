@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/cerebriumai/cerebrium/internal/auth"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -225,17 +226,39 @@ func GetContextKey() interface{} {
 	return configContextKey
 }
 
-// GetCurrentProject returns the current project ID from config
+// GetCurrentProject returns the current project ID.
+// It checks in order of precedence (matching Python CLI behavior):
+// 1. Project ID from config file
+// 2. Project ID extracted from service account token (env var or stored)
 func (c *Config) GetCurrentProject() (string, error) {
-	if c.ProjectID == "" {
-		return "", fmt.Errorf("no project configured. Please set your project ID")
+	// 1. Check config file first (highest priority, matching Python CLI)
+	if c.ProjectID != "" {
+		if !IsValidProjectID(c.ProjectID) {
+			return "", fmt.Errorf("invalid project ID: %s", c.ProjectID)
+		}
+		return c.ProjectID, nil
 	}
 
-	if !IsValidProjectID(c.ProjectID) {
-		return "", fmt.Errorf("invalid project ID: %s", c.ProjectID)
+	// 2. Try to extract from service account token
+	// First check environment variable
+	if token := os.Getenv("CEREBRIUM_SERVICE_ACCOUNT_TOKEN"); token != "" {
+		if claims, err := auth.ParseClaims(token); err == nil {
+			if projectID := ExtractProjectIDFromClaims(claims); projectID != "" {
+				return projectID, nil
+			}
+		}
 	}
 
-	return c.ProjectID, nil
+	// Then check stored service account token
+	if c.ServiceAccountToken != "" {
+		if claims, err := auth.ParseClaims(c.ServiceAccountToken); err == nil {
+			if projectID := ExtractProjectIDFromClaims(claims); projectID != "" {
+				return projectID, nil
+			}
+		}
+	}
+
+	return "", fmt.Errorf("no project configured. Please set your project ID or use a service account token with a project_id claim")
 }
 
 // SetCurrentProject sets and saves the current project ID
@@ -308,4 +331,66 @@ func (c *Config) GetLogLevel() slog.Level {
 	default:
 		return slog.LevelInfo
 	}
+}
+
+// GetAccessToken returns the stored access token
+func (c *Config) GetAccessToken() string {
+	return c.AccessToken
+}
+
+// GetRefreshToken returns the stored refresh token
+func (c *Config) GetRefreshToken() string {
+	return c.RefreshToken
+}
+
+// GetServiceAccountToken returns the stored service account token
+func (c *Config) GetServiceAccountToken() string {
+	return c.ServiceAccountToken
+}
+
+// GetServiceAccountTokenFromEnv checks for a service account token from environment variable.
+// Returns empty string if not found or if validation fails.
+func GetServiceAccountTokenFromEnv() (string, error) {
+	token := os.Getenv("CEREBRIUM_SERVICE_ACCOUNT_TOKEN")
+	if token == "" {
+		return "", nil // No service account token configured
+	}
+
+	// Validate the token
+	if err := auth.ValidateToken(token); err != nil {
+		return "", err
+	}
+
+	return token, nil
+}
+
+// SetAccessToken updates the access token in memory
+func (c *Config) SetAccessToken(token string) {
+	c.AccessToken = token
+}
+
+// ExtractProjectIDFromClaims extracts project ID from JWT claims.
+// It checks multiple claim names to match Python CLI behavior:
+// 1. project_id, projectId, sub, project (top-level)
+// 2. custom.project_id, custom.projectId, custom.project (nested)
+func ExtractProjectIDFromClaims(claims map[string]any) string {
+	// Try top-level claims in order of preference (matching Python CLI)
+	topLevelClaims := []string{"project_id", "projectId", "sub", "project"}
+	for _, claimName := range topLevelClaims {
+		if value, ok := claims[claimName].(string); ok && IsValidProjectID(value) {
+			return value
+		}
+	}
+
+	// Check nested custom claims (matching Python CLI)
+	if customClaims, ok := claims["custom"].(map[string]any); ok {
+		customClaimNames := []string{"project_id", "projectId", "project"}
+		for _, claimName := range customClaimNames {
+			if value, ok := customClaims[claimName].(string); ok && IsValidProjectID(value) {
+				return value
+			}
+		}
+	}
+
+	return ""
 }

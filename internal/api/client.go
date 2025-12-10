@@ -45,23 +45,53 @@ func NewClient(cfg *config.Config) (Client, error) {
 
 // getAuthToken retrieves the authentication token (service account or user token)
 func (c *client) getAuthToken(ctx context.Context) (string, error) {
-	// Try service account token first
-	serviceToken, err := auth.GetServiceAccountToken()
+	// 1. Try service account token from environment variable first
+	serviceToken, err := config.GetServiceAccountTokenFromEnv()
 	if err != nil {
 		return "", fmt.Errorf("service account token error: %w", err)
 	}
-
 	if serviceToken != "" {
 		return serviceToken, nil
 	}
 
-	// Fall back to regular access token
-	token, err := auth.GetOrRefreshToken(ctx, c.config)
-	if err != nil {
-		return "", fmt.Errorf("authentication error: %w", err)
+	// 2. Try stored service account token
+	if token := c.config.GetServiceAccountToken(); token != "" {
+		if err := auth.ValidateToken(token); err == nil {
+			return token, nil
+		}
+		return "", fmt.Errorf("service account token has expired. Please generate a new one")
 	}
 
-	return token, nil
+	// 3. Try access token
+	token := c.config.GetAccessToken()
+	if token == "" {
+		return "", fmt.Errorf("no access token found. Please run 'cerebrium login' or provide a service account token")
+	}
+
+	// Check if access token is still valid
+	if err := auth.ValidateToken(token); err == nil {
+		return token, nil
+	}
+
+	// 4. Access token expired, try to refresh
+	refreshToken := c.config.GetRefreshToken()
+	if refreshToken == "" {
+		return "", fmt.Errorf("access token has expired and no refresh token available. Please run 'cerebrium login'")
+	}
+
+	envConfig := c.config.GetEnvConfig()
+	newToken, err := auth.RefreshToken(ctx, envConfig.AuthUrl, envConfig.ClientID, refreshToken)
+	if err != nil {
+		return "", fmt.Errorf("failed to refresh token: %w", err)
+	}
+
+	// Save the new token
+	c.config.SetAccessToken(newToken)
+	if err := config.Save(c.config); err != nil {
+		return "", fmt.Errorf("failed to save new token: %w", err)
+	}
+
+	return newToken, nil
 }
 
 // request makes an HTTP request to the Cerebrium API with retry logic

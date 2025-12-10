@@ -3,9 +3,9 @@ package commands
 import (
 	"fmt"
 
+	"github.com/cerebriumai/cerebrium/internal/auth"
 	"github.com/cerebriumai/cerebrium/internal/ui"
 	"github.com/cerebriumai/cerebrium/pkg/config"
-	"github.com/golang-jwt/jwt/v5"
 	"github.com/spf13/cobra"
 )
 
@@ -96,14 +96,17 @@ func runSaveAuthConfig(cmd *cobra.Command, args []string, projectIDFlag string) 
 		fmt.Printf("  Refresh token: saved\n")
 	} else {
 		// JWT mode: save to serviceAccountToken, extract project_id from JWT
-		extractedProjectID, err := extractProjectIDFromJWT(accessToken)
+		claims, err := auth.ParseClaims(accessToken)
 		if err != nil {
-			return ui.NewValidationError(fmt.Errorf("failed to extract project_id from JWT: %w", err))
+			return ui.NewValidationError(fmt.Errorf("failed to parse JWT: %w", err))
 		}
 
 		// Use extracted project_id, but allow override via flag
 		if projectID == "" {
-			projectID = extractedProjectID
+			projectID = config.ExtractProjectIDFromClaims(claims)
+			if projectID == "" {
+				return ui.NewValidationError(fmt.Errorf("JWT token does not contain a valid project_id claim"))
+			}
 		}
 
 		if !config.IsValidProjectID(projectID) {
@@ -125,26 +128,4 @@ func runSaveAuthConfig(cmd *cobra.Command, args []string, projectIDFlag string) 
 	}
 
 	return nil
-}
-
-// extractProjectIDFromJWT extracts the project_id claim from a JWT token
-func extractProjectIDFromJWT(tokenString string) (string, error) {
-	// Parse without verification - we just need to extract claims
-	token, _, err := new(jwt.Parser).ParseUnverified(tokenString, jwt.MapClaims{})
-	if err != nil {
-		return "", fmt.Errorf("invalid JWT token: %w", err)
-	}
-
-	claims, ok := token.Claims.(jwt.MapClaims)
-	if !ok {
-		return "", fmt.Errorf("failed to parse JWT claims")
-	}
-
-	// Try to get project_id from claims
-	projectID, ok := claims["project_id"].(string)
-	if !ok || projectID == "" {
-		return "", fmt.Errorf("JWT token does not contain a valid project_id claim")
-	}
-
-	return projectID, nil
 }
