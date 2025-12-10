@@ -322,7 +322,8 @@ func (m *DeployView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			ProjectID: m.conf.ProjectID,
 			BuildID:   m.buildID,
 		})
-		tickInterval := 50 * time.Millisecond // Streaming we can be faster, each new log chunk should be very small
+		// Overly aggressive ticks will cause the CLI to re-render too often leading to a drop in performance
+		tickInterval := 50 * time.Millisecond
 
 		m.logViewer = logging.NewLogViewer(m.ctx, logging.LogViewerConfig{
 			DisplayConfig: m.conf.DisplayConfig,
