@@ -3,7 +3,6 @@ package commands
 import (
 	"context"
 	"fmt"
-	"github.com/cerebriumai/cerebrium/pkg/config"
 	"io"
 	"log/slog"
 	"net/http"
@@ -318,27 +317,12 @@ func (m *DeployView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		// Initialize log viewer with streaming provider
-		var (
-			provider     logging.LogProvider
-			tickInterval time.Duration
-		)
-		if config.GetEnvironment() == config.EnvProd {
-			provider = logging.NewPollingBuildLogProvider(logging.PollingBuildLogProviderConfig{
-				Client:       m.conf.Client,
-				ProjectID:    m.conf.ProjectID,
-				AppName:      m.conf.Config.Deployment.Name,
-				BuildID:      m.buildID,
-				PollInterval: ui.LOG_POLL_INTERVAL,
-			})
-			tickInterval = 200 * time.Millisecond // Polling we should go slower, each new log chunk is a big re-render
-		} else {
-			provider = logging.NewStreamingBuildLogProvider(logging.StreamingBuildLogProviderConfig{
-				Client:    m.conf.WSClient,
-				ProjectID: m.conf.ProjectID,
-				BuildID:   m.buildID,
-			})
-			tickInterval = 50 * time.Millisecond // Streaming we can be faster, each new log chunk should be very small
-		}
+		provider := logging.NewStreamingBuildLogProvider(logging.StreamingBuildLogProviderConfig{
+			Client:    m.conf.WSClient,
+			ProjectID: m.conf.ProjectID,
+			BuildID:   m.buildID,
+		})
+		tickInterval := 50 * time.Millisecond // Streaming we can be faster, each new log chunk should be very small
 
 		m.logViewer = logging.NewLogViewer(m.ctx, logging.LogViewerConfig{
 			DisplayConfig: m.conf.DisplayConfig,
