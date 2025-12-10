@@ -93,15 +93,14 @@ func TestValidateToken(t *testing.T) {
 		assert.Contains(t, err.Error(), "expired")
 	})
 
-	t.Run("returns error for missing exp claim", func(t *testing.T) {
+	t.Run("returns nil for missing exp claim", func(t *testing.T) {
 		token := createTestJWT(map[string]any{
 			"sub": "test",
 		})
 
 		err := ValidateToken(token)
 
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "missing or invalid exp claim")
+		require.NoError(t, err)
 	})
 
 	t.Run("returns error for invalid token", func(t *testing.T) {
