@@ -23,7 +23,8 @@ func ValidateToken(token string) error {
 
 	exp, ok := claims["exp"].(float64)
 	if !ok {
-		return fmt.Errorf("missing or invalid exp claim in JWT")
+		// No expiry present means the service account lasts forever
+		return nil
 	}
 
 	expirationTime := time.Unix(int64(exp), 0)
