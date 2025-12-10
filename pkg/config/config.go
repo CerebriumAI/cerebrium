@@ -1,14 +1,13 @@
 package config
 
 import (
-	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/cerebriumai/cerebrium/internal/auth"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -243,15 +242,19 @@ func (c *Config) GetCurrentProject() (string, error) {
 	// 2. Try to extract from service account token
 	// First check environment variable
 	if token := os.Getenv("CEREBRIUM_SERVICE_ACCOUNT_TOKEN"); token != "" {
-		if projectID, err := extractProjectIDFromToken(token); err == nil && projectID != "" {
-			return projectID, nil
+		if claims, err := auth.ParseClaims(token); err == nil {
+			if projectID := extractProjectIDFromClaims(claims); projectID != "" {
+				return projectID, nil
+			}
 		}
 	}
 
 	// Then check stored service account token
 	if c.ServiceAccountToken != "" {
-		if projectID, err := extractProjectIDFromToken(c.ServiceAccountToken); err == nil && projectID != "" {
-			return projectID, nil
+		if claims, err := auth.ParseClaims(c.ServiceAccountToken); err == nil {
+			if projectID := extractProjectIDFromClaims(claims); projectID != "" {
+				return projectID, nil
+			}
 		}
 	}
 
@@ -330,57 +333,48 @@ func (c *Config) GetLogLevel() slog.Level {
 	}
 }
 
-// extractProjectIDFromToken extracts project ID from a JWT token.
-// This is a local helper to avoid circular dependency with auth package.
-// It checks multiple claim names to match Python CLI behavior.
-func extractProjectIDFromToken(tokenString string) (string, error) {
-	// Parse JWT manually to avoid importing jwt package here
-	parts := strings.Split(tokenString, ".")
-	if len(parts) != 3 {
-		return "", fmt.Errorf("invalid JWT token format")
-	}
+// GetAccessToken returns the stored access token
+func (c *Config) GetAccessToken() string {
+	return c.AccessToken
+}
 
-	// Decode the payload (second part) - JWT uses base64url encoding
-	payload := parts[1]
-	// Add padding if needed for base64 decoding
-	switch len(payload) % 4 {
-	case 2:
-		payload += "=="
-	case 3:
-		payload += "="
-	}
+// GetRefreshToken returns the stored refresh token
+func (c *Config) GetRefreshToken() string {
+	return c.RefreshToken
+}
 
-	// Replace URL-safe characters with standard base64
-	payload = strings.ReplaceAll(payload, "-", "+")
-	payload = strings.ReplaceAll(payload, "_", "/")
+// GetServiceAccountToken returns the stored service account token
+func (c *Config) GetServiceAccountToken() string {
+	return c.ServiceAccountToken
+}
 
-	decoded, err := base64.StdEncoding.DecodeString(payload)
-	if err != nil {
-		return "", fmt.Errorf("failed to decode JWT payload: %w", err)
-	}
+// SetAccessToken updates the access token in memory
+func (c *Config) SetAccessToken(token string) {
+	c.AccessToken = token
+}
 
-	var claims map[string]interface{}
-	if err := json.Unmarshal(decoded, &claims); err != nil {
-		return "", fmt.Errorf("failed to parse JWT claims: %w", err)
-	}
-
+// extractProjectIDFromClaims extracts project ID from JWT claims.
+// It checks multiple claim names to match Python CLI behavior:
+// 1. project_id, projectId, sub, project (top-level)
+// 2. custom.project_id, custom.projectId, custom.project (nested)
+func extractProjectIDFromClaims(claims map[string]any) string {
 	// Try top-level claims in order of preference (matching Python CLI)
 	topLevelClaims := []string{"project_id", "projectId", "sub", "project"}
 	for _, claimName := range topLevelClaims {
 		if value, ok := claims[claimName].(string); ok && IsValidProjectID(value) {
-			return value, nil
+			return value
 		}
 	}
 
 	// Check nested custom claims (matching Python CLI)
-	if customClaims, ok := claims["custom"].(map[string]interface{}); ok {
+	if customClaims, ok := claims["custom"].(map[string]any); ok {
 		customClaimNames := []string{"project_id", "projectId", "project"}
 		for _, claimName := range customClaimNames {
 			if value, ok := customClaims[claimName].(string); ok && IsValidProjectID(value) {
-				return value, nil
+				return value
 			}
 		}
 	}
 
-	return "", fmt.Errorf("JWT token does not contain a valid project_id claim")
+	return ""
 }

@@ -96,14 +96,17 @@ func runSaveAuthConfig(cmd *cobra.Command, args []string, projectIDFlag string) 
 		fmt.Printf("  Refresh token: saved\n")
 	} else {
 		// JWT mode: save to serviceAccountToken, extract project_id from JWT
-		extractedProjectID, err := auth.ExtractProjectIDFromJWT(accessToken)
+		claims, err := auth.ParseClaims(accessToken)
 		if err != nil {
-			return ui.NewValidationError(fmt.Errorf("failed to extract project_id from JWT: %w", err))
+			return ui.NewValidationError(fmt.Errorf("failed to parse JWT: %w", err))
 		}
 
 		// Use extracted project_id, but allow override via flag
 		if projectID == "" {
-			projectID = extractedProjectID
+			projectID = extractProjectIDFromClaims(claims)
+			if projectID == "" {
+				return ui.NewValidationError(fmt.Errorf("JWT token does not contain a valid project_id claim"))
+			}
 		}
 
 		if !config.IsValidProjectID(projectID) {
@@ -125,4 +128,28 @@ func runSaveAuthConfig(cmd *cobra.Command, args []string, projectIDFlag string) 
 	}
 
 	return nil
+}
+
+// extractProjectIDFromClaims extracts project ID from JWT claims.
+// It checks multiple claim names to match Python CLI behavior.
+func extractProjectIDFromClaims(claims map[string]any) string {
+	// Try top-level claims in order of preference
+	topLevelClaims := []string{"project_id", "projectId", "sub", "project"}
+	for _, claimName := range topLevelClaims {
+		if value, ok := claims[claimName].(string); ok && config.IsValidProjectID(value) {
+			return value
+		}
+	}
+
+	// Check nested custom claims
+	if customClaims, ok := claims["custom"].(map[string]any); ok {
+		customClaimNames := []string{"project_id", "projectId", "project"}
+		for _, claimName := range customClaimNames {
+			if value, ok := customClaims[claimName].(string); ok && config.IsValidProjectID(value) {
+				return value
+			}
+		}
+	}
+
+	return ""
 }

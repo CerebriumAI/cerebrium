@@ -3,7 +3,6 @@ package auth
 import (
 	"fmt"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -46,64 +45,4 @@ func ValidateServiceAccountToken(token string) error {
 	}
 
 	return nil
-}
-
-// ExtractProjectIDFromJWT extracts the project_id from a JWT token.
-// It checks multiple claim names to match Python CLI behavior:
-// 1. project_id
-// 2. projectId
-// 3. sub (if it looks like a project ID)
-// 4. project
-// 5. custom.project_id, custom.projectId, custom.project (nested claims)
-func ExtractProjectIDFromJWT(tokenString string) (string, error) {
-	// Parse without verification - we just need to extract claims
-	token, _, err := new(jwt.Parser).ParseUnverified(tokenString, jwt.MapClaims{})
-	if err != nil {
-		return "", fmt.Errorf("invalid JWT token: %w", err)
-	}
-
-	claims, ok := token.Claims.(jwt.MapClaims)
-	if !ok {
-		return "", fmt.Errorf("failed to parse JWT claims")
-	}
-
-	// Try top-level claims in order of preference (matching Python CLI)
-	topLevelClaims := []string{"project_id", "projectId", "sub", "project"}
-	for _, claimName := range topLevelClaims {
-		if value, ok := claims[claimName].(string); ok && isValidProjectID(value) {
-			return value, nil
-		}
-	}
-
-	// Check nested custom claims (matching Python CLI)
-	if customClaims, ok := claims["custom"].(map[string]interface{}); ok {
-		customClaimNames := []string{"project_id", "projectId", "project"}
-		for _, claimName := range customClaimNames {
-			if value, ok := customClaims[claimName].(string); ok && isValidProjectID(value) {
-				return value, nil
-			}
-		}
-	}
-
-	return "", fmt.Errorf("JWT token does not contain a valid project_id claim")
-}
-
-// isValidProjectID checks if a string looks like a valid project ID
-func isValidProjectID(projectID string) bool {
-	return strings.HasPrefix(projectID, "p-") || strings.HasPrefix(projectID, "dev-p-")
-}
-
-// GetJWTClaims returns all claims from a JWT token for debugging purposes
-func GetJWTClaims(tokenString string) (map[string]interface{}, error) {
-	token, _, err := new(jwt.Parser).ParseUnverified(tokenString, jwt.MapClaims{})
-	if err != nil {
-		return nil, fmt.Errorf("invalid JWT token: %w", err)
-	}
-
-	claims, ok := token.Claims.(jwt.MapClaims)
-	if !ok {
-		return nil, fmt.Errorf("failed to parse JWT claims")
-	}
-
-	return claims, nil
 }
