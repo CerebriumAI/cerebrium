@@ -46,7 +46,7 @@ func NewClient(cfg *config.Config) (Client, error) {
 // getAuthToken retrieves the authentication token (service account or user token)
 func (c *client) getAuthToken(ctx context.Context) (string, error) {
 	// 1. Try service account token from environment variable first
-	serviceToken, err := auth.GetServiceAccountToken()
+	serviceToken, err := config.GetServiceAccountTokenFromEnv()
 	if err != nil {
 		return "", fmt.Errorf("service account token error: %w", err)
 	}

@@ -243,7 +243,7 @@ func (c *Config) GetCurrentProject() (string, error) {
 	// First check environment variable
 	if token := os.Getenv("CEREBRIUM_SERVICE_ACCOUNT_TOKEN"); token != "" {
 		if claims, err := auth.ParseClaims(token); err == nil {
-			if projectID := extractProjectIDFromClaims(claims); projectID != "" {
+			if projectID := ExtractProjectIDFromClaims(claims); projectID != "" {
 				return projectID, nil
 			}
 		}
@@ -252,7 +252,7 @@ func (c *Config) GetCurrentProject() (string, error) {
 	// Then check stored service account token
 	if c.ServiceAccountToken != "" {
 		if claims, err := auth.ParseClaims(c.ServiceAccountToken); err == nil {
-			if projectID := extractProjectIDFromClaims(claims); projectID != "" {
+			if projectID := ExtractProjectIDFromClaims(claims); projectID != "" {
 				return projectID, nil
 			}
 		}
@@ -348,16 +348,32 @@ func (c *Config) GetServiceAccountToken() string {
 	return c.ServiceAccountToken
 }
 
+// GetServiceAccountTokenFromEnv checks for a service account token from environment variable.
+// Returns empty string if not found or if validation fails.
+func GetServiceAccountTokenFromEnv() (string, error) {
+	token := os.Getenv("CEREBRIUM_SERVICE_ACCOUNT_TOKEN")
+	if token == "" {
+		return "", nil // No service account token configured
+	}
+
+	// Validate the token
+	if err := auth.ValidateToken(token); err != nil {
+		return "", err
+	}
+
+	return token, nil
+}
+
 // SetAccessToken updates the access token in memory
 func (c *Config) SetAccessToken(token string) {
 	c.AccessToken = token
 }
 
-// extractProjectIDFromClaims extracts project ID from JWT claims.
+// ExtractProjectIDFromClaims extracts project ID from JWT claims.
 // It checks multiple claim names to match Python CLI behavior:
 // 1. project_id, projectId, sub, project (top-level)
 // 2. custom.project_id, custom.projectId, custom.project (nested)
-func extractProjectIDFromClaims(claims map[string]any) string {
+func ExtractProjectIDFromClaims(claims map[string]any) string {
 	// Try top-level claims in order of preference (matching Python CLI)
 	topLevelClaims := []string{"project_id", "projectId", "sub", "project"}
 	for _, claimName := range topLevelClaims {
