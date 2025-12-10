@@ -1,6 +1,8 @@
 package config
 
 import (
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os"
@@ -225,17 +227,35 @@ func GetContextKey() interface{} {
 	return configContextKey
 }
 
-// GetCurrentProject returns the current project ID from config
+// GetCurrentProject returns the current project ID.
+// It checks in order of precedence (matching Python CLI behavior):
+// 1. Project ID from config file
+// 2. Project ID extracted from service account token (env var or stored)
 func (c *Config) GetCurrentProject() (string, error) {
-	if c.ProjectID == "" {
-		return "", fmt.Errorf("no project configured. Please set your project ID")
+	// 1. Check config file first (highest priority, matching Python CLI)
+	if c.ProjectID != "" {
+		if !IsValidProjectID(c.ProjectID) {
+			return "", fmt.Errorf("invalid project ID: %s", c.ProjectID)
+		}
+		return c.ProjectID, nil
 	}
 
-	if !IsValidProjectID(c.ProjectID) {
-		return "", fmt.Errorf("invalid project ID: %s", c.ProjectID)
+	// 2. Try to extract from service account token
+	// First check environment variable
+	if token := os.Getenv("CEREBRIUM_SERVICE_ACCOUNT_TOKEN"); token != "" {
+		if projectID, err := extractProjectIDFromToken(token); err == nil && projectID != "" {
+			return projectID, nil
+		}
 	}
 
-	return c.ProjectID, nil
+	// Then check stored service account token
+	if c.ServiceAccountToken != "" {
+		if projectID, err := extractProjectIDFromToken(c.ServiceAccountToken); err == nil && projectID != "" {
+			return projectID, nil
+		}
+	}
+
+	return "", fmt.Errorf("no project configured. Please set your project ID or use a service account token with a project_id claim")
 }
 
 // SetCurrentProject sets and saves the current project ID
@@ -308,4 +328,59 @@ func (c *Config) GetLogLevel() slog.Level {
 	default:
 		return slog.LevelInfo
 	}
+}
+
+// extractProjectIDFromToken extracts project ID from a JWT token.
+// This is a local helper to avoid circular dependency with auth package.
+// It checks multiple claim names to match Python CLI behavior.
+func extractProjectIDFromToken(tokenString string) (string, error) {
+	// Parse JWT manually to avoid importing jwt package here
+	parts := strings.Split(tokenString, ".")
+	if len(parts) != 3 {
+		return "", fmt.Errorf("invalid JWT token format")
+	}
+
+	// Decode the payload (second part) - JWT uses base64url encoding
+	payload := parts[1]
+	// Add padding if needed for base64 decoding
+	switch len(payload) % 4 {
+	case 2:
+		payload += "=="
+	case 3:
+		payload += "="
+	}
+
+	// Replace URL-safe characters with standard base64
+	payload = strings.ReplaceAll(payload, "-", "+")
+	payload = strings.ReplaceAll(payload, "_", "/")
+
+	decoded, err := base64.StdEncoding.DecodeString(payload)
+	if err != nil {
+		return "", fmt.Errorf("failed to decode JWT payload: %w", err)
+	}
+
+	var claims map[string]interface{}
+	if err := json.Unmarshal(decoded, &claims); err != nil {
+		return "", fmt.Errorf("failed to parse JWT claims: %w", err)
+	}
+
+	// Try top-level claims in order of preference (matching Python CLI)
+	topLevelClaims := []string{"project_id", "projectId", "sub", "project"}
+	for _, claimName := range topLevelClaims {
+		if value, ok := claims[claimName].(string); ok && IsValidProjectID(value) {
+			return value, nil
+		}
+	}
+
+	// Check nested custom claims (matching Python CLI)
+	if customClaims, ok := claims["custom"].(map[string]interface{}); ok {
+		customClaimNames := []string{"project_id", "projectId", "project"}
+		for _, claimName := range customClaimNames {
+			if value, ok := customClaims[claimName].(string); ok && IsValidProjectID(value) {
+				return value, nil
+			}
+		}
+	}
+
+	return "", fmt.Errorf("JWT token does not contain a valid project_id claim")
 }
