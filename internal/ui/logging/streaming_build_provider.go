@@ -55,7 +55,7 @@ func (p *streamingBuildProvider) Collect(ctx context.Context, callback func([]Lo
 			},
 		}
 
-		slog.Info("Streamed log: ", "Log:", log.Content)
+		slog.Debug("Streamed log: ", "Log:", log.Content)
 
 		return callback([]Log{log})
 	})
