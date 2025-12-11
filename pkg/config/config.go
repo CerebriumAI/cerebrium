@@ -13,6 +13,8 @@ import (
 	"github.com/spf13/viper"
 )
 
+// TODO(wes): We need to spend some time fixing up the way this config works. Viper does a lot of what we're trying to do here out of the box, so we should leverage it
+
 const (
 	DefaultConfigDir  = ".cerebrium"
 	DefaultConfigFile = "config.yaml"
