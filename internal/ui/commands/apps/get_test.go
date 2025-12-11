@@ -66,8 +66,11 @@ func TestAppGetView(t *testing.T) {
 			Step(uitesting.TestStep[*GetView]{
 				Name: "success_loaded",
 				// Manually trigger the loaded message (simulating what fetchAppDetails returns)
-				Msg:        appDetailsLoadedMsg{appDetails: appDetails},
-				ViewGolden: "get_success_gpu",
+				Msg: appDetailsLoadedMsg{appDetails: appDetails},
+				// View() returns empty because output is via tea.Println for scrollback support
+				ViewAssert: func(t *testing.T, view string) {
+					assert.Empty(t, view)
+				},
 				ModelAssert: func(t *testing.T, m *GetView) {
 					assert.False(t, m.loading)
 					assert.NotNil(t, m.appDetails)
@@ -117,9 +120,12 @@ func TestAppGetView(t *testing.T) {
 		harness := uitesting.NewTestHarness(t, model)
 		harness.
 			Step(uitesting.TestStep[*GetView]{
-				Name:       "success_cpu_only",
-				Msg:        appDetailsLoadedMsg{appDetails: appDetails},
-				ViewGolden: "get_success_cpu",
+				Name: "success_cpu_only",
+				Msg:  appDetailsLoadedMsg{appDetails: appDetails},
+				// View() returns empty because output is via tea.Println for scrollback support
+				ViewAssert: func(t *testing.T, view string) {
+					assert.Empty(t, view)
+				},
 				ModelAssert: func(t *testing.T, m *GetView) {
 					assert.NotNil(t, m.appDetails)
 					assert.Equal(t, "test-app-cpu", m.appDetails.ID)
@@ -325,20 +331,21 @@ func TestAppGetView(t *testing.T) {
 		harness := uitesting.NewTestHarness(t, model)
 		harness.
 			Step(uitesting.TestStep[*GetView]{
-				Name:       "parse_errors",
-				Msg:        appDetailsLoadedMsg{appDetails: appDetails},
-				ViewGolden: "get_parse_errors",
+				Name: "parse_errors",
+				Msg:  appDetailsLoadedMsg{appDetails: appDetails},
+				// View() returns empty because output is via tea.Println for scrollback support
+				// Parse errors are shown in the tea.Println output, not View()
 				ViewAssert: func(t *testing.T, view string) {
-					// parseErrors are populated during View() rendering
-					uitesting.AssertContains(t, view, "[error parsing")
-					uitesting.AssertContains(t, view, "Discord")
+					assert.Empty(t, view)
 				},
 				ModelAssert: func(t *testing.T, m *GetView) {
 					// Verify the app details with invalid data were loaded
 					assert.NotNil(t, m.appDetails)
 					assert.Equal(t, "parse-error-app", m.appDetails.ID)
-					// parseErrors is populated during View() call, not Update()
-					// So we verify it in ViewAssert instead
+					// Verify formatAppDetailsTable() handles parse errors correctly
+					output := m.formatAppDetailsTable()
+					assert.Contains(t, output, "[error parsing")
+					assert.Contains(t, output, "Discord")
 				},
 			}).
 			Run(t)
@@ -381,15 +388,18 @@ func TestAppGetView(t *testing.T) {
 		harness := uitesting.NewTestHarness(t, model)
 		harness.
 			Step(uitesting.TestStep[*GetView]{
-				Name:       "empty_fields",
-				Msg:        appDetailsLoadedMsg{appDetails: appDetails},
-				ViewGolden: "get_empty_fields",
+				Name: "empty_fields",
+				Msg:  appDetailsLoadedMsg{appDetails: appDetails},
+				// View() returns empty because output is via tea.Println for scrollback support
 				ViewAssert: func(t *testing.T, view string) {
-					uitesting.AssertContains(t, view, "Data Unavailable")
+					assert.Empty(t, view)
 				},
 				ModelAssert: func(t *testing.T, m *GetView) {
 					assert.NotNil(t, m.appDetails)
 					assert.Equal(t, "", m.appDetails.Hardware)
+					// Verify formatAppDetailsTable() handles empty fields correctly
+					output := m.formatAppDetailsTable()
+					assert.Contains(t, output, "Data Unavailable")
 				},
 			}).
 			Run(t)

@@ -14,19 +14,20 @@ import (
 	"time"
 
 	"github.com/bugsnag/bugsnag-go/v2"
-	"github.com/cerebriumai/cerebrium/internal/version"
+	"github.com/charmbracelet/bubbles/progress"
+	"github.com/charmbracelet/bubbles/viewport"
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/cerebriumai/cerebrium/internal/api"
 	"github.com/cerebriumai/cerebrium/internal/auth"
 	"github.com/cerebriumai/cerebrium/internal/files"
 	"github.com/cerebriumai/cerebrium/internal/ui"
 	"github.com/cerebriumai/cerebrium/internal/ui/logging"
+	"github.com/cerebriumai/cerebrium/internal/version"
 	"github.com/cerebriumai/cerebrium/internal/wsapi"
 	cerebrium_bugsnag "github.com/cerebriumai/cerebrium/pkg/bugsnag"
 	"github.com/cerebriumai/cerebrium/pkg/projectconfig"
-	"github.com/charmbracelet/bubbles/progress"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 )
 
 // DeployState represents the current state of the deployment
@@ -90,6 +91,10 @@ type DeployView struct {
 	uploadSpeed         float64 // Cached upload speed in bytes/sec
 	lastPrintedPercent  int     // Track last printed percentage for SimpleOutput
 
+	// Viewport for scrollable confirmation screen
+	viewport      viewport.Model
+	viewportReady bool
+
 	conf DeployConfig
 }
 
@@ -146,8 +151,35 @@ func (m *DeployView) Init() tea.Cmd {
 // Update handles messages
 func (m *DeployView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		viewportHeight := max(msg.Height-2, 1) // Reserve 2 lines for prompt
+
+		if !m.viewportReady {
+			// Viewport initialized here because terminal size is only known after
+			// Bubbletea sends the first WindowSizeMsg (standard Bubbletea pattern)
+			m.viewport = viewport.New(msg.Width, viewportHeight)
+			m.viewportReady = true
+		} else {
+			m.viewport.Width = msg.Width
+			m.viewport.Height = viewportHeight
+		}
+
+		if m.state == StateConfirmation {
+			m.viewport.SetContent(m.renderDeploymentSummary())
+		}
+
+		return m, nil
+
 	case tea.KeyMsg:
 		return m.onKey(msg)
+
+	case tea.MouseMsg:
+		if m.state == StateConfirmation && m.viewportReady {
+			var cmd tea.Cmd
+			m.viewport, cmd = m.viewport.Update(msg)
+			return m, cmd
+		}
+		return m, nil
 
 	case ui.SignalCancelMsg:
 		// Handle termination signal (SIGINT, SIGTERM)
@@ -554,9 +586,12 @@ func (m *DeployView) View() string {
 	// Completed states are printed to scrollback via tea.Println in Update()
 	var output strings.Builder
 
-	// Show confirmation prompt if in confirmation state
 	if m.state == StateConfirmation {
-		output.WriteString(m.renderDeploymentSummary())
+		if m.viewportReady {
+			output.WriteString(m.viewport.View())
+		} else {
+			output.WriteString(m.renderDeploymentSummary())
+		}
 		output.WriteString("\n")
 		output.WriteString(ui.YellowStyle.Render("Do you want to deploy? (Y/n): "))
 		return output.String()
@@ -668,6 +703,21 @@ func (m *DeployView) onKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			// User cancelled deployment
 			m.err = ui.NewUserCancelledError()
 			return m, tea.Quit
+
+		case "up", "k", "down", "j", "pgup", "pgdown":
+			if m.viewportReady {
+				switch msg.String() {
+				case "up", "k":
+					m.viewport.ScrollUp(1)
+				case "down", "j":
+					m.viewport.ScrollDown(1)
+				case "pgup":
+					m.viewport.HalfPageUp()
+				case "pgdown":
+					m.viewport.HalfPageDown()
+				}
+			}
+			return m, nil
 		}
 		return m, nil
 	}
