@@ -140,7 +140,7 @@ func Load() (*Config, error) {
 	if config.ProjectID == "" {
 		config.ProjectID, err = config.GetCurrentProject()
 		if err != nil {
-			return nil, err
+			slog.Info("no project ID configured")
 		}
 	}
 
