@@ -65,11 +65,11 @@ type AppDetails struct {
 }
 
 // GetCPU returns the CPU value as an integer
-func (a *AppDetails) GetCPU() (int, error) {
+func (a *AppDetails) GetCPU() (float64, error) {
 	if a.CPU == "" {
 		return 0, nil
 	}
-	val, err := strconv.Atoi(a.CPU)
+	val, err := strconv.ParseFloat(a.CPU, 64)
 	if err != nil {
 		return 0, fmt.Errorf("failed to parse CPU value '%s': %w", a.CPU, err)
 	}
@@ -77,11 +77,11 @@ func (a *AppDetails) GetCPU() (int, error) {
 }
 
 // GetMemory returns the Memory value as an integer
-func (a *AppDetails) GetMemory() (int, error) {
+func (a *AppDetails) GetMemory() (float64, error) {
 	if a.Memory == "" {
 		return 0, nil
 	}
-	val, err := strconv.Atoi(a.Memory)
+	val, err := strconv.ParseFloat(a.Memory, 64)
 	if err != nil {
 		return 0, fmt.Errorf("failed to parse memory value '%s': %w", a.Memory, err)
 	}

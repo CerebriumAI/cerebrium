@@ -161,7 +161,7 @@ func (m *GetView) formatAppDetailsTable() string {
 	} else if cpu == 0 {
 		hardwareRows = append(hardwareRows, ui.TableRow{Label: "CPU", Value: "Data Unavailable"})
 	} else {
-		hardwareRows = append(hardwareRows, ui.TableRow{Label: "CPU", Value: fmt.Sprintf("%d cores", cpu)})
+		hardwareRows = append(hardwareRows, ui.TableRow{Label: "CPU", Value: fmt.Sprintf("%g cores", cpu)})
 	}
 	memory, err := app.GetMemory()
 	if err != nil {
@@ -170,7 +170,7 @@ func (m *GetView) formatAppDetailsTable() string {
 	} else if memory == 0 {
 		hardwareRows = append(hardwareRows, ui.TableRow{Label: "Memory", Value: "Data Unavailable"})
 	} else {
-		hardwareRows = append(hardwareRows, ui.TableRow{Label: "Memory", Value: fmt.Sprintf("%d GB", memory)})
+		hardwareRows = append(hardwareRows, ui.TableRow{Label: "Memory", Value: fmt.Sprintf("%g GB", memory)})
 	}
 	gpuCount, err := app.GetGPUCount()
 	if err != nil {
@@ -278,7 +278,7 @@ func (m *GetView) formatAppDetailsSimple() string {
 	} else if cpu == 0 {
 		output.WriteString("  CPU: Data Unavailable\n")
 	} else {
-		output.WriteString(fmt.Sprintf("  CPU: %d cores\n", cpu))
+		output.WriteString(fmt.Sprintf("  CPU: %g cores\n", cpu))
 	}
 	if memory, err := app.GetMemory(); err != nil {
 		m.parseErrors = append(m.parseErrors, "Memory")
@@ -286,7 +286,7 @@ func (m *GetView) formatAppDetailsSimple() string {
 	} else if memory == 0 {
 		output.WriteString("  Memory: Data Unavailable\n")
 	} else {
-		output.WriteString(fmt.Sprintf("  Memory: %d GB\n", memory))
+		output.WriteString(fmt.Sprintf("  Memory: %g GB\n", memory))
 	}
 	if gpuCount, err := app.GetGPUCount(); err != nil {
 		m.parseErrors = append(m.parseErrors, "GPU Count")

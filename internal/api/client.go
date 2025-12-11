@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"mime/multipart"
 	"net/http"
+	"net/http/httputil"
 	"net/textproto"
 	"net/url"
 	"os"
@@ -149,6 +151,9 @@ func (c *client) request(ctx context.Context, method, path string, body any, req
 				req.Header.Set("Authorization", "Bearer "+token)
 			}
 
+			reqStr, _ := httputil.DumpRequestOut(req, true)
+			slog.Debug("API request", "req", string(reqStr))
+
 			// Make request
 			startTime := time.Now()
 			resp, err := c.httpClient.Do(req)
@@ -190,9 +195,9 @@ func (c *client) request(ctx context.Context, method, path string, body any, req
 			}
 
 			// Handle authentication errors specially
-			if resp.StatusCode == 401 || resp.StatusCode == 403 {
+			if resp.StatusCode == 401 || resp.StatusCode == 403 || resp.StatusCode == 405 {
 				slog.Warn("Authentication failed", "statusCode", resp.StatusCode, "path", path)
-				authErr := fmt.Errorf("you must log in to use this functionality. Please run 'cerebrium login'")
+				authErr := getAuthErr(resp.StatusCode, respBody)
 
 				// Report authentication errors to Bugsnag
 				cerebrium_bugsnag.NotifyWithMetadata(
@@ -289,6 +294,32 @@ func (c *client) request(ctx context.Context, method, path string, body any, req
 	}
 
 	return respBody, nil
+}
+
+func getAuthErr(respCode int, respBody []byte) error {
+	var errResp ErrorResponse
+	if len(respBody) > 0 {
+		err := json.Unmarshal(respBody, &errResp)
+		if err != nil {
+			// Just log and move on, this is best-effort
+			slog.Warn("Failed to unmarshal response body", "error", err, "statusCode", respCode, "response", string(respBody))
+		}
+	}
+	errMsg := fmt.Sprintf("failed with status code %d", respCode)
+	switch respCode {
+	case http.StatusUnauthorized:
+		errMsg += ". You must log in to use this functionality. Please run 'cerebrium login'"
+
+	case http.StatusForbidden, http.StatusMethodNotAllowed:
+		errMsg += ". You do not have permission to access this resource"
+		if errResp.Message != "" {
+			errMsg += fmt.Sprintf(". Message from server: \"%s\"", errResp.Message)
+		}
+
+	default:
+		errMsg += ". You must log in to use this functionality. Please run 'cerebrium login'"
+	}
+	return errors.New(errMsg)
 }
 
 // GetProjects retrieves the list of projects for the authenticated user
