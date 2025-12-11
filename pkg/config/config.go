@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -135,6 +136,14 @@ func Load() (*Config, error) {
 		LogLevel:            viper.GetString("loglevel"),       // Global setting (not env-specific)
 	}
 
+	// If the project isn't configured in the config file, we might be able to get it from the SA token
+	if config.ProjectID == "" {
+		config.ProjectID, err = config.GetCurrentProject()
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	// Handle telemetry setting - use pointer to distinguish unset from false
 	if viper.IsSet("telemetry") {
 		telemetryEnabled := viper.GetBool("telemetry")
@@ -239,7 +248,19 @@ func (c *Config) GetCurrentProject() (string, error) {
 		return c.ProjectID, nil
 	}
 
-	// 2. Try to extract from service account token
+	// 2. Try get from service account token
+	prjID, err := c.maybeGetProjectFromServiceAccount()
+	if err != nil {
+		slog.Warn("failed to get project from service account", "error", err)
+		return "", fmt.Errorf("no project configured. Please set your project ID or use a service account token with a project_id claim")
+	}
+	c.ProjectID = prjID
+
+	return prjID, nil
+}
+
+func (c *Config) maybeGetProjectFromServiceAccount() (string, error) {
+	// 1. Try to extract from service account token
 	// First check environment variable
 	if token := os.Getenv("CEREBRIUM_SERVICE_ACCOUNT_TOKEN"); token != "" {
 		if claims, err := auth.ParseClaims(token); err == nil {
@@ -249,7 +270,7 @@ func (c *Config) GetCurrentProject() (string, error) {
 		}
 	}
 
-	// Then check stored service account token
+	// 2. Then check stored service account token
 	if c.ServiceAccountToken != "" {
 		if claims, err := auth.ParseClaims(c.ServiceAccountToken); err == nil {
 			if projectID := ExtractProjectIDFromClaims(claims); projectID != "" {
@@ -257,8 +278,7 @@ func (c *Config) GetCurrentProject() (string, error) {
 			}
 		}
 	}
-
-	return "", fmt.Errorf("no project configured. Please set your project ID or use a service account token with a project_id claim")
+	return "", errors.New("no project claim present in service account token")
 }
 
 // SetCurrentProject sets and saves the current project ID
