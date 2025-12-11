@@ -233,6 +233,8 @@ func (c *client) connect(ctx context.Context, projectID, buildID string, from ti
 		return nil, fmt.Errorf("websocket dial failed: %w", err)
 	}
 
+	// TODO(wes): Gracefully handle auth errors, like `client` does
+
 	slog.Info("Connected to build logs websocket",
 		"projectID", projectID,
 		"buildID", buildID,
