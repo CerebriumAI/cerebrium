@@ -36,15 +36,17 @@ type HardwareConfig struct {
 
 // ScalingConfig represents the [cerebrium.scaling] section
 type ScalingConfig struct {
-	MinReplicas            *int    `mapstructure:"min_replicas" toml:"min_replicas,omitempty"`
-	MaxReplicas            *int    `mapstructure:"max_replicas" toml:"max_replicas,omitempty"`
-	Cooldown               *int    `mapstructure:"cooldown" toml:"cooldown,omitempty"`
-	ReplicaConcurrency     *int    `mapstructure:"replica_concurrency" toml:"replica_concurrency,omitempty"`
-	ResponseGracePeriod    *int    `mapstructure:"response_grace_period" toml:"response_grace_period,omitempty"`
-	ScalingMetric          *string `mapstructure:"scaling_metric" toml:"scaling_metric,omitempty"`
-	ScalingTarget          *int    `mapstructure:"scaling_target" toml:"scaling_target,omitempty"`
-	ScalingBuffer          *int    `mapstructure:"scaling_buffer" toml:"scaling_buffer,omitempty"`
-	RollOutDurationSeconds *int    `mapstructure:"roll_out_duration_seconds" toml:"roll_out_duration_seconds,omitempty"`
+	MinReplicas               *int    `mapstructure:"min_replicas" toml:"min_replicas,omitempty"`
+	MaxReplicas               *int    `mapstructure:"max_replicas" toml:"max_replicas,omitempty"`
+	Cooldown                  *int    `mapstructure:"cooldown" toml:"cooldown,omitempty"`
+	ReplicaConcurrency        *int    `mapstructure:"replica_concurrency" toml:"replica_concurrency,omitempty"`
+	ResponseGracePeriod       *int    `mapstructure:"response_grace_period" toml:"response_grace_period,omitempty"`
+	ScalingMetric             *string `mapstructure:"scaling_metric" toml:"scaling_metric,omitempty"`
+	ScalingTarget             *int    `mapstructure:"scaling_target" toml:"scaling_target,omitempty"`
+	ScalingBuffer             *int    `mapstructure:"scaling_buffer" toml:"scaling_buffer,omitempty"`
+	RollOutDurationSeconds    *int    `mapstructure:"roll_out_duration_seconds" toml:"roll_out_duration_seconds,omitempty"`
+	EvaluationIntervalSeconds *int    `mapstructure:"evaluation_interval_seconds" toml:"evaluation_interval_seconds,omitempty"`
+	LoadBalancingAlgorithm    *string `mapstructure:"load_balancing_algorithm" toml:"load_balancing_algorithm,omitempty"`
 }
 
 // DependenciesConfig represents the [cerebrium.dependencies.*] sections
@@ -148,6 +150,12 @@ func (pc *ProjectConfig) ToPayload() map[string]any {
 	}
 	if pc.Scaling.RollOutDurationSeconds != nil {
 		payload["rollOutDurationSeconds"] = *pc.Scaling.RollOutDurationSeconds
+	}
+	if pc.Scaling.EvaluationIntervalSeconds != nil {
+		payload["evaluationIntervalSeconds"] = *pc.Scaling.EvaluationIntervalSeconds
+	}
+	if pc.Scaling.LoadBalancingAlgorithm != nil {
+		payload["loadBalancingAlgorithm"] = *pc.Scaling.LoadBalancingAlgorithm
 	}
 
 	// Runtime configuration
