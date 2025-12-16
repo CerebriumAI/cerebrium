@@ -76,11 +76,15 @@ func (m *GetView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.loading = false
 
 		if m.conf.SimpleOutput() {
-			// Simple mode: print directly
 			fmt.Print(m.formatAppDetailsSimple())
+			return m, tea.Quit
 		}
 
-		return m, tea.Quit
+		// Interactive mode: print to scrollback buffer so user can scroll
+		return m, tea.Sequence(
+			tea.Println(m.formatAppDetailsTable()),
+			tea.Quit,
+		)
 
 	case *ui.UIError:
 		msg.SilentExit = true
@@ -108,12 +112,10 @@ func (m *GetView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // View renders the output
 func (m *GetView) View() string {
-	// Simple mode: output has already been printed directly
 	if m.conf.SimpleOutput() {
 		return ""
 	}
 
-	// Interactive mode: full UI experience
 	if m.loading {
 		return m.spinner.View() + " Loading app details..."
 	}
@@ -122,12 +124,8 @@ func (m *GetView) View() string {
 		return ui.FormatError(m.err)
 	}
 
-	if m.appDetails == nil {
-		return ui.WarningStyle.Render("No app details found")
-	}
-
-	// Render detailed table
-	return m.formatAppDetailsTable()
+	// Output is printed via tea.Println in Update() for scrollback support
+	return ""
 }
 
 // formatAppDetailsTable formats app details for interactive display
