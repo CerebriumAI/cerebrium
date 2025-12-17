@@ -159,7 +159,7 @@ func (pc *ProjectConfig) ToPayload() map[string]any {
 		payload["readycheckEndpoint"] = pc.CustomRuntime.ReadycheckEndpoint
 		payload["dockerfilePath"] = pc.CustomRuntime.DockerfilePath
 		payload["partnerService"] = pc.PartnerService.Name
-		payload["runtime"] = pc.PartnerService.Name
+		payload["runtime"] = "custom" // Backend only accepts "custom" or "cortex"
 	} else if pc.CustomRuntime != nil {
 		// Custom runtime only
 		payload["entrypoint"] = pc.CustomRuntime.Entrypoint
@@ -169,9 +169,9 @@ func (pc *ProjectConfig) ToPayload() map[string]any {
 		payload["dockerfilePath"] = pc.CustomRuntime.DockerfilePath
 		payload["runtime"] = "custom"
 	} else if pc.PartnerService != nil {
-		// Partner service only
+		// Partner service only (e.g., rime, deepgram)
 		payload["partnerService"] = pc.PartnerService.Name
-		payload["runtime"] = pc.PartnerService.Name
+		payload["runtime"] = "custom" // Backend only accepts "custom" or "cortex"
 		if pc.PartnerService.Port != nil {
 			payload["port"] = *pc.PartnerService.Port
 		}
