@@ -1278,6 +1278,12 @@ func (m *DeployView) renderDeploymentSummary() string {
 			}
 			scalingItems = append(scalingItems, concurrency)
 		}
+		if m.conf.Config.Scaling.EvaluationIntervalSeconds != nil {
+			scalingItems = append(scalingItems, fmt.Sprintf("Evaluation Interval: %ds", *m.conf.Config.Scaling.EvaluationIntervalSeconds))
+		}
+		if m.conf.Config.Scaling.LoadBalancingAlgorithm != nil {
+			scalingItems = append(scalingItems, fmt.Sprintf("Load Balancing Algorithm: %s", *m.conf.Config.Scaling.LoadBalancingAlgorithm))
+		}
 		if len(scalingItems) > 0 {
 			formatSection("SCALING PARAMETERS", scalingItems)
 		}
@@ -1428,6 +1434,12 @@ func (m *DeployView) renderDeploymentSummary() string {
 			concurrency += " ⚠️  (Multiple concurrent requests on GPU)"
 		}
 		scalingRows = append(scalingRows, ui.TableRow{Label: "Replica Concurrency:", Value: concurrency})
+	}
+	if m.conf.Config.Scaling.EvaluationIntervalSeconds != nil {
+		scalingRows = append(scalingRows, ui.TableRow{Label: "Evaluation Interval:", Value: fmt.Sprintf("%ds", *m.conf.Config.Scaling.EvaluationIntervalSeconds)})
+	}
+	if m.conf.Config.Scaling.LoadBalancingAlgorithm != nil {
+		scalingRows = append(scalingRows, ui.TableRow{Label: "Load Balancing Algorithm:", Value: *m.conf.Config.Scaling.LoadBalancingAlgorithm})
 	}
 	if len(scalingRows) > 0 {
 		sections = append(sections, ui.TableSection{

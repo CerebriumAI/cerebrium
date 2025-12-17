@@ -9,16 +9,18 @@ import (
 
 // Default values matching Python implementation
 var (
-	DefaultPythonVersion       = "3.11"
-	DefaultDockerBaseImageURL  = "debian:bookworm-slim"
-	DefaultInclude             = []string{"./*", "main.py", "cerebrium.toml"}
-	DefaultExclude             = []string{".*"}
-	DefaultDisableAuth         = true
-	DefaultEntrypoint          = []string{"uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"}
-	DefaultPort                = 8000
-	DefaultHealthcheckEndpoint = ""
-	DefaultReadycheckEndpoint  = ""
-	DefaultProvider            = "aws"
+	DefaultPythonVersion            = "3.11"
+	DefaultDockerBaseImageURL       = "debian:bookworm-slim"
+	DefaultInclude                  = []string{"./*", "main.py", "cerebrium.toml"}
+	DefaultExclude                  = []string{".*"}
+	DefaultDisableAuth              = true
+	DefaultEntrypoint               = []string{"uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"}
+	DefaultPort                     = 8000
+	DefaultHealthcheckEndpoint      = ""
+	DefaultReadycheckEndpoint       = ""
+	DefaultProvider                 = "aws"
+	DefaultEvaluationIntervalSeconds = 30
+	DefaultLoadBalancingAlgorithm   = "round-robin"
 )
 
 // Load reads and parses the cerebrium.toml configuration file
@@ -128,6 +130,14 @@ func applyDefaults(config *ProjectConfig) {
 	// Apply hardware defaults
 	if config.Hardware.Provider == nil {
 		config.Hardware.Provider = &DefaultProvider
+	}
+
+	// Apply scaling defaults
+	if config.Scaling.EvaluationIntervalSeconds == nil {
+		config.Scaling.EvaluationIntervalSeconds = &DefaultEvaluationIntervalSeconds
+	}
+	if config.Scaling.LoadBalancingAlgorithm == nil {
+		config.Scaling.LoadBalancingAlgorithm = &DefaultLoadBalancingAlgorithm
 	}
 
 	// Apply custom runtime defaults
