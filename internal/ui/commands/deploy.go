@@ -102,7 +102,12 @@ type DeployView struct {
 func NewDeployView(ctx context.Context, conf DeployConfig) *DeployView {
 	initialState := StateConfirmation
 	if conf.DisableConfirmation {
-		initialState = StateLoadingFiles
+		// Partner services skip file loading/zipping/uploading
+		if conf.Config.PartnerService != nil {
+			initialState = StateCreatingApp
+		} else {
+			initialState = StateLoadingFiles
+		}
 	}
 
 	prog := progress.New(
@@ -130,6 +135,12 @@ func (m *DeployView) Error() error {
 	return m.err
 }
 
+// isPartnerService returns true if this is a partner service deployment
+// (runtime is not cortex or custom) - these don't require file upload
+func (m *DeployView) isPartnerService() bool {
+	return m.conf.Config.PartnerService != nil
+}
+
 func (m *DeployView) Init() tea.Cmd {
 	if m.state == StateConfirmation {
 		// In non-TTY mode, show confirmation prompt and wait for input
@@ -141,7 +152,16 @@ func (m *DeployView) Init() tea.Cmd {
 		return nil
 	}
 
-	// Confirmation disabled, start loading files
+	// Confirmation disabled - start appropriate flow
+	if m.isPartnerService() {
+		// Partner services skip file loading/zipping, go directly to create app
+		return tea.Batch(
+			m.spinner.Init(),
+			m.createApp,
+		)
+	}
+
+	// Standard flow: start loading files
 	return tea.Batch(
 		m.spinner.Init(),
 		m.loadFiles,
@@ -263,6 +283,73 @@ func (m *DeployView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.appResponse = msg.response
 		m.buildID = msg.response.BuildID
 		m.buildStatus = msg.response.Status
+
+		// Partner services don't have an upload URL - skip directly to build monitoring
+		if msg.response.UploadURL == "" {
+			m.state = StateBuildingApp
+
+			if m.conf.SimpleOutput() {
+				fmt.Printf("✓ Created app (Build ID: %s)\n", msg.response.BuildID)
+			}
+
+			// Handle detach mode
+			if m.conf.Detach {
+				if m.conf.SimpleOutput() {
+					fmt.Println("✓ Build started in detached mode")
+					fmt.Printf("  Build ID: %s\n", m.buildID)
+					fmt.Println("  Check the dashboard for build status.")
+				} else {
+					return m, tea.Sequence(
+						tea.Println(ui.SuccessStyle.Render(fmt.Sprintf("✓  Created app (Build ID: %s)", msg.response.BuildID))),
+						tea.Println(ui.SuccessStyle.Render("✓  Build started in detached mode")),
+						tea.Println(fmt.Sprintf("   Build ID: %s", m.buildID)),
+						tea.Println("   Check the dashboard for build status."),
+						tea.Quit,
+					)
+				}
+				m.state = StateDeploySuccess
+				return m, tea.Quit
+			}
+
+			if m.conf.SimpleOutput() {
+				fmt.Println("Building app...")
+			}
+
+			// Initialize log viewer with streaming provider
+			provider := logging.NewStreamingBuildLogProvider(logging.StreamingBuildLogProviderConfig{
+				Client:    m.conf.WSClient,
+				ProjectID: m.conf.ProjectID,
+				BuildID:   m.buildID,
+			})
+			tickInterval := 50 * time.Millisecond
+
+			m.logViewer = logging.NewLogViewer(m.ctx, logging.LogViewerConfig{
+				DisplayConfig: m.conf.DisplayConfig,
+				Provider:      provider,
+				TickInterval:  tickInterval,
+				ShowHelp:      true,
+				AutoExpand:    true,
+			})
+
+			if !m.conf.SimpleOutput() {
+				printCmds := tea.Sequence(
+					tea.Println(ui.SuccessStyle.Render(fmt.Sprintf("✓  Created app (Build ID: %s)", msg.response.BuildID))),
+					tea.Println(""),
+				)
+				return m, tea.Batch(
+					printCmds,
+					m.logViewer.Init(),
+					m.pollBuildStatus,
+				)
+			}
+
+			return m, tea.Batch(
+				m.logViewer.Init(),
+				m.pollBuildStatus,
+			)
+		}
+
+		// Standard flow: upload zip file
 		m.state = StateUploadingZip
 		m.uploadStartTime = time.Now()
 		m.lastPrintedPercent = 0 // Reset progress tracking
@@ -486,6 +573,14 @@ func (m *DeployView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case confirmationResponseMsg:
 		// Handle non-TTY confirmation response
 		if msg.confirmed {
+			if m.isPartnerService() {
+				// Partner services skip file loading/zipping, go directly to create app
+				m.state = StateCreatingApp
+				return m, tea.Batch(
+					m.spinner.Init(),
+					m.createApp,
+				)
+			}
 			m.state = StateLoadingFiles
 			return m, tea.Batch(
 				m.spinner.Init(),
@@ -692,6 +787,14 @@ func (m *DeployView) onKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 		case "y", "Y", "enter":
 			// User confirmed deployment
+			if m.isPartnerService() {
+				// Partner services skip file loading/zipping, go directly to create app
+				m.state = StateCreatingApp
+				return m, tea.Batch(
+					m.spinner.Init(),
+					m.createApp,
+				)
+			}
 			m.state = StateLoadingFiles
 			return m, tea.Batch(
 				m.spinner.Init(),

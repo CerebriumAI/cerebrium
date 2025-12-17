@@ -394,7 +394,16 @@ func (c *client) UpdateApp(ctx context.Context, projectID, appID string, updates
 
 // CreateApp creates a new app/build
 func (c *client) CreateApp(ctx context.Context, projectID string, payload map[string]any) (*CreateAppResponse, error) {
-	path := fmt.Sprintf("v2/projects/%s/apps", projectID)
+	// Determine endpoint based on runtime type
+	// Partner services (non-cortex, non-custom) use /partner-apps
+	endpoint := "apps"
+	if runtime, ok := payload["runtime"].(string); ok {
+		if runtime != "cortex" && runtime != "custom" {
+			endpoint = "partner-apps"
+		}
+	}
+
+	path := fmt.Sprintf("v2/projects/%s/%s", projectID, endpoint)
 	body, err := c.request(ctx, "POST", path, payload, true)
 	if err != nil {
 		return nil, err
