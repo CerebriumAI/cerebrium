@@ -12,7 +12,7 @@
 │  DEPLOYMENT PARAMETERS                                                      │
 │                                                                             │
 │  Name:                         comprehensive-app                            │
-│  Runtime:                      cortex                                       │
+│  Runtime:                      Cortex                                       │
 │  Python Version:               3.11                                         │
 │  Include:                      *.py, requirements.txt                       │
 │  Exclude:                      __pycache__, *.pyc                           │

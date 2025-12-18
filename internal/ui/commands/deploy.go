@@ -1297,6 +1297,81 @@ func (m *DeployView) waitForConfirmation() tea.Msg {
 	return confirmationResponseMsg{confirmed: false}
 }
 
+// getRuntimeType returns a user-friendly runtime type name
+func getRuntimeType(config *projectconfig.ProjectConfig) string {
+	if config.PartnerService != nil {
+		// Return partner service name (capitalize first letter)
+		if config.PartnerService.Name != "" {
+			return strings.ToUpper(string(config.PartnerService.Name[0])) + config.PartnerService.Name[1:]
+		}
+		return config.PartnerService.Name
+	}
+
+	if config.CustomRuntime != nil {
+		if config.CustomRuntime.DockerfilePath != "" {
+			return "Custom Docker"
+		}
+		return "Custom Python (ASGI/WSGI)"
+	}
+
+	return "Cortex"
+}
+
+// isCustomDocker returns true if this is a Custom Docker deployment
+func isCustomDocker(config *projectconfig.ProjectConfig) bool {
+	return config.CustomRuntime != nil && config.CustomRuntime.DockerfilePath != ""
+}
+
+// isCustomPython returns true if this is a Custom Python deployment
+func isCustomPython(config *projectconfig.ProjectConfig) bool {
+	return config.CustomRuntime != nil && config.CustomRuntime.DockerfilePath == ""
+}
+
+// isPartnerServiceRuntime returns true if this is a Partner Service deployment
+func isPartnerServiceRuntime(config *projectconfig.ProjectConfig) bool {
+	return config.PartnerService != nil
+}
+
+// isCortexRuntime returns true if this is a Cortex (default) deployment
+func isCortexRuntime(config *projectconfig.ProjectConfig) bool {
+	return config.CustomRuntime == nil && config.PartnerService == nil
+}
+
+// renderRuntimeSpecificSettings returns runtime-specific configuration as a string
+func renderRuntimeSpecificSettings(config *projectconfig.ProjectConfig) string {
+	if config.CustomRuntime != nil {
+		// Custom Docker or Custom Python
+		var settings []string
+
+		if config.CustomRuntime.DockerfilePath != "" {
+			settings = append(settings, fmt.Sprintf("Dockerfile: %s", config.CustomRuntime.DockerfilePath))
+		}
+
+		// Port is required for custom runtimes, always show it
+		settings = append(settings, fmt.Sprintf("Port: %d", config.CustomRuntime.Port))
+
+		if len(config.CustomRuntime.Entrypoint) > 0 {
+			settings = append(settings, fmt.Sprintf("Entrypoint: %s", strings.Join(config.CustomRuntime.Entrypoint, " ")))
+		}
+
+		if config.CustomRuntime.HealthcheckEndpoint != "" {
+			settings = append(settings, fmt.Sprintf("Healthcheck: %s", config.CustomRuntime.HealthcheckEndpoint))
+		}
+
+		if config.CustomRuntime.ReadycheckEndpoint != "" {
+			settings = append(settings, fmt.Sprintf("Readycheck: %s", config.CustomRuntime.ReadycheckEndpoint))
+		}
+
+		return strings.Join(settings, "\n")
+	}
+
+	if config.PartnerService != nil && config.PartnerService.Port != nil {
+		return fmt.Sprintf("Port: %d", *config.PartnerService.Port)
+	}
+
+	return "" // Cortex has no runtime-specific settings
+}
+
 // renderDeploymentSummary creates the deployment configuration summary
 func (m *DeployView) renderDeploymentSummary() string {
 	// For simple output mode, use plain text
@@ -1341,27 +1416,20 @@ func (m *DeployView) renderDeploymentSummary() string {
 		var deploymentItems []string
 		deploymentItems = append(deploymentItems, fmt.Sprintf("Name: %s", m.conf.Config.Deployment.Name))
 
-		// Determine runtime type
-		runtime := "cortex"
-		if m.conf.Config.CustomRuntime != nil {
-			runtime = "custom"
-		}
-		if m.conf.Config.PartnerService != nil {
-			runtime = m.conf.Config.PartnerService.Name
-		}
-		deploymentItems = append(deploymentItems, fmt.Sprintf("Runtime: %s", runtime))
+		// Display runtime type using the helper function
+		deploymentItems = append(deploymentItems, fmt.Sprintf("Runtime: %s", getRuntimeType(m.conf.Config)))
 
-		if m.conf.Config.Deployment.PythonVersion != "" {
-			deploymentItems = append(deploymentItems, fmt.Sprintf("Python Version: %s", m.conf.Config.Deployment.PythonVersion))
-		}
-		if m.conf.Config.Deployment.DockerBaseImageURL != "" {
-			deploymentItems = append(deploymentItems, fmt.Sprintf("Docker Image: %s", m.conf.Config.Deployment.DockerBaseImageURL))
-		}
-		if m.conf.Config.CustomRuntime != nil && m.conf.Config.CustomRuntime.DockerfilePath != "" {
-			deploymentItems = append(deploymentItems, fmt.Sprintf("Dockerfile: %s", m.conf.Config.CustomRuntime.DockerfilePath))
+		// Show Python Version and Docker Image only for non-Custom Docker runtimes
+		if !isCustomDocker(m.conf.Config) {
+			if m.conf.Config.Deployment.PythonVersion != "" {
+				deploymentItems = append(deploymentItems, fmt.Sprintf("Python Version: %s", m.conf.Config.Deployment.PythonVersion))
+			}
+			if m.conf.Config.Deployment.DockerBaseImageURL != "" {
+				deploymentItems = append(deploymentItems, fmt.Sprintf("Docker Image: %s", m.conf.Config.Deployment.DockerBaseImageURL))
+			}
 		}
 
-		// Include/Exclude patterns
+		// Include/Exclude patterns (shown for all runtime types)
 		if len(m.conf.Config.Deployment.Include) > 0 {
 			deploymentItems = append(deploymentItems, fmt.Sprintf("Include: %s", strings.Join(m.conf.Config.Deployment.Include, ", ")))
 		}
@@ -1370,6 +1438,13 @@ func (m *DeployView) renderDeploymentSummary() string {
 		}
 
 		formatSection("DEPLOYMENT PARAMETERS", deploymentItems)
+
+		// RUNTIME-SPECIFIC PARAMETERS (Custom Python, Custom Docker, or Partner Service)
+		runtimeSettings := renderRuntimeSpecificSettings(m.conf.Config)
+		if runtimeSettings != "" {
+			runtimeItems := strings.Split(runtimeSettings, "\n")
+			formatSection("RUNTIME PARAMETERS", runtimeItems)
+		}
 
 		// SCALING PARAMETERS
 		var scalingItems []string
@@ -1495,27 +1570,20 @@ func (m *DeployView) renderDeploymentSummary() string {
 	var deploymentRows []ui.TableRow
 	deploymentRows = append(deploymentRows, ui.TableRow{Label: "Name:", Value: m.conf.Config.Deployment.Name})
 
-	// Determine runtime type
-	runtime := "cortex"
-	if m.conf.Config.CustomRuntime != nil {
-		runtime = "custom"
-	}
-	if m.conf.Config.PartnerService != nil {
-		runtime = m.conf.Config.PartnerService.Name
-	}
-	deploymentRows = append(deploymentRows, ui.TableRow{Label: "Runtime:", Value: runtime})
+	// Display runtime type using the helper function
+	deploymentRows = append(deploymentRows, ui.TableRow{Label: "Runtime:", Value: getRuntimeType(m.conf.Config)})
 
-	if m.conf.Config.Deployment.PythonVersion != "" {
-		deploymentRows = append(deploymentRows, ui.TableRow{Label: "Python Version:", Value: m.conf.Config.Deployment.PythonVersion})
-	}
-	if m.conf.Config.Deployment.DockerBaseImageURL != "" {
-		deploymentRows = append(deploymentRows, ui.TableRow{Label: "Docker Image:", Value: m.conf.Config.Deployment.DockerBaseImageURL})
-	}
-	if m.conf.Config.CustomRuntime != nil && m.conf.Config.CustomRuntime.DockerfilePath != "" {
-		deploymentRows = append(deploymentRows, ui.TableRow{Label: "Dockerfile:", Value: m.conf.Config.CustomRuntime.DockerfilePath})
+	// Show Python Version and Docker Image only for non-Custom Docker runtimes
+	if !isCustomDocker(m.conf.Config) {
+		if m.conf.Config.Deployment.PythonVersion != "" {
+			deploymentRows = append(deploymentRows, ui.TableRow{Label: "Python Version:", Value: m.conf.Config.Deployment.PythonVersion})
+		}
+		if m.conf.Config.Deployment.DockerBaseImageURL != "" {
+			deploymentRows = append(deploymentRows, ui.TableRow{Label: "Docker Image:", Value: m.conf.Config.Deployment.DockerBaseImageURL})
+		}
 	}
 
-	// Include/Exclude patterns
+	// Include/Exclude patterns (shown for all runtime types)
 	if len(m.conf.Config.Deployment.Include) > 0 {
 		deploymentRows = append(deploymentRows, ui.TableRow{Label: "Include:", Value: strings.Join(m.conf.Config.Deployment.Include, ", ")})
 	}
@@ -1527,6 +1595,26 @@ func (m *DeployView) renderDeploymentSummary() string {
 		Header: "DEPLOYMENT PARAMETERS",
 		Rows:   deploymentRows,
 	})
+
+	// RUNTIME-SPECIFIC PARAMETERS (Custom Python, Custom Docker, or Partner Service)
+	runtimeSettings := renderRuntimeSpecificSettings(m.conf.Config)
+	if runtimeSettings != "" {
+		var runtimeRows []ui.TableRow
+		for _, line := range strings.Split(runtimeSettings, "\n") {
+			if line != "" {
+				parts := strings.SplitN(line, ": ", 2)
+				if len(parts) == 2 {
+					runtimeRows = append(runtimeRows, ui.TableRow{Label: parts[0] + ":", Value: parts[1]})
+				}
+			}
+		}
+		if len(runtimeRows) > 0 {
+			sections = append(sections, ui.TableSection{
+				Header: "RUNTIME PARAMETERS",
+				Rows:   runtimeRows,
+			})
+		}
+	}
 
 	// SCALING PARAMETERS
 	var scalingRows []ui.TableRow
