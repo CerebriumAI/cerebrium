@@ -419,13 +419,26 @@ func (m *FileDownloadView) checkPathType() tea.Msg {
 		return ui.NewAPIError(fmt.Errorf("directory not found: %s", m.conf.RemotePath))
 	}
 
-	// No trailing slash - verify file exists via download URL
-	_, err := m.conf.Client.GetDownloadURL(m.ctx, m.conf.Config.ProjectID, m.conf.RemotePath, m.conf.Region)
+	// No trailing slash - verify file exists via download URL and get its size.
+	// When a file isn't found in the parent directory listing (above), we lose access
+	// to its metadata (size). We use GetDownloadURL to verify the file exists, then
+	// make a HEAD request to retrieve the Content-Length so we can display accurate
+	// progress information during download.
+	downloadURL, err := m.conf.Client.GetDownloadURL(m.ctx, m.conf.Config.ProjectID, m.conf.RemotePath, m.conf.Region)
 	if err != nil {
 		return ui.NewAPIError(fmt.Errorf("file not found: %s", m.conf.RemotePath))
 	}
 
-	return pathTypeMsg{isDirectory: false, fileSize: 0}
+	// Get file size via HEAD request (falls back to 0 if HEAD fails)
+	fileSize := int64(0)
+	headResp, err := http.Head(downloadURL)
+	if err == nil && headResp.StatusCode == http.StatusOK {
+		fileSize = headResp.ContentLength
+		headResp.Body.Close()
+	}
+
+	// File exists and is ready to download
+	return pathTypeMsg{isDirectory: false, fileSize: fileSize}
 }
 
 // findFileInParentDirectory looks for the target in its parent directory listing.

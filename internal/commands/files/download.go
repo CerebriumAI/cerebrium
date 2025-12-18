@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"strings"
 
 	"github.com/cerebriumai/cerebrium/internal/api"
 	"github.com/cerebriumai/cerebrium/internal/ui"
@@ -41,7 +42,15 @@ func runDownload(cmd *cobra.Command, args []string, region string) error {
 	cmd.SilenceUsage = true
 	cmd.SilenceErrors = true
 
-	remotePath := args[0]
+	// Normalize remote path to handle ./ prefixes and other path quirks
+	// Preserve trailing slash as it indicates directory intent
+	hasTrailingSlash := strings.HasSuffix(args[0], "/")
+	remotePath := filepath.Clean(args[0])
+	if remotePath == "." {
+		remotePath = "/"
+	} else if hasTrailingSlash && !strings.HasSuffix(remotePath, "/") {
+		remotePath += "/"
+	}
 	localPath := ""
 
 	// Determine local path
