@@ -262,6 +262,80 @@ func (_c *MockClient_CreateApp_Call) RunAndReturn(run func(ctx context.Context, 
 	return _c
 }
 
+// CreatePartnerApp provides a mock function for the type MockClient
+func (_mock *MockClient) CreatePartnerApp(ctx context.Context, projectID string, payload map[string]any) (*api.CreateAppResponse, error) {
+	ret := _mock.Called(ctx, projectID, payload)
+
+	if len(ret) == 0 {
+		panic("no return value specified for CreatePartnerApp")
+	}
+
+	var r0 *api.CreateAppResponse
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, map[string]any) (*api.CreateAppResponse, error)); ok {
+		return returnFunc(ctx, projectID, payload)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, map[string]any) *api.CreateAppResponse); ok {
+		r0 = returnFunc(ctx, projectID, payload)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*api.CreateAppResponse)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, map[string]any) error); ok {
+		r1 = returnFunc(ctx, projectID, payload)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockClient_CreatePartnerApp_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'CreatePartnerApp'
+type MockClient_CreatePartnerApp_Call struct {
+	*mock.Call
+}
+
+// CreatePartnerApp is a helper method to define mock.On call
+//   - ctx context.Context
+//   - projectID string
+//   - payload map[string]any
+func (_e *MockClient_Expecter) CreatePartnerApp(ctx interface{}, projectID interface{}, payload interface{}) *MockClient_CreatePartnerApp_Call {
+	return &MockClient_CreatePartnerApp_Call{Call: _e.mock.On("CreatePartnerApp", ctx, projectID, payload)}
+}
+
+func (_c *MockClient_CreatePartnerApp_Call) Run(run func(ctx context.Context, projectID string, payload map[string]any)) *MockClient_CreatePartnerApp_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 map[string]any
+		if args[2] != nil {
+			arg2 = args[2].(map[string]any)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockClient_CreatePartnerApp_Call) Return(createAppResponse *api.CreateAppResponse, err error) *MockClient_CreatePartnerApp_Call {
+	_c.Call.Return(createAppResponse, err)
+	return _c
+}
+
+func (_c *MockClient_CreatePartnerApp_Call) RunAndReturn(run func(ctx context.Context, projectID string, payload map[string]any) (*api.CreateAppResponse, error)) *MockClient_CreatePartnerApp_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // CreateBaseImage provides a mock function for the type MockClient
 func (_mock *MockClient) CreateBaseImage(ctx context.Context, projectID string, appID string, region string, payload api.BaseImagePayload) (string, error) {
 	ret := _mock.Called(ctx, projectID, appID, region, payload)

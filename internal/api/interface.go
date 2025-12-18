@@ -13,6 +13,7 @@ type Client interface {
 
 	// Deploy methods
 	CreateApp(ctx context.Context, projectID string, payload map[string]any) (*CreateAppResponse, error)
+	CreatePartnerApp(ctx context.Context, projectID string, payload map[string]any) (*CreateAppResponse, error)
 	UploadZip(ctx context.Context, uploadURL string, zipPath string) error
 	FetchBuildLogs(ctx context.Context, projectID, appName, buildID string) (*BuildLogsResponse, error)
 	GetBuild(ctx context.Context, projectID, appID, buildID string) (*AppBuild, error)
