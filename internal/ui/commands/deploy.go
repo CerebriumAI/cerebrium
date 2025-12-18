@@ -1419,7 +1419,7 @@ func (m *DeployView) renderDeploymentSummary() string {
 		// Display runtime type using the helper function
 		deploymentItems = append(deploymentItems, fmt.Sprintf("Runtime: %s", getRuntimeType(m.conf.Config)))
 
-		// Show Python Version, Docker Image, and Include/Exclude only for non-Custom Docker runtimes
+		// Show Python Version and Docker Image only for non-Custom Docker runtimes
 		if !isCustomDocker(m.conf.Config) {
 			if m.conf.Config.Deployment.PythonVersion != "" {
 				deploymentItems = append(deploymentItems, fmt.Sprintf("Python Version: %s", m.conf.Config.Deployment.PythonVersion))
@@ -1427,14 +1427,14 @@ func (m *DeployView) renderDeploymentSummary() string {
 			if m.conf.Config.Deployment.DockerBaseImageURL != "" {
 				deploymentItems = append(deploymentItems, fmt.Sprintf("Docker Image: %s", m.conf.Config.Deployment.DockerBaseImageURL))
 			}
+		}
 
-			// Include/Exclude patterns
-			if len(m.conf.Config.Deployment.Include) > 0 {
-				deploymentItems = append(deploymentItems, fmt.Sprintf("Include: %s", strings.Join(m.conf.Config.Deployment.Include, ", ")))
-			}
-			if len(m.conf.Config.Deployment.Exclude) > 0 {
-				deploymentItems = append(deploymentItems, fmt.Sprintf("Exclude: %s", strings.Join(m.conf.Config.Deployment.Exclude, ", ")))
-			}
+		// Include/Exclude patterns (shown for all runtime types)
+		if len(m.conf.Config.Deployment.Include) > 0 {
+			deploymentItems = append(deploymentItems, fmt.Sprintf("Include: %s", strings.Join(m.conf.Config.Deployment.Include, ", ")))
+		}
+		if len(m.conf.Config.Deployment.Exclude) > 0 {
+			deploymentItems = append(deploymentItems, fmt.Sprintf("Exclude: %s", strings.Join(m.conf.Config.Deployment.Exclude, ", ")))
 		}
 
 		formatSection("DEPLOYMENT PARAMETERS", deploymentItems)
@@ -1573,7 +1573,7 @@ func (m *DeployView) renderDeploymentSummary() string {
 	// Display runtime type using the helper function
 	deploymentRows = append(deploymentRows, ui.TableRow{Label: "Runtime:", Value: getRuntimeType(m.conf.Config)})
 
-	// Show Python Version, Docker Image, and Include/Exclude only for non-Custom Docker runtimes
+	// Show Python Version and Docker Image only for non-Custom Docker runtimes
 	if !isCustomDocker(m.conf.Config) {
 		if m.conf.Config.Deployment.PythonVersion != "" {
 			deploymentRows = append(deploymentRows, ui.TableRow{Label: "Python Version:", Value: m.conf.Config.Deployment.PythonVersion})
@@ -1581,14 +1581,14 @@ func (m *DeployView) renderDeploymentSummary() string {
 		if m.conf.Config.Deployment.DockerBaseImageURL != "" {
 			deploymentRows = append(deploymentRows, ui.TableRow{Label: "Docker Image:", Value: m.conf.Config.Deployment.DockerBaseImageURL})
 		}
+	}
 
-		// Include/Exclude patterns
-		if len(m.conf.Config.Deployment.Include) > 0 {
-			deploymentRows = append(deploymentRows, ui.TableRow{Label: "Include:", Value: strings.Join(m.conf.Config.Deployment.Include, ", ")})
-		}
-		if len(m.conf.Config.Deployment.Exclude) > 0 {
-			deploymentRows = append(deploymentRows, ui.TableRow{Label: "Exclude:", Value: strings.Join(m.conf.Config.Deployment.Exclude, ", ")})
-		}
+	// Include/Exclude patterns (shown for all runtime types)
+	if len(m.conf.Config.Deployment.Include) > 0 {
+		deploymentRows = append(deploymentRows, ui.TableRow{Label: "Include:", Value: strings.Join(m.conf.Config.Deployment.Include, ", ")})
+	}
+	if len(m.conf.Config.Deployment.Exclude) > 0 {
+		deploymentRows = append(deploymentRows, ui.TableRow{Label: "Exclude:", Value: strings.Join(m.conf.Config.Deployment.Exclude, ", ")})
 	}
 
 	sections = append(sections, ui.TableSection{
