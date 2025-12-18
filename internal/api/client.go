@@ -711,6 +711,27 @@ func (c *client) GetDownloadURL(ctx context.Context, projectID, filePath, region
 	return response.URL, nil
 }
 
+// GetFileSize retrieves the file size from a URL using a HEAD request.
+// Returns 0 if the size cannot be determined.
+func (c *client) GetFileSize(ctx context.Context, url string) (int64, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodHead, url, nil)
+	if err != nil {
+		return 0, fmt.Errorf("failed to create HEAD request: %w", err)
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return 0, fmt.Errorf("HEAD request failed: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		return 0, fmt.Errorf("HEAD request returned status %d", resp.StatusCode)
+	}
+
+	return resp.ContentLength, nil
+}
+
 // DeleteFile removes a file or directory from persistent storage
 func (c *client) DeleteFile(ctx context.Context, projectID, filePath, region string) error {
 	queryParams := url.Values{}

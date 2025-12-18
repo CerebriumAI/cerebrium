@@ -31,5 +31,6 @@ type Client interface {
 	UploadPart(ctx context.Context, url string, data []byte) (string, error) // Returns ETag
 	CompleteUpload(ctx context.Context, projectID, filePath, uploadID, region string, parts []PartInfo) error
 	GetDownloadURL(ctx context.Context, projectID, filePath, region string) (string, error)
+	GetFileSize(ctx context.Context, url string) (int64, error)
 	DeleteFile(ctx context.Context, projectID, filePath, region string) error
 }

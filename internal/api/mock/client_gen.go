@@ -1069,6 +1069,69 @@ func (_c *MockClient_GetDownloadURL_Call) RunAndReturn(run func(ctx context.Cont
 	return _c
 }
 
+// GetFileSize provides a mock function for the type MockClient
+func (_mock *MockClient) GetFileSize(ctx context.Context, url string) (int64, error) {
+	ret := _mock.Called(ctx, url)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetFileSize")
+	}
+
+	var r0 int64
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) (int64, error)); ok {
+		return returnFunc(ctx, url)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) int64); ok {
+		r0 = returnFunc(ctx, url)
+	} else {
+		r0 = ret.Get(0).(int64)
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string) error); ok {
+		r1 = returnFunc(ctx, url)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockClient_GetFileSize_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetFileSize'
+type MockClient_GetFileSize_Call struct {
+	*mock.Call
+}
+
+// GetFileSize is a helper method to define mock.On call
+//   - ctx context.Context
+//   - url string
+func (_e *MockClient_Expecter) GetFileSize(ctx interface{}, url interface{}) *MockClient_GetFileSize_Call {
+	return &MockClient_GetFileSize_Call{Call: _e.mock.On("GetFileSize", ctx, url)}
+}
+
+func (_c *MockClient_GetFileSize_Call) Run(run func(ctx context.Context, url string)) *MockClient_GetFileSize_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		run(arg0, arg1)
+	})
+	return _c
+}
+
+func (_c *MockClient_GetFileSize_Call) Return(size int64, err error) *MockClient_GetFileSize_Call {
+	_c.Call.Return(size, err)
+	return _c
+}
+
+func (_c *MockClient_GetFileSize_Call) RunAndReturn(run func(ctx context.Context, url string) (int64, error)) *MockClient_GetFileSize_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // GetProjects provides a mock function for the type MockClient
 func (_mock *MockClient) GetProjects(ctx context.Context) ([]api.Project, error) {
 	ret := _mock.Called(ctx)

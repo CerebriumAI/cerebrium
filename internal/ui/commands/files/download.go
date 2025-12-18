@@ -403,7 +403,7 @@ type downloadProgressTickMsg time.Time
 // Commands (async operations)
 
 func (m *FileDownloadView) checkPathType() tea.Msg {
-	// First check if it's a file by looking in parent directory
+	// Try to find item in parent directory listing first (provides metadata)
 	if fileInfo := m.findFileInParentDirectory(); fileInfo != nil {
 		return pathTypeMsg{
 			isDirectory: fileInfo.IsFolder,
@@ -411,31 +411,49 @@ func (m *FileDownloadView) checkPathType() tea.Msg {
 		}
 	}
 
-	// Not found as a file, try listing as directory
-	if m.tryListAsDirectory() {
-		return pathTypeMsg{isDirectory: true, fileSize: 0}
+	// Not in parent listing - use trailing slash to determine type
+	if strings.HasSuffix(m.conf.RemotePath, "/") {
+		if m.tryListAsDirectory() {
+			return pathTypeMsg{isDirectory: true, fileSize: 0}
+		}
+		return ui.NewAPIError(fmt.Errorf("directory not found: %s", m.conf.RemotePath))
 	}
 
-	return ui.NewAPIError(fmt.Errorf("remote path not found: %s", m.conf.RemotePath))
+	// No trailing slash - verify file exists via download URL and get its size.
+	// When a file isn't found in the parent directory listing (above), we lose access
+	// to its metadata (size). We use GetDownloadURL to verify the file exists, then
+	// make a HEAD request to retrieve the Content-Length so we can display accurate
+	// progress information during download.
+	downloadURL, err := m.conf.Client.GetDownloadURL(m.ctx, m.conf.Config.ProjectID, m.conf.RemotePath, m.conf.Region)
+	if err != nil {
+		return ui.NewAPIError(fmt.Errorf("file not found: %s", m.conf.RemotePath))
+	}
+
+	// Get file size via HEAD request (falls back to 0 if unavailable)
+	fileSize, err := m.conf.Client.GetFileSize(m.ctx, downloadURL)
+	if err != nil {
+		// File exists but size is unknown - continue with 0
+		fileSize = 0
+	}
+
+	// File exists and is ready to download
+	return pathTypeMsg{isDirectory: false, fileSize: fileSize}
 }
 
-// findFileInParentDirectory looks for the file in its parent directory
+// findFileInParentDirectory looks for the target in its parent directory listing.
 func (m *FileDownloadView) findFileInParentDirectory() *api.FileInfo {
 	parentDir := filepath.Dir(m.conf.RemotePath)
 	fileName := filepath.Base(m.conf.RemotePath)
 
-	// Special case for root-level items
 	if parentDir == "." {
 		parentDir = "/"
 	}
 
-	// List parent directory
 	parentFiles, err := m.conf.Client.ListFiles(m.ctx, m.conf.Config.ProjectID, parentDir, m.conf.Region)
 	if err != nil {
 		return nil
 	}
 
-	// Look for the file
 	for _, file := range parentFiles {
 		if file.Name == fileName || file.Name == fileName+"/" {
 			return &file
@@ -445,10 +463,10 @@ func (m *FileDownloadView) findFileInParentDirectory() *api.FileInfo {
 	return nil
 }
 
-// tryListAsDirectory attempts to list the path as a directory
+// tryListAsDirectory checks if the path is a non-empty directory.
 func (m *FileDownloadView) tryListAsDirectory() bool {
-	_, err := m.conf.Client.ListFiles(m.ctx, m.conf.Config.ProjectID, m.conf.RemotePath, m.conf.Region)
-	return err == nil
+	files, err := m.conf.Client.ListFiles(m.ctx, m.conf.Config.ProjectID, m.conf.RemotePath, m.conf.Region)
+	return err == nil && len(files) > 0
 }
 
 func (m *FileDownloadView) collectFiles() tea.Msg {
