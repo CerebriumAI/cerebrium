@@ -392,7 +392,7 @@ func (c *client) UpdateApp(ctx context.Context, projectID, appID string, updates
 	return err
 }
 
-// CreateApp creates a new app/build
+// CreateApp creates a new app/build for standard (cortex/custom) deployments
 func (c *client) CreateApp(ctx context.Context, projectID string, payload map[string]any) (*CreateAppResponse, error) {
 	// Determine endpoint based on runtime type
 	// Partner services (non-cortex, non-custom) use /partner-apps
@@ -412,6 +412,23 @@ func (c *client) CreateApp(ctx context.Context, projectID string, payload map[st
 	var response CreateAppResponse
 	if err := json.Unmarshal(body, &response); err != nil {
 		return nil, fmt.Errorf("failed to parse create app response: %w", err)
+	}
+
+	return &response, nil
+}
+
+// CreatePartnerApp creates a new partner service app/build
+// Partner services use the /partner-apps endpoint and don't require file upload
+func (c *client) CreatePartnerApp(ctx context.Context, projectID string, payload map[string]any) (*CreateAppResponse, error) {
+	path := fmt.Sprintf("v2/projects/%s/partner-apps", projectID)
+	body, err := c.request(ctx, "POST", path, payload, true)
+	if err != nil {
+		return nil, err
+	}
+
+	var response CreateAppResponse
+	if err := json.Unmarshal(body, &response); err != nil {
+		return nil, fmt.Errorf("failed to parse create partner app response: %w", err)
 	}
 
 	return &response, nil

@@ -71,17 +71,18 @@ type DeployView struct {
 	state DeployState
 
 	// State data
-	fileList    []string
-	zipPath     string
-	zipSize     int64
-	buildID     string
-	appResponse *api.CreateAppResponse
-	logViewer   *logging.LogViewerModel
-	idleMsgIdx  int
-	buildStatus string
-	spinner     *ui.SpinnerModel
-	message     string
-	err         *ui.UIError
+	isPartnerDeploy bool // Track if this is a partner app deployment
+	fileList        []string
+	zipPath         string
+	zipSize         int64
+	buildID         string
+	appResponse     *api.CreateAppResponse
+	logViewer       *logging.LogViewerModel
+	idleMsgIdx      int
+	buildStatus     string
+	spinner         *ui.SpinnerModel
+	message         string
+	err             *ui.UIError
 
 	// Upload progress tracking
 	progressBar         progress.Model
@@ -101,9 +102,10 @@ type DeployView struct {
 // NewDeployView creates a new deploy view
 func NewDeployView(ctx context.Context, conf DeployConfig) *DeployView {
 	initialState := StateConfirmation
+	isPartnerDeploy := conf.Config.PartnerService != nil
+
 	if conf.DisableConfirmation {
-		// Partner services skip file loading/zipping/uploading
-		if conf.Config.PartnerService != nil {
+		if isPartnerDeploy {
 			initialState = StateCreatingApp
 		} else {
 			initialState = StateLoadingFiles
@@ -118,13 +120,14 @@ func NewDeployView(ctx context.Context, conf DeployConfig) *DeployView {
 	ctx, cancel := context.WithCancel(ctx)
 
 	return &DeployView{
-		ctx:                 ctx,
-		ctxCancel:           cancel,
-		state:               initialState,
-		spinner:             ui.NewSpinner(),
-		progressBar:         prog,
+		ctx:             ctx,
+		ctxCancel:       cancel,
+		state:           initialState,
+		isPartnerDeploy: isPartnerDeploy,
+		spinner:         ui.NewSpinner(),
+		progressBar:     prog,
 		atomicBytesUploaded: &atomic.Int64{},
-		conf:                conf,
+		conf:            conf,
 	}
 }
 
@@ -138,7 +141,7 @@ func (m *DeployView) Error() error {
 // isPartnerService returns true if this is a partner service deployment
 // (runtime is not cortex or custom) - these don't require file upload
 func (m *DeployView) isPartnerService() bool {
-	return m.conf.Config.PartnerService != nil
+	return m.isPartnerDeploy
 }
 
 func (m *DeployView) Init() tea.Cmd {
@@ -284,8 +287,8 @@ func (m *DeployView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.buildID = msg.response.BuildID
 		m.buildStatus = msg.response.Status
 
-		// Partner services don't have an upload URL - skip directly to build monitoring
-		if msg.response.UploadURL == "" {
+		// Partner services skip upload - go directly to build monitoring
+		if m.isPartnerDeploy {
 			m.state = StateBuildingApp
 
 			if m.conf.SimpleOutput() {
@@ -1038,7 +1041,14 @@ func (m *DeployView) createApp() tea.Msg {
 		}
 	}
 
-	response, err := m.conf.Client.CreateApp(m.ctx, m.conf.ProjectID, payload)
+	var response *api.CreateAppResponse
+
+	if m.isPartnerDeploy {
+		response, err = m.conf.Client.CreatePartnerApp(m.ctx, m.conf.ProjectID, payload)
+	} else {
+		response, err = m.conf.Client.CreateApp(m.ctx, m.conf.ProjectID, payload)
+	}
+
 	if err != nil {
 		return ui.NewAPIError(fmt.Errorf("failed to create app: %w", err))
 	}
