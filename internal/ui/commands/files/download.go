@@ -429,15 +429,11 @@ func (m *FileDownloadView) checkPathType() tea.Msg {
 		return ui.NewAPIError(fmt.Errorf("file not found: %s", m.conf.RemotePath))
 	}
 
-	// Get file size via HEAD request (falls back to 0 if HEAD fails)
-	fileSize := int64(0)
-	headReq, err := http.NewRequestWithContext(m.ctx, http.MethodHead, downloadURL, nil)
-	if err == nil {
-		headResp, err := http.DefaultClient.Do(headReq)
-		if err == nil && headResp.StatusCode == http.StatusOK {
-			fileSize = headResp.ContentLength
-			_ = headResp.Body.Close()
-		}
+	// Get file size via HEAD request (falls back to 0 if unavailable)
+	fileSize, err := m.conf.Client.GetFileSize(m.ctx, downloadURL)
+	if err != nil {
+		// File exists but size is unknown - continue with 0
+		fileSize = 0
 	}
 
 	// File exists and is ready to download
