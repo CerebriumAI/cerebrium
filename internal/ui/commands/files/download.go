@@ -431,10 +431,13 @@ func (m *FileDownloadView) checkPathType() tea.Msg {
 
 	// Get file size via HEAD request (falls back to 0 if HEAD fails)
 	fileSize := int64(0)
-	headResp, err := http.Head(downloadURL)
-	if err == nil && headResp.StatusCode == http.StatusOK {
-		fileSize = headResp.ContentLength
-		headResp.Body.Close()
+	headReq, err := http.NewRequestWithContext(m.ctx, http.MethodHead, downloadURL, nil)
+	if err == nil {
+		headResp, err := http.DefaultClient.Do(headReq)
+		if err == nil && headResp.StatusCode == http.StatusOK {
+			fileSize = headResp.ContentLength
+			_ = headResp.Body.Close()
+		}
 	}
 
 	// File exists and is ready to download
