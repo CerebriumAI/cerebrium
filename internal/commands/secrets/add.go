@@ -11,6 +11,20 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// validSecretKeyChars defines what characters are allowed in secret keys.
+// Following Kubernetes secret key naming conventions.
+func isValidSecretKey(key string) bool {
+	if len(key) == 0 || len(key) > 253 {
+		return false
+	}
+	for _, c := range key {
+		if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '-' || c == '.') {
+			return false
+		}
+	}
+	return true
+}
+
 // NewAddCmd creates the secrets add command
 func NewAddCmd() *cobra.Command {
 	var appID string
@@ -55,6 +69,10 @@ func runAdd(cmd *cobra.Command, args []string, appID string) error {
 			return ui.NewValidationError(fmt.Errorf("invalid format: %q. Key cannot be empty", arg))
 		}
 
+		if !isValidSecretKey(key) {
+			return ui.NewValidationError(fmt.Errorf("invalid secret key %q. Keys must contain only alphanumeric characters, hyphens, underscores, or dots", key))
+		}
+
 		newSecrets[key] = value
 	}
 
@@ -76,14 +94,8 @@ func runAdd(cmd *cobra.Command, args []string, appID string) error {
 		return ui.NewValidationError(fmt.Errorf("failed to create API client: %w", err))
 	}
 
-	// Construct full app ID if provided
-	fullAppID := ""
-	if appID != "" {
-		fullAppID = appID
-		if !strings.HasPrefix(appID, projectID+"-") {
-			fullAppID = projectID + "-" + appID
-		}
-	}
+	// Expand app ID if provided
+	fullAppID := expandAppID(appID, projectID)
 
 	// Show spinner while fetching existing secrets
 	spinnerMsg := "Fetching existing secrets..."

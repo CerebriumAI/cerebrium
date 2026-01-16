@@ -1,6 +1,8 @@
 package secrets
 
 import (
+	"strings"
+
 	"github.com/spf13/cobra"
 )
 
@@ -16,4 +18,18 @@ func NewSecretsCmd() *cobra.Command {
 	cmd.AddCommand(NewAddCmd())
 
 	return cmd
+}
+
+// expandAppID expands a short app name to a full app ID if needed.
+// If appID is empty, returns empty string.
+// If appID already has the project prefix, returns as-is.
+// Otherwise, prepends the project ID.
+func expandAppID(appID, projectID string) string {
+	if appID == "" {
+		return ""
+	}
+	if strings.HasPrefix(appID, projectID+"-") {
+		return appID
+	}
+	return projectID + "-" + appID
 }

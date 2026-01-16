@@ -3,7 +3,6 @@ package secrets
 import (
 	"fmt"
 	"sort"
-	"strings"
 
 	"github.com/cerebriumai/cerebrium/internal/api"
 	"github.com/cerebriumai/cerebrium/internal/ui"
@@ -72,12 +71,8 @@ func runList(cmd *cobra.Command, showValues bool, appID string) error {
 
 	// Fetch secrets (project or app level)
 	var secrets map[string]string
-	if appID != "" {
-		// Construct full app ID if not already prefixed with project ID
-		fullAppID := appID
-		if !strings.HasPrefix(appID, projectID+"-") {
-			fullAppID = projectID + "-" + appID
-		}
+	fullAppID := expandAppID(appID, projectID)
+	if fullAppID != "" {
 		secrets, err = client.ListAppSecrets(cmd.Context(), projectID, fullAppID)
 	} else {
 		secrets, err = client.ListSecrets(cmd.Context(), projectID)
