@@ -15,6 +15,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"time"
@@ -140,6 +141,10 @@ func (c *client) request(ctx context.Context, method, path string, body any, req
 			req.Header.Set("Content-Type", "application/json")
 			req.Header.Set("X-Source", "cli")
 			req.Header.Set("X-CLI-Version", version.Version)
+
+			// Add system attribute headers for debugging
+			req.Header.Set("X-Client-OS", runtime.GOOS)
+			req.Header.Set("X-Client-Arch", runtime.GOARCH)
 
 			// Add authentication if required
 			if requiresAuth {
@@ -869,6 +874,10 @@ func (c *client) RunApp(ctx context.Context, projectID, appID, region, filename 
 	req.Header.Set("Content-Type", w.FormDataContentType())
 	req.Header.Set("X-Source", "cli")
 	req.Header.Set("X-CLI-Version", version.Version)
+
+	// Add system attribute headers for debugging
+	req.Header.Set("X-Client-OS", runtime.GOOS)
+	req.Header.Set("X-Client-Arch", runtime.GOARCH)
 
 	// Add authentication
 	token, err := c.getAuthToken(ctx)
