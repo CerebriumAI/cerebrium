@@ -11,14 +11,18 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// validSecretKeyChars defines what characters are allowed in secret keys.
-// Following Kubernetes secret key naming conventions.
+// isValidSecretKey checks if a secret key follows Kubernetes secret key naming conventions.
+// Keys must be 1-253 characters and contain only alphanumeric characters, hyphens, underscores, or dots.
 func isValidSecretKey(key string) bool {
 	if len(key) == 0 || len(key) > 253 {
 		return false
 	}
 	for _, c := range key {
-		if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '-' || c == '.') {
+		isLower := c >= 'a' && c <= 'z'
+		isUpper := c >= 'A' && c <= 'Z'
+		isDigit := c >= '0' && c <= '9'
+		isAllowed := c == '_' || c == '-' || c == '.'
+		if !isLower && !isUpper && !isDigit && !isAllowed {
 			return false
 		}
 	}
