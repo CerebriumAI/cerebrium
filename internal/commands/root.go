@@ -12,6 +12,7 @@ import (
 	projectCmd "github.com/cerebriumai/cerebrium/internal/commands/projects"
 	regionCmd "github.com/cerebriumai/cerebrium/internal/commands/region"
 	runsCmd "github.com/cerebriumai/cerebrium/internal/commands/runs"
+	secretsCmd "github.com/cerebriumai/cerebrium/internal/commands/secrets"
 	"github.com/cerebriumai/cerebrium/internal/ui"
 	"github.com/cerebriumai/cerebrium/internal/version"
 	cerebrium_bugsnag "github.com/cerebriumai/cerebrium/pkg/bugsnag"
@@ -114,6 +115,7 @@ func NewRootCmd() *cobra.Command {
 	rootCmd.AddCommand(projectCmd.NewProjectsCmd())
 	rootCmd.AddCommand(regionCmd.NewRegionCmd())
 	rootCmd.AddCommand(runsCmd.NewRunsCmd())
+	rootCmd.AddCommand(secretsCmd.NewSecretsCmd())
 
 	// File operation commands (at root level for feature parity with Python CLI)
 	rootCmd.AddCommand(filesCmd.NewLsCmd())

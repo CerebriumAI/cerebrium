@@ -1029,3 +1029,36 @@ func (c *client) GetRuns(ctx context.Context, projectID, appID string, asyncOnly
 
 	return response.Items, nil
 }
+
+// ListSecrets retrieves the secrets for a project
+func (c *client) ListSecrets(ctx context.Context, projectID string) (map[string]string, error) {
+	path := fmt.Sprintf("v2/projects/%s/secrets", projectID)
+	body, err := c.request(ctx, "GET", path, nil, true)
+	if err != nil {
+		return nil, err
+	}
+
+	// Handle empty response (no secrets configured yet)
+	if len(body) == 0 {
+		return make(map[string]string), nil
+	}
+
+	var secrets map[string]string
+	if err := json.Unmarshal(body, &secrets); err != nil {
+		return nil, fmt.Errorf("failed to parse secrets response: %w", err)
+	}
+
+	// Return empty map if nil (e.g., API returned null)
+	if secrets == nil {
+		return make(map[string]string), nil
+	}
+
+	return secrets, nil
+}
+
+// UpdateSecrets updates the secrets for a project
+func (c *client) UpdateSecrets(ctx context.Context, projectID string, secrets map[string]string) error {
+	path := fmt.Sprintf("v2/projects/%s/secrets", projectID)
+	_, err := c.request(ctx, "PATCH", path, secrets, true)
+	return err
+}
