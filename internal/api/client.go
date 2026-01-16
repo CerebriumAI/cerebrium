@@ -1062,3 +1062,36 @@ func (c *client) UpdateSecrets(ctx context.Context, projectID string, secrets ma
 	_, err := c.request(ctx, "PATCH", path, secrets, true)
 	return err
 }
+
+// ListAppSecrets retrieves the secrets for a specific app
+func (c *client) ListAppSecrets(ctx context.Context, projectID, appID string) (map[string]string, error) {
+	path := fmt.Sprintf("v2/projects/%s/apps/%s/secrets", projectID, appID)
+	body, err := c.request(ctx, "GET", path, nil, true)
+	if err != nil {
+		return nil, err
+	}
+
+	// Handle empty response (no secrets configured yet)
+	if len(body) == 0 {
+		return make(map[string]string), nil
+	}
+
+	var secrets map[string]string
+	if err := json.Unmarshal(body, &secrets); err != nil {
+		return nil, fmt.Errorf("failed to parse secrets response: %w", err)
+	}
+
+	// Return empty map if nil (e.g., API returned null)
+	if secrets == nil {
+		return make(map[string]string), nil
+	}
+
+	return secrets, nil
+}
+
+// UpdateAppSecrets updates the secrets for a specific app
+func (c *client) UpdateAppSecrets(ctx context.Context, projectID, appID string, secrets map[string]string) error {
+	path := fmt.Sprintf("v2/projects/%s/apps/%s/secrets", projectID, appID)
+	_, err := c.request(ctx, "PATCH", path, secrets, true)
+	return err
+}

@@ -3,6 +3,7 @@ package secrets
 import (
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/cerebriumai/cerebrium/internal/api"
 	"github.com/cerebriumai/cerebrium/internal/ui"
@@ -13,30 +14,34 @@ import (
 // NewListCmd creates the secrets list command
 func NewListCmd() *cobra.Command {
 	var showValues bool
+	var appID string
 
 	cmd := &cobra.Command{
 		Use:   "list",
-		Short: "List all secrets for the current project",
-		Long: `List all secrets configured for the current project.
+		Short: "List all secrets for the current project or a specific app",
+		Long: `List all secrets configured for the current project or a specific app.
 
 By default, secret values are hidden for security. Use --show-values to display them.
 
 Examples:
-  cerebrium secrets list                  # List secret names only
-  cerebrium secrets list --show-values    # List secrets with their values`,
+  cerebrium secrets list                       # List project secrets (names only)
+  cerebrium secrets list --show-values         # List project secrets with values
+  cerebrium secrets list --app my-app          # List app-specific secrets
+  cerebrium secrets list --app my-app --show-values`,
 		Aliases: []string{"ls"},
 		Args:    cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runList(cmd, showValues)
+			return runList(cmd, showValues, appID)
 		},
 	}
 
 	cmd.Flags().BoolVar(&showValues, "show-values", false, "Show secret values (hidden by default)")
+	cmd.Flags().StringVar(&appID, "app", "", "App ID to list secrets for (if not specified, lists project secrets)")
 
 	return cmd
 }
 
-func runList(cmd *cobra.Command, showValues bool) error {
+func runList(cmd *cobra.Command, showValues bool, appID string) error {
 	cmd.SilenceUsage = true
 
 	// Load config
@@ -58,11 +63,25 @@ func runList(cmd *cobra.Command, showValues bool) error {
 	}
 
 	// Show spinner while fetching
-	spinner := ui.NewSimpleSpinner("Loading secrets...")
+	spinnerMsg := "Loading secrets..."
+	if appID != "" {
+		spinnerMsg = fmt.Sprintf("Loading secrets for app %s...", appID)
+	}
+	spinner := ui.NewSimpleSpinner(spinnerMsg)
 	spinner.Start()
 
-	// Fetch secrets
-	secrets, err := client.ListSecrets(cmd.Context(), projectID)
+	// Fetch secrets (project or app level)
+	var secrets map[string]string
+	if appID != "" {
+		// Construct full app ID if not already prefixed with project ID
+		fullAppID := appID
+		if !strings.HasPrefix(appID, projectID+"-") {
+			fullAppID = projectID + "-" + appID
+		}
+		secrets, err = client.ListAppSecrets(cmd.Context(), projectID, fullAppID)
+	} else {
+		secrets, err = client.ListSecrets(cmd.Context(), projectID)
+	}
 	spinner.Stop()
 	if err != nil {
 		return ui.NewAPIError(err)

@@ -38,4 +38,6 @@ type Client interface {
 	// Secrets operations
 	ListSecrets(ctx context.Context, projectID string) (map[string]string, error)
 	UpdateSecrets(ctx context.Context, projectID string, secrets map[string]string) error
+	ListAppSecrets(ctx context.Context, projectID, appID string) (map[string]string, error)
+	UpdateAppSecrets(ctx context.Context, projectID, appID string, secrets map[string]string) error
 }
