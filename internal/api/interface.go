@@ -34,4 +34,10 @@ type Client interface {
 	GetDownloadURL(ctx context.Context, projectID, filePath, region string) (string, error)
 	GetFileSize(ctx context.Context, url string) (int64, error)
 	DeleteFile(ctx context.Context, projectID, filePath, region string) error
+
+	// Secrets operations
+	ListSecrets(ctx context.Context, projectID string) (map[string]string, error)
+	UpdateSecrets(ctx context.Context, projectID string, secrets map[string]string) error
+	ListAppSecrets(ctx context.Context, projectID, appID string) (map[string]string, error)
+	UpdateAppSecrets(ctx context.Context, projectID, appID string, secrets map[string]string) error
 }
