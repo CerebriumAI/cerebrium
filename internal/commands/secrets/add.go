@@ -101,10 +101,10 @@ func runAdd(cmd *cobra.Command, args []string, appID string) error {
 	// Expand app ID if provided
 	fullAppID := expandAppID(appID, projectID)
 
-	// Show spinner while fetching existing secrets
-	spinnerMsg := "Fetching existing secrets..."
+	// Show spinner while adding secrets
+	spinnerMsg := "Adding secrets..."
 	if fullAppID != "" {
-		spinnerMsg = fmt.Sprintf("Fetching existing secrets for app %s...", appID)
+		spinnerMsg = fmt.Sprintf("Adding secrets to app %s...", appID)
 	}
 	spinner := ui.NewSimpleSpinner(spinnerMsg)
 	spinner.Start()
@@ -116,8 +116,8 @@ func runAdd(cmd *cobra.Command, args []string, appID string) error {
 	} else {
 		existingSecrets, err = client.ListSecrets(cmd.Context(), projectID)
 	}
-	spinner.Stop()
 	if err != nil {
+		spinner.Stop()
 		return ui.NewAPIError(err)
 	}
 
@@ -128,14 +128,6 @@ func runAdd(cmd *cobra.Command, args []string, appID string) error {
 	for key, value := range newSecrets {
 		existingSecrets[key] = value
 	}
-
-	// Show spinner while updating
-	spinnerMsg = "Updating secrets..."
-	if fullAppID != "" {
-		spinnerMsg = fmt.Sprintf("Updating secrets for app %s...", appID)
-	}
-	spinner = ui.NewSimpleSpinner(spinnerMsg)
-	spinner.Start()
 
 	// Update secrets (project or app level)
 	if fullAppID != "" {
