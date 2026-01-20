@@ -443,6 +443,8 @@ func (m *FileDownloadView) checkPathType() tea.Msg {
 // findFileInParentDirectory looks for the target in its parent directory listing.
 func (m *FileDownloadView) findFileInParentDirectory() *api.FileInfo {
 	parentDir := filepath.Dir(m.conf.RemotePath)
+	// Convert to forward slashes for API compatibility (Windows uses backslashes)
+	parentDir = filepath.ToSlash(parentDir)
 	fileName := filepath.Base(m.conf.RemotePath)
 
 	if parentDir == "." {

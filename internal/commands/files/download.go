@@ -46,6 +46,8 @@ func runDownload(cmd *cobra.Command, args []string, region string) error {
 	// Preserve trailing slash as it indicates directory intent
 	hasTrailingSlash := strings.HasSuffix(args[0], "/")
 	remotePath := filepath.Clean(args[0])
+	// Convert to forward slashes for API compatibility (Windows uses backslashes)
+	remotePath = filepath.ToSlash(remotePath)
 	if remotePath == "." {
 		remotePath = "/"
 	} else if hasTrailingSlash && !strings.HasSuffix(remotePath, "/") {
