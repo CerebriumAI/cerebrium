@@ -114,7 +114,7 @@ In order to start building with Cerebrium, you can check out the following resou
 - **Getting Started**: [Introduction Guide](https://docs.cerebrium.ai/cerebrium/getting-started/introduction)
 - **Configuration**: [TOML Reference](https://docs.cerebrium.ai/toml-reference/toml-reference)
 - **Full Documentation**: [docs.cerebrium.ai](https://docs.cerebrium.ai)
-- **API Reference**: [api.cerebrium.ai](https://api.cerebrium.ai)
+- **API Reference**: [docs.cerebrium.ai/api-reference](https://docs.cerebrium.ai/api-reference)
 - **Examples**: [github.com/CerebriumAI/examples](https://github.com/CerebriumAI/examples)
 
 ### Autocompletion
