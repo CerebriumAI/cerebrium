@@ -9,18 +9,18 @@ import (
 
 // Default values matching Python implementation
 var (
-	DefaultPythonVersion            = "3.11"
-	DefaultDockerBaseImageURL       = "debian:bookworm-slim"
-	DefaultInclude                  = []string{"./*", "main.py", "cerebrium.toml"}
-	DefaultExclude                  = []string{".*"}
-	DefaultDisableAuth              = true
-	DefaultEntrypoint               = []string{"uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"}
-	DefaultPort                     = 8000
-	DefaultHealthcheckEndpoint      = ""
-	DefaultReadycheckEndpoint       = ""
-	DefaultProvider                 = "aws"
+	DefaultPythonVersion             = "3.11"
+	DefaultDockerBaseImageURL        = "debian:bookworm-slim"
+	DefaultInclude                   = []string{"./*", "main.py", "cerebrium.toml"}
+	DefaultExclude                   = []string{".*"}
+	DefaultDisableAuth               = true
+	DefaultEntrypoint                = []string{"uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"}
+	DefaultPort                      = 8000
+	DefaultHealthcheckEndpoint       = ""
+	DefaultReadycheckEndpoint        = ""
+	DefaultProvider                  = "aws"
 	DefaultEvaluationIntervalSeconds = 30
-	DefaultLoadBalancingAlgorithm   = "round-robin"
+	DefaultLoadBalancingAlgorithm    = "round-robin"
 )
 
 // Load reads and parses the cerebrium.toml configuration file
@@ -47,6 +47,7 @@ func Load(configPath string) (*ProjectConfig, error) {
 
 	// Parse into config struct
 	var config ProjectConfig
+	config.DeprecationWarnings = []string{}
 
 	// Parse deployment section (required)
 	if err := v.UnmarshalKey("cerebrium.deployment", &config.Deployment); err != nil {
@@ -74,13 +75,59 @@ func Load(configPath string) (*ProjectConfig, error) {
 		}
 	}
 
-	// Parse custom runtime section
+	// Parse new runtime sections (cortex, python, docker)
+	if err := parseRuntimeSections(v, &config); err != nil {
+		return nil, err
+	}
+
+	// Check for deprecated deployment fields and add warnings
+	checkDeprecatedDeploymentFields(v, &config)
+
+	// Apply defaults for missing fields
+	applyDefaults(&config)
+
+	return &config, nil
+}
+
+// parseRuntimeSections parses all runtime sections from the config
+func parseRuntimeSections(v *viper.Viper, config *ProjectConfig) error {
+	// Parse cortex runtime section
+	if v.IsSet("cerebrium.runtime.cortex") {
+		var cortexRuntime CortexRuntimeConfig
+		if err := v.UnmarshalKey("cerebrium.runtime.cortex", &cortexRuntime); err != nil {
+			return fmt.Errorf("failed to parse cortex runtime config: %w", err)
+		}
+		config.CortexRuntime = &cortexRuntime
+	}
+
+	// Parse python runtime section
+	if v.IsSet("cerebrium.runtime.python") {
+		var pythonRuntime PythonRuntimeConfig
+		if err := v.UnmarshalKey("cerebrium.runtime.python", &pythonRuntime); err != nil {
+			return fmt.Errorf("failed to parse python runtime config: %w", err)
+		}
+		config.PythonRuntime = &pythonRuntime
+	}
+
+	// Parse docker runtime section
+	if v.IsSet("cerebrium.runtime.docker") {
+		var dockerRuntime DockerRuntimeConfig
+		if err := v.UnmarshalKey("cerebrium.runtime.docker", &dockerRuntime); err != nil {
+			return fmt.Errorf("failed to parse docker runtime config: %w", err)
+		}
+		config.DockerRuntime = &dockerRuntime
+	}
+
+	// Parse deprecated custom runtime section
 	if v.IsSet("cerebrium.runtime.custom") {
 		var customRuntime CustomRuntimeConfig
 		if err := v.UnmarshalKey("cerebrium.runtime.custom", &customRuntime); err != nil {
-			return nil, fmt.Errorf("failed to parse custom runtime config: %w", err)
+			return fmt.Errorf("failed to parse custom runtime config: %w", err)
 		}
 		config.CustomRuntime = &customRuntime
+
+		// Add deprecation warning and migrate to appropriate runtime type
+		migrateCustomRuntime(config)
 	}
 
 	// Parse partner service sections (deepgram, rime, etc.)
@@ -113,21 +160,56 @@ func Load(configPath string) (*ProjectConfig, error) {
 		}
 	}
 
-	// Apply defaults for missing fields
-	applyDefaults(&config)
+	return nil
+}
 
-	return &config, nil
+// migrateCustomRuntime migrates deprecated [cerebrium.runtime.custom] to the appropriate new runtime type
+func migrateCustomRuntime(config *ProjectConfig) {
+	if config.CustomRuntime == nil {
+		return
+	}
+
+	// Determine if this is a docker or python runtime based on dockerfile_path
+	if config.CustomRuntime.DockerfilePath != "" {
+		// This is a docker runtime
+		config.DeprecationWarnings = append(config.DeprecationWarnings,
+			"[cerebrium.runtime.custom] is deprecated. Please migrate to [cerebrium.runtime.docker]:\n"+
+				"  [cerebrium.runtime.docker]\n"+
+				"  dockerfile_path = \""+config.CustomRuntime.DockerfilePath+"\"")
+	} else {
+		// This is a python runtime
+		config.DeprecationWarnings = append(config.DeprecationWarnings,
+			"[cerebrium.runtime.custom] is deprecated. Please migrate to [cerebrium.runtime.python]:\n"+
+				"  [cerebrium.runtime.python]\n"+
+				"  entrypoint = [\"uvicorn\", \"app.main:app\", \"--host\", \"0.0.0.0\", \"--port\", \"8000\"]")
+	}
+}
+
+// checkDeprecatedDeploymentFields checks for deprecated fields in the deployment section
+func checkDeprecatedDeploymentFields(v *viper.Viper, config *ProjectConfig) {
+	deprecatedFields := []struct {
+		key     string
+		name    string
+		newLoc  string
+	}{
+		{"cerebrium.deployment.python_version", "python_version", "[cerebrium.runtime.cortex] or [cerebrium.runtime.python]"},
+		{"cerebrium.deployment.docker_base_image_url", "docker_base_image_url", "[cerebrium.runtime.cortex] or [cerebrium.runtime.python]"},
+		{"cerebrium.deployment.shell_commands", "shell_commands", "[cerebrium.runtime.cortex] or [cerebrium.runtime.python]"},
+		{"cerebrium.deployment.pre_build_commands", "pre_build_commands", "[cerebrium.runtime.cortex] or [cerebrium.runtime.python]"},
+		{"cerebrium.deployment.use_uv", "use_uv", "[cerebrium.runtime.cortex] or [cerebrium.runtime.python]"},
+	}
+
+	for _, field := range deprecatedFields {
+		if v.IsSet(field.key) {
+			config.DeprecationWarnings = append(config.DeprecationWarnings,
+				fmt.Sprintf("[cerebrium.deployment].%s is deprecated. Please move to %s", field.name, field.newLoc))
+		}
+	}
 }
 
 // applyDefaults sets default values for fields that weren't specified in the config
 func applyDefaults(config *ProjectConfig) {
-	// Apply deployment defaults
-	if config.Deployment.PythonVersion == "" {
-		config.Deployment.PythonVersion = DefaultPythonVersion
-	}
-	if config.Deployment.DockerBaseImageURL == "" {
-		config.Deployment.DockerBaseImageURL = DefaultDockerBaseImageURL
-	}
+	// Apply deployment defaults (app-level only)
 	if len(config.Deployment.Include) == 0 {
 		config.Deployment.Include = DefaultInclude
 	}
@@ -152,7 +234,40 @@ func applyDefaults(config *ProjectConfig) {
 		config.Scaling.LoadBalancingAlgorithm = &DefaultLoadBalancingAlgorithm
 	}
 
-	// Apply custom runtime defaults
+	// Apply cortex runtime defaults
+	if config.CortexRuntime != nil {
+		if config.CortexRuntime.PythonVersion == "" {
+			config.CortexRuntime.PythonVersion = DefaultPythonVersion
+		}
+		if config.CortexRuntime.DockerBaseImageURL == "" {
+			config.CortexRuntime.DockerBaseImageURL = DefaultDockerBaseImageURL
+		}
+	}
+
+	// Apply python runtime defaults
+	if config.PythonRuntime != nil {
+		if config.PythonRuntime.PythonVersion == "" {
+			config.PythonRuntime.PythonVersion = DefaultPythonVersion
+		}
+		if config.PythonRuntime.DockerBaseImageURL == "" {
+			config.PythonRuntime.DockerBaseImageURL = DefaultDockerBaseImageURL
+		}
+		if len(config.PythonRuntime.Entrypoint) == 0 {
+			config.PythonRuntime.Entrypoint = DefaultEntrypoint
+		}
+		if config.PythonRuntime.Port == 0 {
+			config.PythonRuntime.Port = DefaultPort
+		}
+	}
+
+	// Apply docker runtime defaults
+	if config.DockerRuntime != nil {
+		if config.DockerRuntime.Port == 0 {
+			config.DockerRuntime.Port = DefaultPort
+		}
+	}
+
+	// Apply custom runtime defaults (deprecated)
 	if config.CustomRuntime != nil {
 		if len(config.CustomRuntime.Entrypoint) == 0 {
 			config.CustomRuntime.Entrypoint = DefaultEntrypoint
@@ -160,12 +275,5 @@ func applyDefaults(config *ProjectConfig) {
 		if config.CustomRuntime.Port == 0 {
 			config.CustomRuntime.Port = DefaultPort
 		}
-		if config.CustomRuntime.HealthcheckEndpoint == "" {
-			config.CustomRuntime.HealthcheckEndpoint = DefaultHealthcheckEndpoint
-		}
-		if config.CustomRuntime.ReadycheckEndpoint == "" {
-			config.CustomRuntime.ReadycheckEndpoint = DefaultReadycheckEndpoint
-		}
 	}
-
 }

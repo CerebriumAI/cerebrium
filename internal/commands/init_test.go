@@ -65,9 +65,18 @@ func TestRunInit(t *testing.T) {
 				deployment, ok := cerebrium["deployment"].(map[string]any)
 				require.True(t, ok, "deployment section should exist")
 				assert.Equal(t, projectName, deployment["name"])
-				assert.Equal(t, "3.11", deployment["python_version"])
-				assert.Equal(t, "debian:bookworm-slim", deployment["docker_base_image_url"])
 				assert.Equal(t, true, deployment["disable_auth"])
+				// python_version and docker_base_image_url are now in runtime.cortex
+				assert.Nil(t, deployment["python_version"], "python_version should not be in deployment")
+				assert.Nil(t, deployment["docker_base_image_url"], "docker_base_image_url should not be in deployment")
+
+				// Check runtime.cortex config
+				runtime, ok := cerebrium["runtime"].(map[string]any)
+				require.True(t, ok, "runtime section should exist")
+				cortex, ok := runtime["cortex"].(map[string]any)
+				require.True(t, ok, "runtime.cortex section should exist")
+				assert.Equal(t, "3.11", cortex["python_version"])
+				assert.Equal(t, "debian:bookworm-slim", cortex["docker_base_image_url"])
 
 				// Check include/exclude arrays
 				include, ok := deployment["include"].([]any)
@@ -288,10 +297,19 @@ func TestCreateDefaultConfig(t *testing.T) {
 				deployment, ok := cerebrium["deployment"].(map[string]any)
 				require.True(t, ok)
 				assert.Equal(t, projectName, deployment["name"])
-				assert.NotNil(t, deployment["python_version"])
-				assert.NotNil(t, deployment["docker_base_image_url"])
 				assert.NotNil(t, deployment["include"])
 				assert.NotNil(t, deployment["exclude"])
+				// python_version and docker_base_image_url are now in runtime.cortex
+				assert.Nil(t, deployment["python_version"], "python_version should not be in deployment")
+				assert.Nil(t, deployment["docker_base_image_url"], "docker_base_image_url should not be in deployment")
+
+				// Check runtime.cortex config
+				runtime, ok := cerebrium["runtime"].(map[string]any)
+				require.True(t, ok, "runtime section should exist")
+				cortex, ok := runtime["cortex"].(map[string]any)
+				require.True(t, ok, "runtime.cortex section should exist")
+				assert.NotNil(t, cortex["python_version"])
+				assert.NotNil(t, cortex["docker_base_image_url"])
 
 				hardware, ok := cerebrium["hardware"].(map[string]any)
 				require.True(t, ok)

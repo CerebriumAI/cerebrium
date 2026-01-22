@@ -80,4 +80,202 @@ name = "test-app"
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "'cerebrium' key not found")
 	})
+
+	t.Run("parses cortex runtime section", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		configPath := filepath.Join(tmpDir, "cerebrium.toml")
+
+		content := `[cerebrium.deployment]
+name = "test-app"
+
+[cerebrium.runtime.cortex]
+python_version = "3.12"
+docker_base_image_url = "python:3.12-slim"
+shell_commands = ["pip install numpy"]
+`
+		err := os.WriteFile(configPath, []byte(content), 0644)
+		require.NoError(t, err)
+
+		config, err := Load(configPath)
+		require.NoError(t, err)
+		require.NotNil(t, config.CortexRuntime)
+		assert.Equal(t, "3.12", config.CortexRuntime.PythonVersion)
+		assert.Equal(t, "python:3.12-slim", config.CortexRuntime.DockerBaseImageURL)
+		assert.Equal(t, []string{"pip install numpy"}, config.CortexRuntime.ShellCommands)
+		assert.Equal(t, RuntimeTypeCortex, config.GetRuntimeType())
+	})
+
+	t.Run("parses python runtime section", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		configPath := filepath.Join(tmpDir, "cerebrium.toml")
+
+		content := `[cerebrium.deployment]
+name = "test-app"
+
+[cerebrium.runtime.python]
+python_version = "3.11"
+entrypoint = ["uvicorn", "myapp:app"]
+port = 9000
+healthcheck_endpoint = "/health"
+`
+		err := os.WriteFile(configPath, []byte(content), 0644)
+		require.NoError(t, err)
+
+		config, err := Load(configPath)
+		require.NoError(t, err)
+		require.NotNil(t, config.PythonRuntime)
+		assert.Equal(t, "3.11", config.PythonRuntime.PythonVersion)
+		assert.Equal(t, []string{"uvicorn", "myapp:app"}, config.PythonRuntime.Entrypoint)
+		assert.Equal(t, 9000, config.PythonRuntime.Port)
+		assert.Equal(t, "/health", config.PythonRuntime.HealthcheckEndpoint)
+		assert.Equal(t, RuntimeTypePython, config.GetRuntimeType())
+	})
+
+	t.Run("parses docker runtime section", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		configPath := filepath.Join(tmpDir, "cerebrium.toml")
+
+		// Create a dummy Dockerfile
+		dockerfilePath := filepath.Join(tmpDir, "Dockerfile")
+		err := os.WriteFile(dockerfilePath, []byte("FROM python:3.11"), 0644)
+		require.NoError(t, err)
+
+		content := `[cerebrium.deployment]
+name = "test-app"
+
+[cerebrium.runtime.docker]
+dockerfile_path = "` + dockerfilePath + `"
+port = 8080
+entrypoint = ["python", "main.py"]
+healthcheck_endpoint = "/healthz"
+`
+		err = os.WriteFile(configPath, []byte(content), 0644)
+		require.NoError(t, err)
+
+		config, err := Load(configPath)
+		require.NoError(t, err)
+		require.NotNil(t, config.DockerRuntime)
+		assert.Equal(t, dockerfilePath, config.DockerRuntime.DockerfilePath)
+		assert.Equal(t, 8080, config.DockerRuntime.Port)
+		assert.Equal(t, []string{"python", "main.py"}, config.DockerRuntime.Entrypoint)
+		assert.Equal(t, "/healthz", config.DockerRuntime.HealthcheckEndpoint)
+		assert.Equal(t, RuntimeTypeDocker, config.GetRuntimeType())
+	})
+
+	t.Run("adds deprecation warning for custom runtime", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		configPath := filepath.Join(tmpDir, "cerebrium.toml")
+
+		content := `[cerebrium.deployment]
+name = "test-app"
+
+[cerebrium.runtime.custom]
+entrypoint = ["python", "app.py"]
+port = 8000
+`
+		err := os.WriteFile(configPath, []byte(content), 0644)
+		require.NoError(t, err)
+
+		config, err := Load(configPath)
+		require.NoError(t, err)
+		require.NotNil(t, config.CustomRuntime)
+		assert.Len(t, config.DeprecationWarnings, 1)
+		assert.Contains(t, config.DeprecationWarnings[0], "[cerebrium.runtime.custom] is deprecated")
+	})
+
+	t.Run("adds deprecation warnings for deployment fields", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		configPath := filepath.Join(tmpDir, "cerebrium.toml")
+
+		content := `[cerebrium.deployment]
+name = "test-app"
+python_version = "3.11"
+docker_base_image_url = "debian:bookworm-slim"
+shell_commands = ["echo hello"]
+`
+		err := os.WriteFile(configPath, []byte(content), 0644)
+		require.NoError(t, err)
+
+		config, err := Load(configPath)
+		require.NoError(t, err)
+		assert.GreaterOrEqual(t, len(config.DeprecationWarnings), 3)
+	})
+
+	t.Run("defaults to cortex runtime when no runtime specified", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		configPath := filepath.Join(tmpDir, "cerebrium.toml")
+
+		content := `[cerebrium.deployment]
+name = "test-app"
+`
+		err := os.WriteFile(configPath, []byte(content), 0644)
+		require.NoError(t, err)
+
+		config, err := Load(configPath)
+		require.NoError(t, err)
+		assert.Equal(t, RuntimeTypeCortex, config.GetRuntimeType())
+		assert.Nil(t, config.CortexRuntime)
+		assert.Nil(t, config.PythonRuntime)
+		assert.Nil(t, config.DockerRuntime)
+	})
+
+	t.Run("deprecated deployment fields are used in payload with warnings", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		configPath := filepath.Join(tmpDir, "cerebrium.toml")
+
+		// Use old-style config with deprecated fields in deployment section
+		content := `[cerebrium.deployment]
+name = "test-app"
+python_version = "3.10"
+docker_base_image_url = "python:3.10-slim"
+shell_commands = ["pip install requests"]
+pre_build_commands = ["echo pre-build"]
+`
+		err := os.WriteFile(configPath, []byte(content), 0644)
+		require.NoError(t, err)
+
+		config, err := Load(configPath)
+		require.NoError(t, err)
+
+		// Verify deprecation warnings are present
+		assert.GreaterOrEqual(t, len(config.DeprecationWarnings), 4)
+
+		// Verify payload uses the deprecated values as fallback
+		payload := config.ToPayload()
+		assert.Equal(t, "3.10", payload["pythonVersion"])
+		assert.Equal(t, "python:3.10-slim", payload["baseImage"])
+		assert.Equal(t, []string{"pip install requests"}, payload["shellCommands"])
+		assert.Equal(t, []string{"echo pre-build"}, payload["preBuildCommands"])
+		assert.Equal(t, "cortex", payload["runtime"])
+	})
+
+	t.Run("cortex runtime fields take precedence over deprecated deployment fields", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		configPath := filepath.Join(tmpDir, "cerebrium.toml")
+
+		// Config with both deprecated deployment fields and new cortex runtime fields
+		content := `[cerebrium.deployment]
+name = "test-app"
+python_version = "3.10"
+docker_base_image_url = "python:3.10-slim"
+
+[cerebrium.runtime.cortex]
+python_version = "3.12"
+docker_base_image_url = "debian:bookworm-slim"
+`
+		err := os.WriteFile(configPath, []byte(content), 0644)
+		require.NoError(t, err)
+
+		config, err := Load(configPath)
+		require.NoError(t, err)
+
+		// Verify deprecation warnings are present for deployment fields
+		assert.GreaterOrEqual(t, len(config.DeprecationWarnings), 2)
+
+		// Verify payload uses cortex runtime values (not deprecated deployment values)
+		payload := config.ToPayload()
+		assert.Equal(t, "3.12", payload["pythonVersion"])
+		assert.Equal(t, "debian:bookworm-slim", payload["baseImage"])
+		assert.Equal(t, "cortex", payload["runtime"])
+	})
 }
