@@ -75,8 +75,10 @@ type CustomRuntimeConfig struct {
 
 // PartnerServiceConfig represents partner service configurations
 type PartnerServiceConfig struct {
-	Name string `mapstructure:"name" toml:"name,omitempty"`
-	Port *int   `mapstructure:"port" toml:"port,omitempty"`
+	Name      string  `mapstructure:"name" toml:"name,omitempty"`
+	Port      *int    `mapstructure:"port" toml:"port,omitempty"`
+	ModelName *string `mapstructure:"model_name" toml:"model_name,omitempty"`
+	Language  *string `mapstructure:"language" toml:"language,omitempty"`
 }
 
 // ToPayload converts the project config to an API payload
@@ -168,6 +170,12 @@ func (pc *ProjectConfig) ToPayload() map[string]any {
 		payload["dockerfilePath"] = pc.CustomRuntime.DockerfilePath
 		payload["partnerService"] = pc.PartnerService.Name
 		payload["runtime"] = pc.PartnerService.Name
+		if pc.PartnerService.ModelName != nil {
+			payload["modelName"] = *pc.PartnerService.ModelName
+		}
+		if pc.PartnerService.Language != nil {
+			payload["language"] = *pc.PartnerService.Language
+		}
 	} else if pc.CustomRuntime != nil {
 		// Custom runtime only
 		payload["entrypoint"] = pc.CustomRuntime.Entrypoint
@@ -182,6 +190,12 @@ func (pc *ProjectConfig) ToPayload() map[string]any {
 		payload["runtime"] = pc.PartnerService.Name
 		if pc.PartnerService.Port != nil {
 			payload["port"] = *pc.PartnerService.Port
+		}
+		if pc.PartnerService.ModelName != nil {
+			payload["modelName"] = *pc.PartnerService.ModelName
+		}
+		if pc.PartnerService.Language != nil {
+			payload["language"] = *pc.PartnerService.Language
 		}
 	} else {
 		// Default cortex runtime

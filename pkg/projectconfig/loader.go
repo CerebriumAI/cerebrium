@@ -96,6 +96,18 @@ func Load(configPath string) (*ProjectConfig, error) {
 				partnerConfig.Port = &port
 			}
 
+			// Check for model_name (e.g., "arcana", "mist")
+			if v.IsSet(key + ".model_name") {
+				modelName := v.GetString(key + ".model_name")
+				partnerConfig.ModelName = &modelName
+			}
+
+			// Check for language (e.g., "en", "es")
+			if v.IsSet(key + ".language") {
+				language := v.GetString(key + ".language")
+				partnerConfig.Language = &language
+			}
+
 			config.PartnerService = partnerConfig
 			break // Only one partner service at a time
 		}
