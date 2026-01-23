@@ -98,11 +98,11 @@ shell_commands = ["pip install numpy"]
 
 		config, err := Load(configPath)
 		require.NoError(t, err)
-		require.NotNil(t, config.CortexRuntime)
-		assert.Equal(t, "3.12", config.CortexRuntime.PythonVersion)
-		assert.Equal(t, "python:3.12-slim", config.CortexRuntime.DockerBaseImageURL)
-		assert.Equal(t, []string{"pip install numpy"}, config.CortexRuntime.ShellCommands)
-		assert.Equal(t, RuntimeTypeCortex, config.GetRuntimeType())
+		require.NotNil(t, config.Runtime)
+		assert.Equal(t, "cortex", config.Runtime.Type)
+		assert.Equal(t, "3.12", config.Runtime.Params["python_version"])
+		assert.Equal(t, "python:3.12-slim", config.Runtime.Params["docker_base_image_url"])
+		assert.Equal(t, "cortex", config.GetRuntimeType())
 	})
 
 	t.Run("parses python runtime section", func(t *testing.T) {
@@ -123,12 +123,12 @@ healthcheck_endpoint = "/health"
 
 		config, err := Load(configPath)
 		require.NoError(t, err)
-		require.NotNil(t, config.PythonRuntime)
-		assert.Equal(t, "3.11", config.PythonRuntime.PythonVersion)
-		assert.Equal(t, []string{"uvicorn", "myapp:app"}, config.PythonRuntime.Entrypoint)
-		assert.Equal(t, 9000, config.PythonRuntime.Port)
-		assert.Equal(t, "/health", config.PythonRuntime.HealthcheckEndpoint)
-		assert.Equal(t, RuntimeTypePython, config.GetRuntimeType())
+		require.NotNil(t, config.Runtime)
+		assert.Equal(t, "python", config.Runtime.Type)
+		assert.Equal(t, "3.11", config.Runtime.Params["python_version"])
+		assert.Equal(t, int64(9000), config.Runtime.Params["port"])
+		assert.Equal(t, "/health", config.Runtime.Params["healthcheck_endpoint"])
+		assert.Equal(t, "python", config.GetRuntimeType())
 	})
 
 	t.Run("parses docker runtime section", func(t *testing.T) {
@@ -154,12 +154,12 @@ healthcheck_endpoint = "/healthz"
 
 		config, err := Load(configPath)
 		require.NoError(t, err)
-		require.NotNil(t, config.DockerRuntime)
-		assert.Equal(t, dockerfilePath, config.DockerRuntime.DockerfilePath)
-		assert.Equal(t, 8080, config.DockerRuntime.Port)
-		assert.Equal(t, []string{"python", "main.py"}, config.DockerRuntime.Entrypoint)
-		assert.Equal(t, "/healthz", config.DockerRuntime.HealthcheckEndpoint)
-		assert.Equal(t, RuntimeTypeDocker, config.GetRuntimeType())
+		require.NotNil(t, config.Runtime)
+		assert.Equal(t, "docker", config.Runtime.Type)
+		assert.Equal(t, dockerfilePath, config.Runtime.GetDockerfilePath())
+		assert.Equal(t, int64(8080), config.Runtime.Params["port"])
+		assert.Equal(t, "/healthz", config.Runtime.Params["healthcheck_endpoint"])
+		assert.Equal(t, "docker", config.GetRuntimeType())
 	})
 
 	t.Run("adds deprecation warning for custom runtime", func(t *testing.T) {
@@ -178,7 +178,8 @@ port = 8000
 
 		config, err := Load(configPath)
 		require.NoError(t, err)
-		require.NotNil(t, config.CustomRuntime)
+		require.NotNil(t, config.Runtime)
+		assert.Equal(t, "custom", config.Runtime.Type)
 		assert.Len(t, config.DeprecationWarnings, 1)
 		assert.Contains(t, config.DeprecationWarnings[0], "[cerebrium.runtime.custom] is deprecated")
 	})
@@ -213,10 +214,8 @@ name = "test-app"
 
 		config, err := Load(configPath)
 		require.NoError(t, err)
-		assert.Equal(t, RuntimeTypeCortex, config.GetRuntimeType())
-		assert.Nil(t, config.CortexRuntime)
-		assert.Nil(t, config.PythonRuntime)
-		assert.Nil(t, config.DockerRuntime)
+		assert.Equal(t, "cortex", config.GetRuntimeType())
+		assert.Nil(t, config.Runtime) // No explicit runtime section
 	})
 
 	t.Run("deprecated deployment fields are used in payload with warnings", func(t *testing.T) {
@@ -277,5 +276,52 @@ docker_base_image_url = "debian:bookworm-slim"
 		assert.Equal(t, "3.12", payload["pythonVersion"])
 		assert.Equal(t, "debian:bookworm-slim", payload["baseImage"])
 		assert.Equal(t, "cortex", payload["runtime"])
+	})
+
+	t.Run("parses arbitrary runtime types for backend validation", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		configPath := filepath.Join(tmpDir, "cerebrium.toml")
+
+		// Test with a partner service like rime
+		content := `[cerebrium.deployment]
+name = "test-app"
+
+[cerebrium.runtime.rime]
+model_name = "arcana"
+language = "en"
+port = 8080
+`
+		err := os.WriteFile(configPath, []byte(content), 0644)
+		require.NoError(t, err)
+
+		config, err := Load(configPath)
+		require.NoError(t, err)
+		require.NotNil(t, config.Runtime)
+		assert.Equal(t, "rime", config.Runtime.Type)
+		assert.Equal(t, "arcana", config.Runtime.Params["model_name"])
+		assert.Equal(t, "en", config.Runtime.Params["language"])
+		assert.Equal(t, int64(8080), config.Runtime.Params["port"])
+		assert.Equal(t, "rime", config.GetRuntimeType())
+	})
+
+	t.Run("rejects multiple runtime types", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		configPath := filepath.Join(tmpDir, "cerebrium.toml")
+
+		content := `[cerebrium.deployment]
+name = "test-app"
+
+[cerebrium.runtime.cortex]
+python_version = "3.11"
+
+[cerebrium.runtime.python]
+entrypoint = ["uvicorn", "app:app"]
+`
+		err := os.WriteFile(configPath, []byte(content), 0644)
+		require.NoError(t, err)
+
+		_, err = Load(configPath)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "only one runtime type can be specified")
 	})
 }

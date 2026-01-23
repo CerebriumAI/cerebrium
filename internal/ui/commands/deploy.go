@@ -102,7 +102,7 @@ type DeployView struct {
 // NewDeployView creates a new deploy view
 func NewDeployView(ctx context.Context, conf DeployConfig) *DeployView {
 	initialState := StateConfirmation
-	isPartnerDeploy := conf.Config.PartnerService != nil
+	isPartnerDeploy := isPartnerServiceRuntime(conf.Config)
 
 	if conf.DisableConfirmation {
 		if isPartnerDeploy {
@@ -1299,77 +1299,110 @@ func (m *DeployView) waitForConfirmation() tea.Msg {
 
 // getRuntimeType returns a user-friendly runtime type name
 func getRuntimeType(config *projectconfig.ProjectConfig) string {
-	if config.PartnerService != nil {
-		// Return partner service name (capitalize first letter)
-		if config.PartnerService.Name != "" {
-			return strings.ToUpper(string(config.PartnerService.Name[0])) + config.PartnerService.Name[1:]
-		}
-		return config.PartnerService.Name
-	}
+	runtimeType := config.GetRuntimeType()
 
-	if config.CustomRuntime != nil {
-		if config.CustomRuntime.DockerfilePath != "" {
+	// Check for well-known runtime types and return user-friendly names
+	switch runtimeType {
+	case "cortex":
+		return "Cortex"
+	case "docker":
+		return "Custom Docker"
+	case "python":
+		return "Custom Python (ASGI/WSGI)"
+	case "custom":
+		// Deprecated custom runtime - determine type from params
+		if config.Runtime != nil && config.Runtime.GetDockerfilePath() != "" {
 			return "Custom Docker"
 		}
 		return "Custom Python (ASGI/WSGI)"
+	default:
+		// Partner service or other runtime - capitalize first letter
+		if len(runtimeType) > 0 {
+			return strings.ToUpper(string(runtimeType[0])) + runtimeType[1:]
+		}
+		return runtimeType
 	}
-
-	return "Cortex"
 }
 
 // isCustomDocker returns true if this is a Custom Docker deployment
 func isCustomDocker(config *projectconfig.ProjectConfig) bool {
-	return config.CustomRuntime != nil && config.CustomRuntime.DockerfilePath != ""
+	runtimeType := config.GetRuntimeType()
+	if runtimeType == "docker" {
+		return true
+	}
+	// Also check for deprecated custom runtime with dockerfile
+	if runtimeType == "custom" && config.Runtime != nil && config.Runtime.GetDockerfilePath() != "" {
+		return true
+	}
+	return false
 }
 
 // isCustomPython returns true if this is a Custom Python deployment
 func isCustomPython(config *projectconfig.ProjectConfig) bool {
-	return config.CustomRuntime != nil && config.CustomRuntime.DockerfilePath == ""
+	runtimeType := config.GetRuntimeType()
+	if runtimeType == "python" {
+		return true
+	}
+	// Also check for deprecated custom runtime without dockerfile
+	if runtimeType == "custom" && config.Runtime != nil && config.Runtime.GetDockerfilePath() == "" {
+		return true
+	}
+	return false
 }
 
 // isPartnerServiceRuntime returns true if this is a Partner Service deployment
+// (any runtime that is not cortex, python, docker, or custom)
 func isPartnerServiceRuntime(config *projectconfig.ProjectConfig) bool {
-	return config.PartnerService != nil
+	runtimeType := config.GetRuntimeType()
+	switch runtimeType {
+	case "cortex", "python", "docker", "custom", "":
+		return false
+	default:
+		return true
+	}
 }
 
 // isCortexRuntime returns true if this is a Cortex (default) deployment
 func isCortexRuntime(config *projectconfig.ProjectConfig) bool {
-	return config.CustomRuntime == nil && config.PartnerService == nil
+	return config.GetRuntimeType() == "cortex"
 }
 
 // renderRuntimeSpecificSettings returns runtime-specific configuration as a string
 func renderRuntimeSpecificSettings(config *projectconfig.ProjectConfig) string {
-	if config.CustomRuntime != nil {
-		// Custom Docker or Custom Python
-		var settings []string
-
-		if config.CustomRuntime.DockerfilePath != "" {
-			settings = append(settings, fmt.Sprintf("Dockerfile: %s", config.CustomRuntime.DockerfilePath))
-		}
-
-		// Port is required for custom runtimes, always show it
-		settings = append(settings, fmt.Sprintf("Port: %d", config.CustomRuntime.Port))
-
-		if len(config.CustomRuntime.Entrypoint) > 0 {
-			settings = append(settings, fmt.Sprintf("Entrypoint: %s", strings.Join(config.CustomRuntime.Entrypoint, " ")))
-		}
-
-		if config.CustomRuntime.HealthcheckEndpoint != "" {
-			settings = append(settings, fmt.Sprintf("Healthcheck: %s", config.CustomRuntime.HealthcheckEndpoint))
-		}
-
-		if config.CustomRuntime.ReadycheckEndpoint != "" {
-			settings = append(settings, fmt.Sprintf("Readycheck: %s", config.CustomRuntime.ReadycheckEndpoint))
-		}
-
-		return strings.Join(settings, "\n")
+	if config.Runtime == nil {
+		return "" // Cortex with defaults has no runtime-specific settings
 	}
 
-	if config.PartnerService != nil && config.PartnerService.Port != nil {
-		return fmt.Sprintf("Port: %d", *config.PartnerService.Port)
+	runtimeType := config.GetRuntimeType()
+	var settings []string
+
+	// Show dockerfile path for docker runtime
+	dockerfilePath := config.Runtime.GetDockerfilePath()
+	if dockerfilePath != "" {
+		settings = append(settings, fmt.Sprintf("Dockerfile: %s", dockerfilePath))
 	}
 
-	return "" // Cortex has no runtime-specific settings
+	// Show port for non-cortex runtimes
+	if runtimeType != "cortex" {
+		port := config.Runtime.GetPort()
+		settings = append(settings, fmt.Sprintf("Port: %d", port))
+	}
+
+	// Show entrypoint if set
+	entrypoint := config.Runtime.GetEntrypoint()
+	if len(entrypoint) > 0 {
+		settings = append(settings, fmt.Sprintf("Entrypoint: %s", strings.Join(entrypoint, " ")))
+	}
+
+	// Show health/ready check endpoints if set
+	if healthcheck, ok := config.Runtime.Params["healthcheck_endpoint"].(string); ok && healthcheck != "" {
+		settings = append(settings, fmt.Sprintf("Healthcheck: %s", healthcheck))
+	}
+	if readycheck, ok := config.Runtime.Params["readycheck_endpoint"].(string); ok && readycheck != "" {
+		settings = append(settings, fmt.Sprintf("Readycheck: %s", readycheck))
+	}
+
+	return strings.Join(settings, "\n")
 }
 
 // renderDeploymentSummary creates the deployment configuration summary
@@ -1477,7 +1510,7 @@ func (m *DeployView) renderDeploymentSummary() string {
 		}
 
 		// DEPENDENCIES (only show if not using Dockerfile)
-		if m.conf.Config.CustomRuntime == nil || m.conf.Config.CustomRuntime.DockerfilePath == "" {
+		if !isCustomDocker(m.conf.Config) {
 			var depItems []string
 
 			// Pip packages
@@ -1650,7 +1683,7 @@ func (m *DeployView) renderDeploymentSummary() string {
 	}
 
 	// DEPENDENCIES (only show if not using Dockerfile)
-	if m.conf.Config.CustomRuntime == nil || m.conf.Config.CustomRuntime.DockerfilePath == "" {
+	if !isCustomDocker(m.conf.Config) {
 		var depRows []ui.TableRow
 
 		// Pip packages

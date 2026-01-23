@@ -89,93 +89,67 @@ func Load(configPath string) (*ProjectConfig, error) {
 	return &config, nil
 }
 
-// parseRuntimeSections parses all runtime sections from the config
+// parseRuntimeSections parses the runtime section from the config
+// The CLI accepts any [cerebrium.runtime.<name>] section and passes it to the backend
 func parseRuntimeSections(v *viper.Viper, config *ProjectConfig) error {
-	// Parse cortex runtime section
-	if v.IsSet("cerebrium.runtime.cortex") {
-		var cortexRuntime CortexRuntimeConfig
-		if err := v.UnmarshalKey("cerebrium.runtime.cortex", &cortexRuntime); err != nil {
-			return fmt.Errorf("failed to parse cortex runtime config: %w", err)
-		}
-		config.CortexRuntime = &cortexRuntime
+	// Get all keys under cerebrium.runtime
+	runtimeSection := v.GetStringMap("cerebrium.runtime")
+	if len(runtimeSection) == 0 {
+		return nil
 	}
 
-	// Parse python runtime section
-	if v.IsSet("cerebrium.runtime.python") {
-		var pythonRuntime PythonRuntimeConfig
-		if err := v.UnmarshalKey("cerebrium.runtime.python", &pythonRuntime); err != nil {
-			return fmt.Errorf("failed to parse python runtime config: %w", err)
-		}
-		config.PythonRuntime = &pythonRuntime
+	// Find the runtime type(s) - there should be exactly one
+	var runtimeTypes []string
+	for key := range runtimeSection {
+		runtimeTypes = append(runtimeTypes, key)
 	}
 
-	// Parse docker runtime section
-	if v.IsSet("cerebrium.runtime.docker") {
-		var dockerRuntime DockerRuntimeConfig
-		if err := v.UnmarshalKey("cerebrium.runtime.docker", &dockerRuntime); err != nil {
-			return fmt.Errorf("failed to parse docker runtime config: %w", err)
-		}
-		config.DockerRuntime = &dockerRuntime
+	if len(runtimeTypes) > 1 {
+		return fmt.Errorf("only one runtime type can be specified, found: %v", runtimeTypes)
 	}
 
-	// Parse deprecated custom runtime section
-	if v.IsSet("cerebrium.runtime.custom") {
-		var customRuntime CustomRuntimeConfig
-		if err := v.UnmarshalKey("cerebrium.runtime.custom", &customRuntime); err != nil {
-			return fmt.Errorf("failed to parse custom runtime config: %w", err)
+	if len(runtimeTypes) == 1 {
+		runtimeType := runtimeTypes[0]
+		key := fmt.Sprintf("cerebrium.runtime.%s", runtimeType)
+
+		// Parse the runtime params as a generic map
+		params := v.GetStringMap(key)
+
+		// Convert the params to map[string]any for proper type handling
+		runtimeParams := make(map[string]any)
+		for k := range params {
+			// Re-fetch with proper type preservation
+			paramKey := fmt.Sprintf("%s.%s", key, k)
+			runtimeParams[k] = v.Get(paramKey)
 		}
-		config.CustomRuntime = &customRuntime
 
-		// Add deprecation warning and migrate to appropriate runtime type
-		migrateCustomRuntime(config)
-	}
+		config.Runtime = &RuntimeConfig{
+			Type:   runtimeType,
+			Params: runtimeParams,
+		}
 
-	// Parse partner service sections (deepgram, rime, etc.)
-	partnerNames := []string{"deepgram", "rime"}
-	for _, partner := range partnerNames {
-		key := fmt.Sprintf("cerebrium.runtime.%s", partner)
-		if v.IsSet(key) {
-			partnerConfig := &PartnerServiceConfig{Name: partner}
-
-			// Check if it's a map with port
-			if v.IsSet(key + ".port") {
-				port := v.GetInt(key + ".port")
-				partnerConfig.Port = &port
-			}
-
-			// Check for model_name (e.g., "arcana", "mist")
-			if v.IsSet(key + ".model_name") {
-				modelName := v.GetString(key + ".model_name")
-				partnerConfig.ModelName = &modelName
-			}
-
-			// Check for language (e.g., "en", "es")
-			if v.IsSet(key + ".language") {
-				language := v.GetString(key + ".language")
-				partnerConfig.Language = &language
-			}
-
-			config.PartnerService = partnerConfig
-			break // Only one partner service at a time
+		// Add deprecation warning for [cerebrium.runtime.custom]
+		if runtimeType == "custom" {
+			addCustomRuntimeDeprecationWarning(config)
 		}
 	}
 
 	return nil
 }
 
-// migrateCustomRuntime migrates deprecated [cerebrium.runtime.custom] to the appropriate new runtime type
-func migrateCustomRuntime(config *ProjectConfig) {
-	if config.CustomRuntime == nil {
+// addCustomRuntimeDeprecationWarning adds a deprecation warning for [cerebrium.runtime.custom]
+func addCustomRuntimeDeprecationWarning(config *ProjectConfig) {
+	if config.Runtime == nil || config.Runtime.Type != "custom" {
 		return
 	}
 
 	// Determine if this is a docker or python runtime based on dockerfile_path
-	if config.CustomRuntime.DockerfilePath != "" {
+	if config.Runtime.GetDockerfilePath() != "" {
 		// This is a docker runtime
 		config.DeprecationWarnings = append(config.DeprecationWarnings,
 			"[cerebrium.runtime.custom] is deprecated. Please migrate to [cerebrium.runtime.docker]:\n"+
 				"  [cerebrium.runtime.docker]\n"+
-				"  dockerfile_path = \""+config.CustomRuntime.DockerfilePath+"\"")
+				"  dockerfile_path = \""+config.Runtime.GetDockerfilePath()+"\"")
 	} else {
 		// This is a python runtime
 		config.DeprecationWarnings = append(config.DeprecationWarnings,
@@ -234,46 +208,7 @@ func applyDefaults(config *ProjectConfig) {
 		config.Scaling.LoadBalancingAlgorithm = &DefaultLoadBalancingAlgorithm
 	}
 
-	// Apply cortex runtime defaults
-	if config.CortexRuntime != nil {
-		if config.CortexRuntime.PythonVersion == "" {
-			config.CortexRuntime.PythonVersion = DefaultPythonVersion
-		}
-		if config.CortexRuntime.DockerBaseImageURL == "" {
-			config.CortexRuntime.DockerBaseImageURL = DefaultDockerBaseImageURL
-		}
-	}
-
-	// Apply python runtime defaults
-	if config.PythonRuntime != nil {
-		if config.PythonRuntime.PythonVersion == "" {
-			config.PythonRuntime.PythonVersion = DefaultPythonVersion
-		}
-		if config.PythonRuntime.DockerBaseImageURL == "" {
-			config.PythonRuntime.DockerBaseImageURL = DefaultDockerBaseImageURL
-		}
-		if len(config.PythonRuntime.Entrypoint) == 0 {
-			config.PythonRuntime.Entrypoint = DefaultEntrypoint
-		}
-		if config.PythonRuntime.Port == 0 {
-			config.PythonRuntime.Port = DefaultPort
-		}
-	}
-
-	// Apply docker runtime defaults
-	if config.DockerRuntime != nil {
-		if config.DockerRuntime.Port == 0 {
-			config.DockerRuntime.Port = DefaultPort
-		}
-	}
-
-	// Apply custom runtime defaults (deprecated)
-	if config.CustomRuntime != nil {
-		if len(config.CustomRuntime.Entrypoint) == 0 {
-			config.CustomRuntime.Entrypoint = DefaultEntrypoint
-		}
-		if config.CustomRuntime.Port == 0 {
-			config.CustomRuntime.Port = DefaultPort
-		}
-	}
+	// Runtime defaults are not applied here - the backend handles validation
+	// and defaults for runtime-specific parameters. This allows new runtimes
+	// to be added without modifying the CLI.
 }

@@ -1,51 +1,90 @@
 package projectconfig
 
-// RuntimeType represents the type of runtime configuration
-type RuntimeType string
-
-const (
-	RuntimeTypeCortex  RuntimeType = "cortex"
-	RuntimeTypePython  RuntimeType = "python"
-	RuntimeTypeDocker  RuntimeType = "docker"
-	RuntimeTypeCustom  RuntimeType = "custom"  // deprecated alias
-	RuntimeTypePartner RuntimeType = "partner" // for deepgram, rime, etc.
-)
-
 // ProjectConfig represents the complete cerebrium.toml configuration
 type ProjectConfig struct {
-	Deployment     DeploymentConfig      `mapstructure:"deployment" toml:"deployment"`
-	Hardware       HardwareConfig        `mapstructure:"hardware" toml:"hardware"`
-	Scaling        ScalingConfig         `mapstructure:"scaling" toml:"scaling"`
-	Dependencies   DependenciesConfig    `mapstructure:"dependencies" toml:"dependencies"`
-	CortexRuntime  *CortexRuntimeConfig  `mapstructure:"cortex" toml:"cortex,omitempty"`
-	PythonRuntime  *PythonRuntimeConfig  `mapstructure:"python" toml:"python,omitempty"`
-	DockerRuntime  *DockerRuntimeConfig  `mapstructure:"docker" toml:"docker,omitempty"`
-	CustomRuntime  *CustomRuntimeConfig  `mapstructure:"custom" toml:"runtime,omitempty"` // deprecated
-	PartnerService *PartnerServiceConfig `mapstructure:"partner" toml:"partner,omitempty"`
+	Deployment   DeploymentConfig   `mapstructure:"deployment" toml:"deployment"`
+	Hardware     HardwareConfig     `mapstructure:"hardware" toml:"hardware"`
+	Scaling      ScalingConfig      `mapstructure:"scaling" toml:"scaling"`
+	Dependencies DependenciesConfig `mapstructure:"dependencies" toml:"dependencies"`
+
+	// Runtime holds the generic runtime configuration from [cerebrium.runtime.<name>]
+	// The CLI accepts any runtime type and passes parameters to the backend for validation
+	Runtime *RuntimeConfig `mapstructure:"-" toml:"-"`
 
 	// DeprecationWarnings contains warnings about deprecated config fields
 	DeprecationWarnings []string `mapstructure:"-" toml:"-"`
 }
 
-// GetRuntimeType returns the active runtime type for this configuration
-func (pc *ProjectConfig) GetRuntimeType() RuntimeType {
-	if pc.DockerRuntime != nil {
-		return RuntimeTypeDocker
-	}
-	if pc.PythonRuntime != nil {
-		return RuntimeTypePython
-	}
-	if pc.CortexRuntime != nil {
-		return RuntimeTypeCortex
-	}
-	if pc.CustomRuntime != nil {
-		return RuntimeTypeCustom
-	}
-	if pc.PartnerService != nil {
-		return RuntimeTypePartner
+// RuntimeConfig represents a generic runtime configuration
+// The CLI accepts any [cerebrium.runtime.<name>] section and passes it to the backend
+type RuntimeConfig struct {
+	// Type is the runtime name (cortex, python, docker, rime, deepgram, etc.)
+	Type string `mapstructure:"-" toml:"-"`
+
+	// Params contains all parameters from the runtime section
+	// The backend validates these parameters based on the runtime type
+	Params map[string]any `mapstructure:",remain" toml:",inline"`
+}
+
+// GetRuntimeType returns the active runtime type name for this configuration
+// Returns "cortex" as default if no runtime is specified
+func (pc *ProjectConfig) GetRuntimeType() string {
+	if pc.Runtime != nil && pc.Runtime.Type != "" {
+		return pc.Runtime.Type
 	}
 	// Default to cortex
-	return RuntimeTypeCortex
+	return "cortex"
+}
+
+// Helper methods to access common runtime parameters that the CLI needs locally
+
+// GetDockerfilePath returns the dockerfile_path from runtime params, if present
+func (rc *RuntimeConfig) GetDockerfilePath() string {
+	if rc == nil || rc.Params == nil {
+		return ""
+	}
+	if path, ok := rc.Params["dockerfile_path"].(string); ok {
+		return path
+	}
+	return ""
+}
+
+// GetEntrypoint returns the entrypoint from runtime params, if present
+func (rc *RuntimeConfig) GetEntrypoint() []string {
+	if rc == nil || rc.Params == nil {
+		return nil
+	}
+	if entrypoint, ok := rc.Params["entrypoint"].([]any); ok {
+		result := make([]string, len(entrypoint))
+		for i, v := range entrypoint {
+			if s, ok := v.(string); ok {
+				result[i] = s
+			}
+		}
+		return result
+	}
+	// Handle case where it's already []string (from test setup)
+	if entrypoint, ok := rc.Params["entrypoint"].([]string); ok {
+		return entrypoint
+	}
+	return nil
+}
+
+// GetPort returns the port from runtime params, if present (defaults to 8000)
+func (rc *RuntimeConfig) GetPort() int {
+	if rc == nil || rc.Params == nil {
+		return DefaultPort
+	}
+	if port, ok := rc.Params["port"].(int); ok {
+		return port
+	}
+	if port, ok := rc.Params["port"].(int64); ok {
+		return int(port)
+	}
+	if port, ok := rc.Params["port"].(float64); ok {
+		return int(port)
+	}
+	return DefaultPort
 }
 
 // DeploymentConfig represents the [cerebrium.deployment] section
@@ -66,36 +105,6 @@ type DeploymentConfig struct {
 	UseUv              *bool    `mapstructure:"use_uv" toml:"use_uv,omitempty"`
 }
 
-// CortexRuntimeConfig represents [cerebrium.runtime.cortex] (default Cerebrium managed Python)
-type CortexRuntimeConfig struct {
-	PythonVersion      string   `mapstructure:"python_version" toml:"python_version,omitempty"`
-	DockerBaseImageURL string   `mapstructure:"docker_base_image_url" toml:"docker_base_image_url,omitempty"`
-	ShellCommands      []string `mapstructure:"shell_commands" toml:"shell_commands,omitempty"`
-	PreBuildCommands   []string `mapstructure:"pre_build_commands" toml:"pre_build_commands,omitempty"`
-	UseUv              *bool    `mapstructure:"use_uv" toml:"use_uv,omitempty"`
-}
-
-// PythonRuntimeConfig represents [cerebrium.runtime.python] (custom Python ASGI app)
-type PythonRuntimeConfig struct {
-	PythonVersion       string   `mapstructure:"python_version" toml:"python_version,omitempty"`
-	DockerBaseImageURL  string   `mapstructure:"docker_base_image_url" toml:"docker_base_image_url,omitempty"`
-	ShellCommands       []string `mapstructure:"shell_commands" toml:"shell_commands,omitempty"`
-	PreBuildCommands    []string `mapstructure:"pre_build_commands" toml:"pre_build_commands,omitempty"`
-	UseUv               *bool    `mapstructure:"use_uv" toml:"use_uv,omitempty"`
-	Entrypoint          []string `mapstructure:"entrypoint" toml:"entrypoint,omitempty"`
-	Port                int      `mapstructure:"port" toml:"port,omitempty"`
-	HealthcheckEndpoint string   `mapstructure:"healthcheck_endpoint" toml:"healthcheck_endpoint,omitempty"`
-	ReadycheckEndpoint  string   `mapstructure:"readycheck_endpoint" toml:"readycheck_endpoint,omitempty"`
-}
-
-// DockerRuntimeConfig represents [cerebrium.runtime.docker] (custom Dockerfile)
-type DockerRuntimeConfig struct {
-	DockerfilePath      string   `mapstructure:"dockerfile_path" toml:"dockerfile_path,omitempty"`
-	Entrypoint          []string `mapstructure:"entrypoint" toml:"entrypoint,omitempty"`
-	Port                int      `mapstructure:"port" toml:"port,omitempty"`
-	HealthcheckEndpoint string   `mapstructure:"healthcheck_endpoint" toml:"healthcheck_endpoint,omitempty"`
-	ReadycheckEndpoint  string   `mapstructure:"readycheck_endpoint" toml:"readycheck_endpoint,omitempty"`
-}
 
 // HardwareConfig represents the [cerebrium.hardware] section
 type HardwareConfig struct {
@@ -137,22 +146,6 @@ type DependencyPathsConfig struct {
 	Apt   string `mapstructure:"apt" toml:"apt,omitempty"`
 }
 
-// CustomRuntimeConfig represents the [cerebrium.runtime.custom] section
-type CustomRuntimeConfig struct {
-	Entrypoint          []string `mapstructure:"entrypoint" toml:"entrypoint,omitempty"`
-	Port                int      `mapstructure:"port" toml:"port,omitempty"`
-	HealthcheckEndpoint string   `mapstructure:"healthcheck_endpoint" toml:"healthcheck_endpoint,omitempty"`
-	ReadycheckEndpoint  string   `mapstructure:"readycheck_endpoint" toml:"readycheck_endpoint,omitempty"`
-	DockerfilePath      string   `mapstructure:"dockerfile_path" toml:"dockerfile_path,omitempty"`
-}
-
-// PartnerServiceConfig represents partner service configurations
-type PartnerServiceConfig struct {
-	Name      string  `mapstructure:"name" toml:"name,omitempty"`
-	Port      *int    `mapstructure:"port" toml:"port,omitempty"`
-	ModelName *string `mapstructure:"model_name" toml:"model_name,omitempty"`
-	Language  *string `mapstructure:"language" toml:"language,omitempty"`
-}
 
 // ToPayload converts the project config to an API payload
 func (pc *ProjectConfig) ToPayload() map[string]any {
@@ -225,222 +218,114 @@ func (pc *ProjectConfig) ToPayload() map[string]any {
 		payload["loadBalancingAlgorithm"] = *pc.Scaling.LoadBalancingAlgorithm
 	}
 
-	// Runtime configuration based on type
+	// Runtime configuration - pass through to backend
 	pc.addRuntimePayload(payload)
 
 	return payload
 }
 
-// addRuntimePayload adds runtime-specific fields to the payload
+// addRuntimePayload adds runtime configuration to the payload
+// The CLI passes runtime parameters to the backend for validation
 func (pc *ProjectConfig) addRuntimePayload(payload map[string]any) {
 	runtimeType := pc.GetRuntimeType()
+	payload["runtime"] = runtimeType
 
-	switch runtimeType {
-	case RuntimeTypeDocker:
-		pc.addDockerRuntimePayload(payload)
-	case RuntimeTypePython:
-		pc.addPythonRuntimePayload(payload)
-	case RuntimeTypeCortex:
-		pc.addCortexRuntimePayload(payload)
-	case RuntimeTypeCustom:
-		pc.addCustomRuntimePayload(payload)
-	case RuntimeTypePartner:
-		pc.addPartnerRuntimePayload(payload)
+	// If we have runtime params, pass them through to the backend
+	if pc.Runtime != nil && pc.Runtime.Params != nil {
+		for key, value := range pc.Runtime.Params {
+			// Convert snake_case keys to API payload keys
+			apiKey := toAPIKey(key)
+			payload[apiKey] = value
+		}
 	}
+
+	// Apply deprecated deployment field fallbacks for backwards compatibility
+	// These are only applied if not already set by the runtime section
+	pc.applyDeprecatedDeploymentFallbacks(payload)
 }
 
-// addCortexRuntimePayload adds cortex runtime fields to the payload
-func (pc *ProjectConfig) addCortexRuntimePayload(payload map[string]any) {
-	payload["runtime"] = "cortex"
-
-	// Get values from cortex runtime or fallback to deprecated deployment fields
-	pythonVersion := DefaultPythonVersion
-	baseImage := DefaultDockerBaseImageURL
-	var shellCommands []string
-	var preBuildCommands []string
-	var useUv *bool
-
-	if pc.CortexRuntime != nil {
-		if pc.CortexRuntime.PythonVersion != "" {
-			pythonVersion = pc.CortexRuntime.PythonVersion
-		}
-		if pc.CortexRuntime.DockerBaseImageURL != "" {
-			baseImage = pc.CortexRuntime.DockerBaseImageURL
-		}
-		shellCommands = pc.CortexRuntime.ShellCommands
-		preBuildCommands = pc.CortexRuntime.PreBuildCommands
-		useUv = pc.CortexRuntime.UseUv
+// toAPIKey converts config keys to API payload keys
+// Some keys have special mappings that differ from simple camelCase conversion
+func toAPIKey(key string) string {
+	// Special mappings for known fields
+	specialMappings := map[string]string{
+		"docker_base_image_url": "baseImage",
+		"dockerfile_path":       "dockerfilePath",
 	}
 
-	// Fallback to deprecated deployment fields if runtime fields not set
-	if pc.CortexRuntime == nil || pc.CortexRuntime.PythonVersion == "" {
-		if pc.Deployment.PythonVersion != "" {
-			pythonVersion = pc.Deployment.PythonVersion
-		}
-	}
-	if pc.CortexRuntime == nil || pc.CortexRuntime.DockerBaseImageURL == "" {
-		if pc.Deployment.DockerBaseImageURL != "" {
-			baseImage = pc.Deployment.DockerBaseImageURL
-		}
-	}
-	if pc.CortexRuntime == nil || len(pc.CortexRuntime.ShellCommands) == 0 {
-		if len(pc.Deployment.ShellCommands) > 0 {
-			shellCommands = pc.Deployment.ShellCommands
-		}
-	}
-	if pc.CortexRuntime == nil || len(pc.CortexRuntime.PreBuildCommands) == 0 {
-		if len(pc.Deployment.PreBuildCommands) > 0 {
-			preBuildCommands = pc.Deployment.PreBuildCommands
-		}
-	}
-	if (pc.CortexRuntime == nil || pc.CortexRuntime.UseUv == nil) && pc.Deployment.UseUv != nil {
-		useUv = pc.Deployment.UseUv
+	if apiKey, ok := specialMappings[key]; ok {
+		return apiKey
 	}
 
-	payload["pythonVersion"] = pythonVersion
-	payload["baseImage"] = baseImage
-	payload["shellCommands"] = shellCommands
-	payload["preBuildCommands"] = preBuildCommands
-	if useUv != nil {
-		payload["useUv"] = *useUv
-	}
+	// Default to camelCase conversion
+	return snakeToCamel(key)
 }
 
-// addPythonRuntimePayload adds python runtime fields to the payload
-func (pc *ProjectConfig) addPythonRuntimePayload(payload map[string]any) {
-	payload["runtime"] = "custom"
-
-	pythonVersion := DefaultPythonVersion
-	baseImage := DefaultDockerBaseImageURL
-	var shellCommands []string
-	var preBuildCommands []string
-	var useUv *bool
-	entrypoint := DefaultEntrypoint
-	port := DefaultPort
-
-	if pc.PythonRuntime != nil {
-		if pc.PythonRuntime.PythonVersion != "" {
-			pythonVersion = pc.PythonRuntime.PythonVersion
-		}
-		if pc.PythonRuntime.DockerBaseImageURL != "" {
-			baseImage = pc.PythonRuntime.DockerBaseImageURL
-		}
-		shellCommands = pc.PythonRuntime.ShellCommands
-		preBuildCommands = pc.PythonRuntime.PreBuildCommands
-		useUv = pc.PythonRuntime.UseUv
-		if len(pc.PythonRuntime.Entrypoint) > 0 {
-			entrypoint = pc.PythonRuntime.Entrypoint
-		}
-		if pc.PythonRuntime.Port != 0 {
-			port = pc.PythonRuntime.Port
-		}
-		payload["healthcheckEndpoint"] = pc.PythonRuntime.HealthcheckEndpoint
-		payload["readycheckEndpoint"] = pc.PythonRuntime.ReadycheckEndpoint
-	}
-
-	// Fallback to deprecated deployment fields
-	if pc.PythonRuntime == nil || pc.PythonRuntime.PythonVersion == "" {
-		if pc.Deployment.PythonVersion != "" {
-			pythonVersion = pc.Deployment.PythonVersion
-		}
-	}
-	if pc.PythonRuntime == nil || pc.PythonRuntime.DockerBaseImageURL == "" {
-		if pc.Deployment.DockerBaseImageURL != "" {
-			baseImage = pc.Deployment.DockerBaseImageURL
-		}
-	}
-	if pc.PythonRuntime == nil || len(pc.PythonRuntime.ShellCommands) == 0 {
-		if len(pc.Deployment.ShellCommands) > 0 {
-			shellCommands = pc.Deployment.ShellCommands
-		}
-	}
-	if pc.PythonRuntime == nil || len(pc.PythonRuntime.PreBuildCommands) == 0 {
-		if len(pc.Deployment.PreBuildCommands) > 0 {
-			preBuildCommands = pc.Deployment.PreBuildCommands
-		}
-	}
-	if (pc.PythonRuntime == nil || pc.PythonRuntime.UseUv == nil) && pc.Deployment.UseUv != nil {
-		useUv = pc.Deployment.UseUv
-	}
-
-	payload["pythonVersion"] = pythonVersion
-	payload["baseImage"] = baseImage
-	payload["shellCommands"] = shellCommands
-	payload["preBuildCommands"] = preBuildCommands
-	if useUv != nil {
-		payload["useUv"] = *useUv
-	}
-	payload["entrypoint"] = entrypoint
-	payload["port"] = port
-}
-
-// addDockerRuntimePayload adds docker runtime fields to the payload
-func (pc *ProjectConfig) addDockerRuntimePayload(payload map[string]any) {
-	payload["runtime"] = "custom"
-
-	if pc.DockerRuntime != nil {
-		payload["dockerfilePath"] = pc.DockerRuntime.DockerfilePath
-		payload["entrypoint"] = pc.DockerRuntime.Entrypoint
-		port := DefaultPort
-		if pc.DockerRuntime.Port != 0 {
-			port = pc.DockerRuntime.Port
-		}
-		payload["port"] = port
-		payload["healthcheckEndpoint"] = pc.DockerRuntime.HealthcheckEndpoint
-		payload["readycheckEndpoint"] = pc.DockerRuntime.ReadycheckEndpoint
-	}
-}
-
-// addCustomRuntimePayload adds deprecated custom runtime fields to the payload
-func (pc *ProjectConfig) addCustomRuntimePayload(payload map[string]any) {
-	// Handle deprecated [cerebrium.runtime.custom] section
-	payload["runtime"] = "custom"
-
-	// Also include build params from deployment (deprecated fallback)
-	pythonVersion := DefaultPythonVersion
-	baseImage := DefaultDockerBaseImageURL
-
-	if pc.Deployment.PythonVersion != "" {
-		pythonVersion = pc.Deployment.PythonVersion
-	}
-	if pc.Deployment.DockerBaseImageURL != "" {
-		baseImage = pc.Deployment.DockerBaseImageURL
-	}
-
-	payload["pythonVersion"] = pythonVersion
-	payload["baseImage"] = baseImage
-	payload["shellCommands"] = pc.Deployment.ShellCommands
-	payload["preBuildCommands"] = pc.Deployment.PreBuildCommands
-	if pc.Deployment.UseUv != nil {
-		payload["useUv"] = *pc.Deployment.UseUv
-	}
-
-	if pc.CustomRuntime != nil {
-		payload["entrypoint"] = pc.CustomRuntime.Entrypoint
-		payload["port"] = pc.CustomRuntime.Port
-		payload["healthcheckEndpoint"] = pc.CustomRuntime.HealthcheckEndpoint
-		payload["readycheckEndpoint"] = pc.CustomRuntime.ReadycheckEndpoint
-		if pc.CustomRuntime.DockerfilePath != "" {
-			payload["dockerfilePath"] = pc.CustomRuntime.DockerfilePath
-		}
-	}
-}
-
-// addPartnerRuntimePayload adds partner service fields to the payload
-func (pc *ProjectConfig) addPartnerRuntimePayload(payload map[string]any) {
-	if pc.PartnerService == nil {
+// applyDeprecatedDeploymentFallbacks applies deprecated deployment fields if not set by runtime
+func (pc *ProjectConfig) applyDeprecatedDeploymentFallbacks(payload map[string]any) {
+	// Only apply fallbacks for non-docker runtimes (docker doesn't use these fields)
+	if pc.Runtime != nil && pc.Runtime.GetDockerfilePath() != "" {
 		return
 	}
 
-	payload["partnerService"] = pc.PartnerService.Name
-	payload["runtime"] = pc.PartnerService.Name
-	if pc.PartnerService.Port != nil {
-		payload["port"] = *pc.PartnerService.Port
+	// python_version fallback
+	if _, ok := payload["pythonVersion"]; !ok {
+		if pc.Deployment.PythonVersion != "" {
+			payload["pythonVersion"] = pc.Deployment.PythonVersion
+		} else {
+			payload["pythonVersion"] = DefaultPythonVersion
+		}
 	}
-	if pc.PartnerService.ModelName != nil {
-		payload["modelName"] = *pc.PartnerService.ModelName
+
+	// docker_base_image_url fallback
+	if _, ok := payload["baseImage"]; !ok {
+		if pc.Deployment.DockerBaseImageURL != "" {
+			payload["baseImage"] = pc.Deployment.DockerBaseImageURL
+		} else {
+			payload["baseImage"] = DefaultDockerBaseImageURL
+		}
 	}
-	if pc.PartnerService.Language != nil {
-		payload["language"] = *pc.PartnerService.Language
+
+	// shell_commands fallback
+	if _, ok := payload["shellCommands"]; !ok {
+		if len(pc.Deployment.ShellCommands) > 0 {
+			payload["shellCommands"] = pc.Deployment.ShellCommands
+		}
 	}
+
+	// pre_build_commands fallback
+	if _, ok := payload["preBuildCommands"]; !ok {
+		if len(pc.Deployment.PreBuildCommands) > 0 {
+			payload["preBuildCommands"] = pc.Deployment.PreBuildCommands
+		}
+	}
+
+	// use_uv fallback
+	if _, ok := payload["useUv"]; !ok {
+		if pc.Deployment.UseUv != nil {
+			payload["useUv"] = *pc.Deployment.UseUv
+		}
+	}
+}
+
+// snakeToCamel converts snake_case to camelCase
+func snakeToCamel(s string) string {
+	result := make([]byte, 0, len(s))
+	capitalizeNext := false
+
+	for i := 0; i < len(s); i++ {
+		if s[i] == '_' {
+			capitalizeNext = true
+			continue
+		}
+		if capitalizeNext && s[i] >= 'a' && s[i] <= 'z' {
+			result = append(result, s[i]-32) // Convert to uppercase
+			capitalizeNext = false
+		} else {
+			result = append(result, s[i])
+			capitalizeNext = false
+		}
+	}
+
+	return string(result)
 }
