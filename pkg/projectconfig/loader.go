@@ -40,51 +40,79 @@ func Load(configPath string) (*ProjectConfig, error) {
 		return nil, fmt.Errorf("failed to read config file: %w", err)
 	}
 
-	// Check if 'cerebrium' key exists
-	if !v.IsSet("cerebrium") {
-		return nil, fmt.Errorf("'cerebrium' key not found in %s. Please ensure your config file is valid", configPath)
+	// Determine which format is being used
+	// Legacy format: [cerebrium.deployment], [cerebrium.hardware], etc.
+	// New format: [deployment], [hardware], etc.
+	useLegacyFormat := v.IsSet("cerebrium")
+	useNewFormat := v.IsSet("deployment") || v.IsSet("hardware") || v.IsSet("scaling") || v.IsSet("dependencies") || v.IsSet("runtime")
+
+	if useLegacyFormat && useNewFormat {
+		return nil, fmt.Errorf("cannot mix [cerebrium.*] format with new format. Please use one or the other")
+	}
+
+	if !useLegacyFormat && !useNewFormat {
+		return nil, fmt.Errorf("no valid configuration found in %s. Expected [deployment] section", configPath)
 	}
 
 	// Parse into config struct
 	var config ProjectConfig
 	config.DeprecationWarnings = []string{}
 
+	// Determine the key prefix based on format
+	prefix := ""
+	if useLegacyFormat {
+		prefix = "cerebrium."
+		config.DeprecationWarnings = append(config.DeprecationWarnings,
+			"[cerebrium.*] prefix is deprecated. Please remove the 'cerebrium.' prefix from all sections:\n"+
+				"  [cerebrium.deployment] → [deployment]\n"+
+				"  [cerebrium.hardware] → [hardware]\n"+
+				"  [cerebrium.scaling] → [scaling]\n"+
+				"  [cerebrium.runtime.cortex] → [runtime.cortex]")
+	}
+
 	// Parse deployment section (required)
-	if err := v.UnmarshalKey("cerebrium.deployment", &config.Deployment); err != nil {
+	deploymentKey := prefix + "deployment"
+	if !v.IsSet(deploymentKey) {
+		return nil, fmt.Errorf("[deployment] section not found in %s", configPath)
+	}
+	if err := v.UnmarshalKey(deploymentKey, &config.Deployment); err != nil {
 		return nil, fmt.Errorf("failed to parse deployment config: %w", err)
 	}
 
 	// Parse hardware section
-	if v.IsSet("cerebrium.hardware") {
-		if err := v.UnmarshalKey("cerebrium.hardware", &config.Hardware); err != nil {
+	hardwareKey := prefix + "hardware"
+	if v.IsSet(hardwareKey) {
+		if err := v.UnmarshalKey(hardwareKey, &config.Hardware); err != nil {
 			return nil, fmt.Errorf("failed to parse hardware config: %w", err)
 		}
 	}
 
 	// Parse scaling section
-	if v.IsSet("cerebrium.scaling") {
-		if err := v.UnmarshalKey("cerebrium.scaling", &config.Scaling); err != nil {
+	scalingKey := prefix + "scaling"
+	if v.IsSet(scalingKey) {
+		if err := v.UnmarshalKey(scalingKey, &config.Scaling); err != nil {
 			return nil, fmt.Errorf("failed to parse scaling config: %w", err)
 		}
 	}
 
 	// Parse dependencies section
-	if v.IsSet("cerebrium.dependencies") {
-		if err := v.UnmarshalKey("cerebrium.dependencies", &config.Dependencies); err != nil {
+	dependenciesKey := prefix + "dependencies"
+	if v.IsSet(dependenciesKey) {
+		if err := v.UnmarshalKey(dependenciesKey, &config.Dependencies); err != nil {
 			return nil, fmt.Errorf("failed to parse dependencies config: %w", err)
 		}
 	}
 
-	// Parse new runtime sections (cortex, python, docker)
-	if err := parseRuntimeSections(v, &config); err != nil {
+	// Parse runtime sections (cortex, python, docker, etc.)
+	if err := parseRuntimeSections(v, &config, prefix); err != nil {
 		return nil, err
 	}
 
 	// Check for deprecated deployment fields and add warnings
-	checkDeprecatedDeploymentFields(v, &config)
+	checkDeprecatedDeploymentFields(v, &config, prefix)
 
 	// Check for deprecated top-level dependencies and add warnings
-	checkDeprecatedDependencies(v, &config)
+	checkDeprecatedDependencies(&config, prefix)
 
 	// Apply defaults for missing fields
 	applyDefaults(&config)
@@ -93,10 +121,11 @@ func Load(configPath string) (*ProjectConfig, error) {
 }
 
 // parseRuntimeSections parses the runtime section from the config
-// The CLI accepts any [cerebrium.runtime.<name>] section and passes it to the backend
-func parseRuntimeSections(v *viper.Viper, config *ProjectConfig) error {
-	// Get all keys under cerebrium.runtime
-	runtimeSection := v.GetStringMap("cerebrium.runtime")
+// The CLI accepts any [runtime.<name>] section and passes it to the backend
+func parseRuntimeSections(v *viper.Viper, config *ProjectConfig, prefix string) error {
+	// Get all keys under runtime (with appropriate prefix)
+	runtimeKey := prefix + "runtime"
+	runtimeSection := v.GetStringMap(runtimeKey)
 	if len(runtimeSection) == 0 {
 		return nil
 	}
@@ -113,7 +142,7 @@ func parseRuntimeSections(v *viper.Viper, config *ProjectConfig) error {
 
 	if len(runtimeTypes) == 1 {
 		runtimeType := runtimeTypes[0]
-		key := fmt.Sprintf("cerebrium.runtime.%s", runtimeType)
+		key := fmt.Sprintf("%sruntime.%s", prefix, runtimeType)
 
 		// Parse the runtime params as a generic map
 		params := v.GetStringMap(key)
@@ -131,17 +160,17 @@ func parseRuntimeSections(v *viper.Viper, config *ProjectConfig) error {
 			Params: runtimeParams,
 		}
 
-		// Add deprecation warning for [cerebrium.runtime.custom]
+		// Add deprecation warning for [runtime.custom]
 		if runtimeType == "custom" {
-			addCustomRuntimeDeprecationWarning(config)
+			addCustomRuntimeDeprecationWarning(config, prefix)
 		}
 	}
 
 	return nil
 }
 
-// addCustomRuntimeDeprecationWarning adds a deprecation warning for [cerebrium.runtime.custom]
-func addCustomRuntimeDeprecationWarning(config *ProjectConfig) {
+// addCustomRuntimeDeprecationWarning adds a deprecation warning for [runtime.custom]
+func addCustomRuntimeDeprecationWarning(config *ProjectConfig, prefix string) {
 	if config.Runtime == nil || config.Runtime.Type != "custom" {
 		return
 	}
@@ -150,20 +179,20 @@ func addCustomRuntimeDeprecationWarning(config *ProjectConfig) {
 	if config.Runtime.GetDockerfilePath() != "" {
 		// This is a docker runtime
 		config.DeprecationWarnings = append(config.DeprecationWarnings,
-			"[cerebrium.runtime.custom] is deprecated. Please migrate to [cerebrium.runtime.docker]:\n"+
-				"  [cerebrium.runtime.docker]\n"+
-				"  dockerfile_path = \""+config.Runtime.GetDockerfilePath()+"\"")
+			fmt.Sprintf("[%sruntime.custom] is deprecated. Please migrate to [%sruntime.docker]:\n"+
+				"  [%sruntime.docker]\n"+
+				"  dockerfile_path = \"%s\"", prefix, prefix, prefix, config.Runtime.GetDockerfilePath()))
 	} else {
 		// This is a python runtime
 		config.DeprecationWarnings = append(config.DeprecationWarnings,
-			"[cerebrium.runtime.custom] is deprecated. Please migrate to [cerebrium.runtime.python]:\n"+
-				"  [cerebrium.runtime.python]\n"+
-				"  entrypoint = [\"uvicorn\", \"app.main:app\", \"--host\", \"0.0.0.0\", \"--port\", \"8000\"]")
+			fmt.Sprintf("[%sruntime.custom] is deprecated. Please migrate to [%sruntime.python]:\n"+
+				"  [%sruntime.python]\n"+
+				"  entrypoint = [\"uvicorn\", \"app.main:app\", \"--host\", \"0.0.0.0\", \"--port\", \"8000\"]", prefix, prefix, prefix))
 	}
 }
 
 // checkDeprecatedDependencies checks for deprecated top-level dependencies section
-func checkDeprecatedDependencies(_ *viper.Viper, config *ProjectConfig) {
+func checkDeprecatedDependencies(config *ProjectConfig, prefix string) {
 	if !config.HasTopLevelDependencies() {
 		return
 	}
@@ -176,33 +205,33 @@ func checkDeprecatedDependencies(_ *viper.Viper, config *ProjectConfig) {
 	}
 
 	config.DeprecationWarnings = append(config.DeprecationWarnings,
-		fmt.Sprintf("[cerebrium.dependencies] is deprecated. Please move to [cerebrium.runtime.%s.dependencies.*]:\n"+
-			"  [cerebrium.runtime.%s.dependencies.pip]\n"+
+		fmt.Sprintf("[%sdependencies] is deprecated. Please move to [%sruntime.%s.deps.*]:\n"+
+			"  [%sruntime.%s.deps.pip]\n"+
 			"  torch = \"2.0.0\"\n"+
 			"  \n"+
-			"  [cerebrium.runtime.%s.dependencies.apt]\n"+
+			"  [%sruntime.%s.deps.apt]\n"+
 			"  ffmpeg = \"\"",
-			runtimeType, runtimeType, runtimeType))
+			prefix, prefix, runtimeType, prefix, runtimeType, prefix, runtimeType))
 }
 
 // checkDeprecatedDeploymentFields checks for deprecated fields in the deployment section
-func checkDeprecatedDeploymentFields(v *viper.Viper, config *ProjectConfig) {
+func checkDeprecatedDeploymentFields(v *viper.Viper, config *ProjectConfig, prefix string) {
 	deprecatedFields := []struct {
-		key     string
-		name    string
-		newLoc  string
+		name   string
+		newLoc string
 	}{
-		{"cerebrium.deployment.python_version", "python_version", "[cerebrium.runtime.cortex] or [cerebrium.runtime.python]"},
-		{"cerebrium.deployment.docker_base_image_url", "docker_base_image_url", "[cerebrium.runtime.cortex] or [cerebrium.runtime.python]"},
-		{"cerebrium.deployment.shell_commands", "shell_commands", "[cerebrium.runtime.cortex] or [cerebrium.runtime.python]"},
-		{"cerebrium.deployment.pre_build_commands", "pre_build_commands", "[cerebrium.runtime.cortex] or [cerebrium.runtime.python]"},
-		{"cerebrium.deployment.use_uv", "use_uv", "[cerebrium.runtime.cortex] or [cerebrium.runtime.python]"},
+		{"python_version", "[runtime.cortex] or [runtime.python]"},
+		{"docker_base_image_url", "[runtime.cortex] or [runtime.python]"},
+		{"shell_commands", "[runtime.cortex] or [runtime.python]"},
+		{"pre_build_commands", "[runtime.cortex] or [runtime.python]"},
+		{"use_uv", "[runtime.cortex] or [runtime.python]"},
 	}
 
 	for _, field := range deprecatedFields {
-		if v.IsSet(field.key) {
+		key := prefix + "deployment." + field.name
+		if v.IsSet(key) {
 			config.DeprecationWarnings = append(config.DeprecationWarnings,
-				fmt.Sprintf("[cerebrium.deployment].%s is deprecated. Please move to %s", field.name, field.newLoc))
+				fmt.Sprintf("[%sdeployment].%s is deprecated. Please move to %s", prefix, field.name, field.newLoc))
 		}
 	}
 }

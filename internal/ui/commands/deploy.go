@@ -960,7 +960,7 @@ func (m *DeployView) validateRuntime() tea.Msg {
 		if len(effectiveDeps.Apt) > 0 {
 			depsMap["apt"] = effectiveDeps.Apt
 		}
-		params["dependencies"] = depsMap
+		params["deps"] = depsMap
 	}
 
 	req := &api.ValidateRuntimeRequest{

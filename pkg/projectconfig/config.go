@@ -200,7 +200,7 @@ func (rc *RuntimeConfig) GetDependencies() *DependenciesConfig {
 		return nil
 	}
 
-	depsRaw, ok := rc.Params["dependencies"]
+	depsRaw, ok := rc.Params["deps"]
 	if !ok {
 		return nil
 	}

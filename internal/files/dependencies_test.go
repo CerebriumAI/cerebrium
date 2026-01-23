@@ -218,7 +218,7 @@ func TestGenerateDependencyFiles_WithRuntimeDependencies(t *testing.T) {
 			Type: "cortex",
 			Params: map[string]any{
 				"python_version": "3.12",
-				"dependencies": map[string]any{
+				"deps": map[string]any{
 					"pip": map[string]any{
 						"torch": "2.0.0",
 						"numpy": "latest",
@@ -254,7 +254,7 @@ func TestGenerateDependencyFiles_MergeTopLevelAndRuntimeDependencies(t *testing.
 			Type: "cortex",
 			Params: map[string]any{
 				"python_version": "3.12",
-				"dependencies": map[string]any{
+				"deps": map[string]any{
 					"pip": map[string]any{
 						"torch": "2.0.0",
 						"numpy": "1.24.0", // Overrides top-level

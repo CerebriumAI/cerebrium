@@ -67,7 +67,7 @@ disable_auth = true
 		assert.Contains(t, err.Error(), "config file not found")
 	})
 
-	t.Run("returns error when cerebrium key missing", func(t *testing.T) {
+	t.Run("returns error when no valid config found", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		configPath := filepath.Join(tmpDir, "cerebrium.toml")
 
@@ -79,7 +79,7 @@ name = "test-app"
 
 		_, err = Load(configPath)
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "'cerebrium' key not found")
+		assert.Contains(t, err.Error(), "no valid configuration found")
 	})
 
 	t.Run("parses cortex runtime section", func(t *testing.T) {
@@ -181,8 +181,16 @@ port = 8000
 		require.NoError(t, err)
 		require.NotNil(t, config.Runtime)
 		assert.Equal(t, "custom", config.Runtime.Type)
-		assert.Len(t, config.DeprecationWarnings, 1)
-		assert.Contains(t, config.DeprecationWarnings[0], "[cerebrium.runtime.custom] is deprecated")
+		// Should have both prefix deprecation warning and custom runtime warning
+		assert.GreaterOrEqual(t, len(config.DeprecationWarnings), 1)
+		foundCustomWarning := false
+		for _, warning := range config.DeprecationWarnings {
+			if strings.Contains(warning, "runtime.custom] is deprecated") {
+				foundCustomWarning = true
+				break
+			}
+		}
+		assert.True(t, foundCustomWarning, "expected deprecation warning for custom runtime")
 	})
 
 	t.Run("adds deprecation warnings for deployment fields", func(t *testing.T) {
@@ -336,11 +344,11 @@ name = "test-app"
 [cerebrium.runtime.cortex]
 python_version = "3.12"
 
-[cerebrium.runtime.cortex.dependencies.pip]
+[cerebrium.runtime.cortex.deps.pip]
 torch = "2.0.0"
 numpy = "latest"
 
-[cerebrium.runtime.cortex.dependencies.apt]
+[cerebrium.runtime.cortex.deps.apt]
 ffmpeg = ""
 `
 		err := os.WriteFile(configPath, []byte(content), 0644)
@@ -395,7 +403,7 @@ name = "test-app"
 [cerebrium.runtime.cortex]
 python_version = "3.12"
 
-[cerebrium.runtime.cortex.dependencies.pip]
+[cerebrium.runtime.cortex.deps.pip]
 torch = "2.0.0"
 `
 		err := os.WriteFile(configPath, []byte(content), 0644)
@@ -424,7 +432,7 @@ numpy = "1.23.0"
 [cerebrium.runtime.cortex]
 python_version = "3.12"
 
-[cerebrium.runtime.cortex.dependencies.pip]
+[cerebrium.runtime.cortex.deps.pip]
 torch = "2.0.0"
 numpy = "1.24.0"
 `
@@ -442,5 +450,165 @@ numpy = "1.24.0"
 		assert.Equal(t, "2.28.0", effectiveDeps.Pip["requests"])
 		// Runtime-only package
 		assert.Equal(t, "2.0.0", effectiveDeps.Pip["torch"])
+	})
+
+	// Tests for new format (without cerebrium. prefix)
+	t.Run("parses new format without cerebrium prefix", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		configPath := filepath.Join(tmpDir, "cerebrium.toml")
+
+		content := `[deployment]
+name = "test-app"
+
+[runtime.cortex]
+python_version = "3.12"
+
+[hardware]
+cpu = 2
+memory = 4.0
+
+[scaling]
+min_replicas = 1
+`
+		err := os.WriteFile(configPath, []byte(content), 0644)
+		require.NoError(t, err)
+
+		config, err := Load(configPath)
+		require.NoError(t, err)
+
+		assert.Equal(t, "test-app", config.Deployment.Name)
+		assert.Equal(t, "cortex", config.Runtime.Type)
+		assert.Equal(t, "3.12", config.Runtime.Params["python_version"])
+		assert.Equal(t, float64(2), *config.Hardware.CPU)
+		assert.Equal(t, float64(4.0), *config.Hardware.Memory)
+		assert.Equal(t, 1, *config.Scaling.MinReplicas)
+
+		// No deprecation warning for cerebrium prefix in new format
+		for _, warning := range config.DeprecationWarnings {
+			assert.NotContains(t, warning, "[cerebrium.*] prefix is deprecated")
+		}
+	})
+
+	t.Run("adds deprecation warning for cerebrium prefix", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		configPath := filepath.Join(tmpDir, "cerebrium.toml")
+
+		content := `[cerebrium.deployment]
+name = "test-app"
+`
+		err := os.WriteFile(configPath, []byte(content), 0644)
+		require.NoError(t, err)
+
+		config, err := Load(configPath)
+		require.NoError(t, err)
+
+		// Should have deprecation warning for cerebrium. prefix
+		foundPrefixWarning := false
+		for _, warning := range config.DeprecationWarnings {
+			if strings.Contains(warning, "[cerebrium.*] prefix is deprecated") {
+				foundPrefixWarning = true
+				break
+			}
+		}
+		assert.True(t, foundPrefixWarning, "expected deprecation warning for cerebrium. prefix")
+	})
+
+	t.Run("rejects mixed format", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		configPath := filepath.Join(tmpDir, "cerebrium.toml")
+
+		content := `[cerebrium.deployment]
+name = "test-app"
+
+[hardware]
+cpu = 2
+`
+		err := os.WriteFile(configPath, []byte(content), 0644)
+		require.NoError(t, err)
+
+		_, err = Load(configPath)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "cannot mix")
+	})
+
+	t.Run("new format with runtime dependencies", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		configPath := filepath.Join(tmpDir, "cerebrium.toml")
+
+		content := `[deployment]
+name = "test-app"
+
+[runtime.cortex]
+python_version = "3.12"
+
+[runtime.cortex.deps.pip]
+torch = "2.0.0"
+numpy = "latest"
+
+[runtime.cortex.deps.apt]
+ffmpeg = ""
+`
+		err := os.WriteFile(configPath, []byte(content), 0644)
+		require.NoError(t, err)
+
+		config, err := Load(configPath)
+		require.NoError(t, err)
+
+		effectiveDeps := config.GetEffectiveDependencies()
+		assert.Equal(t, "2.0.0", effectiveDeps.Pip["torch"])
+		assert.Equal(t, "latest", effectiveDeps.Pip["numpy"])
+		assert.Equal(t, "", effectiveDeps.Apt["ffmpeg"])
+	})
+
+	t.Run("new format python runtime", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		configPath := filepath.Join(tmpDir, "cerebrium.toml")
+
+		content := `[deployment]
+name = "fastapi-app"
+
+[runtime.python]
+python_version = "3.11"
+entrypoint = ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+port = 8000
+healthcheck_endpoint = "/health"
+`
+		err := os.WriteFile(configPath, []byte(content), 0644)
+		require.NoError(t, err)
+
+		config, err := Load(configPath)
+		require.NoError(t, err)
+
+		assert.Equal(t, "python", config.Runtime.Type)
+		assert.Equal(t, "3.11", config.Runtime.Params["python_version"])
+		assert.Equal(t, int64(8000), config.Runtime.Params["port"])
+		assert.Equal(t, "/health", config.Runtime.Params["healthcheck_endpoint"])
+	})
+
+	t.Run("new format docker runtime", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		configPath := filepath.Join(tmpDir, "cerebrium.toml")
+
+		// Create a dummy Dockerfile
+		dockerfilePath := filepath.Join(tmpDir, "Dockerfile")
+		err := os.WriteFile(dockerfilePath, []byte("FROM python:3.11"), 0644)
+		require.NoError(t, err)
+
+		content := `[deployment]
+name = "docker-app"
+
+[runtime.docker]
+dockerfile_path = "` + dockerfilePath + `"
+port = 8080
+`
+		err = os.WriteFile(configPath, []byte(content), 0644)
+		require.NoError(t, err)
+
+		config, err := Load(configPath)
+		require.NoError(t, err)
+
+		assert.Equal(t, "docker", config.Runtime.Type)
+		assert.Equal(t, dockerfilePath, config.Runtime.GetDockerfilePath())
+		assert.Equal(t, int64(8080), config.Runtime.Params["port"])
 	})
 }
