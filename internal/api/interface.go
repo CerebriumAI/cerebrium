@@ -12,6 +12,7 @@ type Client interface {
 	FetchAppLogs(ctx context.Context, projectID, appID string, opts AppLogOptions) (*AppLogsResponse, error)
 
 	// Deploy methods
+	ValidateRuntime(ctx context.Context, projectID string, req *ValidateRuntimeRequest) (*ValidateRuntimeResponse, error)
 	CreateApp(ctx context.Context, projectID string, payload map[string]any) (*CreateAppResponse, error)
 	CreatePartnerApp(ctx context.Context, projectID string, payload map[string]any) (*CreateAppResponse, error)
 	UploadZip(ctx context.Context, uploadURL string, zipPath string) error

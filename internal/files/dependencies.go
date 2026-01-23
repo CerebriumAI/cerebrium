@@ -13,29 +13,32 @@ import (
 func GenerateDependencyFiles(config *projectconfig.ProjectConfig) (map[string]string, error) {
 	files := make(map[string]string)
 
+	// Get effective dependencies (merged from top-level and runtime-specific)
+	effectiveDeps := config.GetEffectiveDependencies()
+
 	// Generate pip requirements
-	if err := generateDependencyFile(files, "requirements.txt", config.Dependencies.Pip, config.Dependencies.Paths.Pip); err != nil {
+	if err := generateDependencyFile(files, "requirements.txt", effectiveDeps.Pip, effectiveDeps.Paths.Pip); err != nil {
 		return nil, fmt.Errorf("failed to generate pip requirements: %w", err)
 	}
 
 	// Generate conda requirements
-	if err := generateDependencyFile(files, "conda_pkglist.txt", config.Dependencies.Conda, config.Dependencies.Paths.Conda); err != nil {
+	if err := generateDependencyFile(files, "conda_pkglist.txt", effectiveDeps.Conda, effectiveDeps.Paths.Conda); err != nil {
 		return nil, fmt.Errorf("failed to generate conda requirements: %w", err)
 	}
 
 	// Generate apt requirements
-	if err := generateDependencyFile(files, "pkglist.txt", config.Dependencies.Apt, config.Dependencies.Paths.Apt); err != nil {
+	if err := generateDependencyFile(files, "pkglist.txt", effectiveDeps.Apt, effectiveDeps.Paths.Apt); err != nil {
 		return nil, fmt.Errorf("failed to generate apt requirements: %w", err)
 	}
 
-	// Generate shell commands file
-	if len(config.Deployment.ShellCommands) > 0 {
-		files["shell_commands.sh"] = generateShellCommandsContent(config.Deployment.ShellCommands)
+	// Generate shell commands file (from runtime or deprecated deployment section)
+	if shellCmds := config.GetEffectiveShellCommands(); len(shellCmds) > 0 {
+		files["shell_commands.sh"] = generateShellCommandsContent(shellCmds)
 	}
 
-	// Generate pre-build commands file
-	if len(config.Deployment.PreBuildCommands) > 0 {
-		files["pre_build_commands.sh"] = generateShellCommandsContent(config.Deployment.PreBuildCommands)
+	// Generate pre-build commands file (from runtime or deprecated deployment section)
+	if preBuildCmds := config.GetEffectivePreBuildCommands(); len(preBuildCmds) > 0 {
+		files["pre_build_commands.sh"] = generateShellCommandsContent(preBuildCmds)
 	}
 
 	return files, nil

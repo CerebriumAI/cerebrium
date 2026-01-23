@@ -3,6 +3,7 @@ package projectconfig
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -323,5 +324,123 @@ entrypoint = ["uvicorn", "app:app"]
 		_, err = Load(configPath)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "only one runtime type can be specified")
+	})
+
+	t.Run("parses runtime-specific dependencies", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		configPath := filepath.Join(tmpDir, "cerebrium.toml")
+
+		content := `[cerebrium.deployment]
+name = "test-app"
+
+[cerebrium.runtime.cortex]
+python_version = "3.12"
+
+[cerebrium.runtime.cortex.dependencies.pip]
+torch = "2.0.0"
+numpy = "latest"
+
+[cerebrium.runtime.cortex.dependencies.apt]
+ffmpeg = ""
+`
+		err := os.WriteFile(configPath, []byte(content), 0644)
+		require.NoError(t, err)
+
+		config, err := Load(configPath)
+		require.NoError(t, err)
+		require.NotNil(t, config.Runtime)
+
+		// Check runtime dependencies were parsed
+		runtimeDeps := config.Runtime.GetDependencies()
+		require.NotNil(t, runtimeDeps)
+		assert.Equal(t, "2.0.0", runtimeDeps.Pip["torch"])
+		assert.Equal(t, "latest", runtimeDeps.Pip["numpy"])
+		assert.Equal(t, "", runtimeDeps.Apt["ffmpeg"])
+	})
+
+	t.Run("adds deprecation warning for top-level dependencies", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		configPath := filepath.Join(tmpDir, "cerebrium.toml")
+
+		content := `[cerebrium.deployment]
+name = "test-app"
+
+[cerebrium.dependencies.pip]
+torch = "2.0.0"
+`
+		err := os.WriteFile(configPath, []byte(content), 0644)
+		require.NoError(t, err)
+
+		config, err := Load(configPath)
+		require.NoError(t, err)
+
+		// Check for deprecation warning
+		foundDeprecationWarning := false
+		for _, warning := range config.DeprecationWarnings {
+			if strings.Contains(warning, "[cerebrium.dependencies] is deprecated") {
+				foundDeprecationWarning = true
+				break
+			}
+		}
+		assert.True(t, foundDeprecationWarning, "expected deprecation warning for top-level dependencies")
+	})
+
+	t.Run("no deprecation warning for runtime-only dependencies", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		configPath := filepath.Join(tmpDir, "cerebrium.toml")
+
+		content := `[cerebrium.deployment]
+name = "test-app"
+
+[cerebrium.runtime.cortex]
+python_version = "3.12"
+
+[cerebrium.runtime.cortex.dependencies.pip]
+torch = "2.0.0"
+`
+		err := os.WriteFile(configPath, []byte(content), 0644)
+		require.NoError(t, err)
+
+		config, err := Load(configPath)
+		require.NoError(t, err)
+
+		// Check there's no deprecation warning for dependencies
+		for _, warning := range config.DeprecationWarnings {
+			assert.NotContains(t, warning, "[cerebrium.dependencies] is deprecated")
+		}
+	})
+
+	t.Run("merges top-level and runtime dependencies with runtime winning", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		configPath := filepath.Join(tmpDir, "cerebrium.toml")
+
+		content := `[cerebrium.deployment]
+name = "test-app"
+
+[cerebrium.dependencies.pip]
+requests = "2.28.0"
+numpy = "1.23.0"
+
+[cerebrium.runtime.cortex]
+python_version = "3.12"
+
+[cerebrium.runtime.cortex.dependencies.pip]
+torch = "2.0.0"
+numpy = "1.24.0"
+`
+		err := os.WriteFile(configPath, []byte(content), 0644)
+		require.NoError(t, err)
+
+		config, err := Load(configPath)
+		require.NoError(t, err)
+
+		effectiveDeps := config.GetEffectiveDependencies()
+
+		// Runtime wins for numpy
+		assert.Equal(t, "1.24.0", effectiveDeps.Pip["numpy"])
+		// Top-level preserved for requests
+		assert.Equal(t, "2.28.0", effectiveDeps.Pip["requests"])
+		// Runtime-only package
+		assert.Equal(t, "2.0.0", effectiveDeps.Pip["torch"])
 	})
 }

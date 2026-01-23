@@ -83,6 +83,9 @@ func Load(configPath string) (*ProjectConfig, error) {
 	// Check for deprecated deployment fields and add warnings
 	checkDeprecatedDeploymentFields(v, &config)
 
+	// Check for deprecated top-level dependencies and add warnings
+	checkDeprecatedDependencies(v, &config)
+
 	// Apply defaults for missing fields
 	applyDefaults(&config)
 
@@ -157,6 +160,29 @@ func addCustomRuntimeDeprecationWarning(config *ProjectConfig) {
 				"  [cerebrium.runtime.python]\n"+
 				"  entrypoint = [\"uvicorn\", \"app.main:app\", \"--host\", \"0.0.0.0\", \"--port\", \"8000\"]")
 	}
+}
+
+// checkDeprecatedDependencies checks for deprecated top-level dependencies section
+func checkDeprecatedDependencies(_ *viper.Viper, config *ProjectConfig) {
+	if !config.HasTopLevelDependencies() {
+		return
+	}
+
+	// Determine the target runtime section for the deprecation message
+	runtimeType := config.GetRuntimeType()
+	if runtimeType == "docker" {
+		// Docker runtime doesn't use dependencies - don't suggest moving them
+		return
+	}
+
+	config.DeprecationWarnings = append(config.DeprecationWarnings,
+		fmt.Sprintf("[cerebrium.dependencies] is deprecated. Please move to [cerebrium.runtime.%s.dependencies.*]:\n"+
+			"  [cerebrium.runtime.%s.dependencies.pip]\n"+
+			"  torch = \"2.0.0\"\n"+
+			"  \n"+
+			"  [cerebrium.runtime.%s.dependencies.apt]\n"+
+			"  ffmpeg = \"\"",
+			runtimeType, runtimeType, runtimeType))
 }
 
 // checkDeprecatedDeploymentFields checks for deprecated fields in the deployment section

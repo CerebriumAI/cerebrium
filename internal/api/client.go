@@ -397,6 +397,22 @@ func (c *client) UpdateApp(ctx context.Context, projectID, appID string, updates
 	return err
 }
 
+// ValidateRuntime validates runtime configuration and returns the action to take
+func (c *client) ValidateRuntime(ctx context.Context, projectID string, req *ValidateRuntimeRequest) (*ValidateRuntimeResponse, error) {
+	path := fmt.Sprintf("v4/projects/%s/apps/validate-runtime", projectID)
+	body, err := c.request(ctx, "POST", path, req, true)
+	if err != nil {
+		return nil, err
+	}
+
+	var response ValidateRuntimeResponse
+	if err := json.Unmarshal(body, &response); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	return &response, nil
+}
+
 // CreateApp creates a new app/build for standard (cortex/custom) deployments
 func (c *client) CreateApp(ctx context.Context, projectID string, payload map[string]any) (*CreateAppResponse, error) {
 	// Determine endpoint based on runtime type

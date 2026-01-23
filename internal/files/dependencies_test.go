@@ -210,3 +210,114 @@ func TestGenerateDependencyFiles_WithShellCommands(t *testing.T) {
 	assert.Contains(t, preBuildContent, "set -e")
 	assert.Contains(t, preBuildContent, "apt-get update")
 }
+
+func TestGenerateDependencyFiles_WithRuntimeDependencies(t *testing.T) {
+	config := &projectconfig.ProjectConfig{
+		Dependencies: projectconfig.DependenciesConfig{},
+		Runtime: &projectconfig.RuntimeConfig{
+			Type: "cortex",
+			Params: map[string]any{
+				"python_version": "3.12",
+				"dependencies": map[string]any{
+					"pip": map[string]any{
+						"torch": "2.0.0",
+						"numpy": "latest",
+					},
+					"apt": map[string]any{
+						"ffmpeg": "",
+					},
+				},
+			},
+		},
+	}
+
+	files, err := GenerateDependencyFiles(config)
+	require.NoError(t, err)
+
+	assert.Len(t, files, 2)
+	assert.Equal(t, "numpy\ntorch==2.0.0\n", files["requirements.txt"])
+	assert.Equal(t, "ffmpeg\n", files["pkglist.txt"])
+}
+
+func TestGenerateDependencyFiles_MergeTopLevelAndRuntimeDependencies(t *testing.T) {
+	config := &projectconfig.ProjectConfig{
+		Dependencies: projectconfig.DependenciesConfig{
+			Pip: map[string]string{
+				"requests": "2.28.0",
+				"numpy":    "1.23.0", // Will be overridden by runtime
+			},
+			Apt: map[string]string{
+				"git": "",
+			},
+		},
+		Runtime: &projectconfig.RuntimeConfig{
+			Type: "cortex",
+			Params: map[string]any{
+				"python_version": "3.12",
+				"dependencies": map[string]any{
+					"pip": map[string]any{
+						"torch": "2.0.0",
+						"numpy": "1.24.0", // Overrides top-level
+					},
+					"apt": map[string]any{
+						"ffmpeg": "",
+					},
+				},
+			},
+		},
+	}
+
+	files, err := GenerateDependencyFiles(config)
+	require.NoError(t, err)
+
+	// Pip should have merged deps with runtime winning
+	assert.Contains(t, files["requirements.txt"], "numpy==1.24.0") // Runtime wins
+	assert.Contains(t, files["requirements.txt"], "torch==2.0.0")
+	assert.Contains(t, files["requirements.txt"], "requests==2.28.0")
+
+	// Apt should have merged deps
+	assert.Contains(t, files["pkglist.txt"], "ffmpeg")
+	assert.Contains(t, files["pkglist.txt"], "git")
+}
+
+func TestGenerateDependencyFiles_RuntimeShellCommands(t *testing.T) {
+	config := &projectconfig.ProjectConfig{
+		Dependencies: projectconfig.DependenciesConfig{},
+		Runtime: &projectconfig.RuntimeConfig{
+			Type: "cortex",
+			Params: map[string]any{
+				"shell_commands":     []any{"echo 'from runtime'"},
+				"pre_build_commands": []any{"apt-get update"},
+			},
+		},
+	}
+
+	files, err := GenerateDependencyFiles(config)
+	require.NoError(t, err)
+
+	assert.Len(t, files, 2)
+	assert.Contains(t, files["shell_commands.sh"], "echo 'from runtime'")
+	assert.Contains(t, files["pre_build_commands.sh"], "apt-get update")
+}
+
+func TestGenerateDependencyFiles_RuntimeShellCommandsOverrideDeployment(t *testing.T) {
+	config := &projectconfig.ProjectConfig{
+		Dependencies: projectconfig.DependenciesConfig{},
+		Deployment: projectconfig.DeploymentConfig{
+			ShellCommands: []string{"echo 'from deployment'"},
+		},
+		Runtime: &projectconfig.RuntimeConfig{
+			Type: "cortex",
+			Params: map[string]any{
+				"shell_commands": []any{"echo 'from runtime'"},
+			},
+		},
+	}
+
+	files, err := GenerateDependencyFiles(config)
+	require.NoError(t, err)
+
+	// Runtime shell commands should override deprecated deployment shell commands
+	assert.Contains(t, files["shell_commands.sh"], "echo 'from runtime'")
+	assert.NotContains(t, files["shell_commands.sh"], "echo 'from deployment'")
+}

@@ -1,5 +1,7 @@
 package projectconfig
 
+import "maps"
+
 // ProjectConfig represents the complete cerebrium.toml configuration
 type ProjectConfig struct {
 	Deployment   DeploymentConfig   `mapstructure:"deployment" toml:"deployment"`
@@ -34,6 +36,79 @@ func (pc *ProjectConfig) GetRuntimeType() string {
 	}
 	// Default to cortex
 	return "cortex"
+}
+
+// GetEffectiveDependencies merges top-level and runtime-specific dependencies
+// Runtime dependencies take precedence over top-level dependencies (per-package)
+func (pc *ProjectConfig) GetEffectiveDependencies() DependenciesConfig {
+	// Start with top-level dependencies as base
+	result := DependenciesConfig{
+		Pip:   make(map[string]string),
+		Conda: make(map[string]string),
+		Apt:   make(map[string]string),
+		Paths: pc.Dependencies.Paths,
+	}
+
+	// Copy top-level dependencies
+	maps.Copy(result.Pip, pc.Dependencies.Pip)
+	maps.Copy(result.Conda, pc.Dependencies.Conda)
+	maps.Copy(result.Apt, pc.Dependencies.Apt)
+
+	// Merge runtime dependencies on top (runtime wins per-package)
+	if pc.Runtime != nil {
+		runtimeDeps := pc.Runtime.GetDependencies()
+		if runtimeDeps != nil {
+			// Merge pip, conda, apt (runtime wins per-package)
+			maps.Copy(result.Pip, runtimeDeps.Pip)
+			maps.Copy(result.Conda, runtimeDeps.Conda)
+			maps.Copy(result.Apt, runtimeDeps.Apt)
+
+			// Runtime paths override top-level paths
+			if runtimeDeps.Paths.Pip != "" {
+				result.Paths.Pip = runtimeDeps.Paths.Pip
+			}
+			if runtimeDeps.Paths.Conda != "" {
+				result.Paths.Conda = runtimeDeps.Paths.Conda
+			}
+			if runtimeDeps.Paths.Apt != "" {
+				result.Paths.Apt = runtimeDeps.Paths.Apt
+			}
+		}
+	}
+
+	return result
+}
+
+// HasTopLevelDependencies returns true if any top-level dependencies are specified
+func (pc *ProjectConfig) HasTopLevelDependencies() bool {
+	return len(pc.Dependencies.Pip) > 0 ||
+		len(pc.Dependencies.Conda) > 0 ||
+		len(pc.Dependencies.Apt) > 0 ||
+		pc.Dependencies.Paths.Pip != "" ||
+		pc.Dependencies.Paths.Conda != "" ||
+		pc.Dependencies.Paths.Apt != ""
+}
+
+// GetEffectiveShellCommands returns shell commands from runtime section if present,
+// otherwise falls back to deprecated deployment section
+func (pc *ProjectConfig) GetEffectiveShellCommands() []string {
+	if pc.Runtime != nil {
+		if cmds := pc.Runtime.GetShellCommands(); len(cmds) > 0 {
+			return cmds
+		}
+	}
+	return pc.Deployment.ShellCommands
+}
+
+// GetEffectivePreBuildCommands returns pre-build commands from runtime section if present,
+// otherwise falls back to deprecated deployment section
+func (pc *ProjectConfig) GetEffectivePreBuildCommands() []string {
+	if pc.Runtime != nil {
+		if cmds := pc.Runtime.GetPreBuildCommands(); len(cmds) > 0 {
+			return cmds
+		}
+	}
+	return pc.Deployment.PreBuildCommands
 }
 
 // Helper methods to access common runtime parameters that the CLI needs locally
@@ -85,6 +160,107 @@ func (rc *RuntimeConfig) GetPort() int {
 		return int(port)
 	}
 	return DefaultPort
+}
+
+// GetShellCommands returns shell_commands from runtime params, if present
+func (rc *RuntimeConfig) GetShellCommands() []string {
+	return rc.getStringSlice("shell_commands")
+}
+
+// GetPreBuildCommands returns pre_build_commands from runtime params, if present
+func (rc *RuntimeConfig) GetPreBuildCommands() []string {
+	return rc.getStringSlice("pre_build_commands")
+}
+
+// getStringSlice is a helper to extract []string from runtime params
+func (rc *RuntimeConfig) getStringSlice(key string) []string {
+	if rc == nil || rc.Params == nil {
+		return nil
+	}
+	if arr, ok := rc.Params[key].([]any); ok {
+		result := make([]string, len(arr))
+		for i, v := range arr {
+			if s, ok := v.(string); ok {
+				result[i] = s
+			}
+		}
+		return result
+	}
+	// Handle case where it's already []string (from test setup)
+	if arr, ok := rc.Params[key].([]string); ok {
+		return arr
+	}
+	return nil
+}
+
+// GetDependencies extracts dependencies from runtime params, if present
+// This parses the [cerebrium.runtime.<type>.dependencies.*] sections
+func (rc *RuntimeConfig) GetDependencies() *DependenciesConfig {
+	if rc == nil || rc.Params == nil {
+		return nil
+	}
+
+	depsRaw, ok := rc.Params["dependencies"]
+	if !ok {
+		return nil
+	}
+
+	depsMap, ok := depsRaw.(map[string]any)
+	if !ok {
+		return nil
+	}
+
+	deps := &DependenciesConfig{
+		Pip:   make(map[string]string),
+		Conda: make(map[string]string),
+		Apt:   make(map[string]string),
+	}
+
+	// Parse pip dependencies
+	if pipRaw, ok := depsMap["pip"].(map[string]any); ok {
+		for pkg, ver := range pipRaw {
+			deps.Pip[pkg] = anyToString(ver)
+		}
+	}
+
+	// Parse conda dependencies
+	if condaRaw, ok := depsMap["conda"].(map[string]any); ok {
+		for pkg, ver := range condaRaw {
+			deps.Conda[pkg] = anyToString(ver)
+		}
+	}
+
+	// Parse apt dependencies
+	if aptRaw, ok := depsMap["apt"].(map[string]any); ok {
+		for pkg, ver := range aptRaw {
+			deps.Apt[pkg] = anyToString(ver)
+		}
+	}
+
+	// Parse paths section
+	if pathsRaw, ok := depsMap["paths"].(map[string]any); ok {
+		if pipPath, ok := pathsRaw["pip"].(string); ok {
+			deps.Paths.Pip = pipPath
+		}
+		if condaPath, ok := pathsRaw["conda"].(string); ok {
+			deps.Paths.Conda = condaPath
+		}
+		if aptPath, ok := pathsRaw["apt"].(string); ok {
+			deps.Paths.Apt = aptPath
+		}
+	}
+
+	return deps
+}
+
+// anyToString converts an any value to string for dependency versions
+func anyToString(v any) string {
+	switch val := v.(type) {
+	case string:
+		return val
+	default:
+		return ""
+	}
 }
 
 // DeploymentConfig represents the [cerebrium.deployment] section
