@@ -344,11 +344,11 @@ name = "test-app"
 [cerebrium.runtime.cortex]
 python_version = "3.12"
 
-[cerebrium.runtime.cortex.deps.pip]
+[cerebrium.runtime.cortex.dependencies.pip]
 torch = "2.0.0"
 numpy = "latest"
 
-[cerebrium.runtime.cortex.deps.apt]
+[cerebrium.runtime.cortex.dependencies.apt]
 ffmpeg = ""
 `
 		err := os.WriteFile(configPath, []byte(content), 0644)
@@ -403,7 +403,7 @@ name = "test-app"
 [cerebrium.runtime.cortex]
 python_version = "3.12"
 
-[cerebrium.runtime.cortex.deps.pip]
+[cerebrium.runtime.cortex.dependencies.pip]
 torch = "2.0.0"
 `
 		err := os.WriteFile(configPath, []byte(content), 0644)
@@ -432,7 +432,7 @@ numpy = "1.23.0"
 [cerebrium.runtime.cortex]
 python_version = "3.12"
 
-[cerebrium.runtime.cortex.deps.pip]
+[cerebrium.runtime.cortex.dependencies.pip]
 torch = "2.0.0"
 numpy = "1.24.0"
 `
@@ -541,11 +541,11 @@ name = "test-app"
 [runtime.cortex]
 python_version = "3.12"
 
-[runtime.cortex.deps.pip]
+[runtime.cortex.dependencies.pip]
 torch = "2.0.0"
 numpy = "latest"
 
-[runtime.cortex.deps.apt]
+[runtime.cortex.dependencies.apt]
 ffmpeg = ""
 `
 		err := os.WriteFile(configPath, []byte(content), 0644)
@@ -610,5 +610,86 @@ port = 8080
 		assert.Equal(t, "docker", config.Runtime.Type)
 		assert.Equal(t, dockerfilePath, config.Runtime.GetDockerfilePath())
 		assert.Equal(t, int64(8080), config.Runtime.Params["port"])
+	})
+
+	t.Run("parses deprecated dependencies.paths section", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		configPath := filepath.Join(tmpDir, "cerebrium.toml")
+
+		content := `[deployment]
+name = "test-app"
+
+[dependencies.paths]
+pip = "requirements.txt"
+apt = "packages.txt"
+`
+		err := os.WriteFile(configPath, []byte(content), 0644)
+		require.NoError(t, err)
+
+		config, err := Load(configPath)
+		require.NoError(t, err)
+
+		// Verify paths are parsed
+		assert.Equal(t, "requirements.txt", config.Dependencies.Paths.Pip)
+		assert.Equal(t, "packages.txt", config.Dependencies.Paths.Apt)
+		assert.True(t, config.HasDeprecatedPaths())
+	})
+
+	t.Run("adds deprecation warning for dependencies.paths section", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		configPath := filepath.Join(tmpDir, "cerebrium.toml")
+
+		content := `[deployment]
+name = "test-app"
+
+[dependencies.paths]
+pip = "requirements.txt"
+`
+		err := os.WriteFile(configPath, []byte(content), 0644)
+		require.NoError(t, err)
+
+		config, err := Load(configPath)
+		require.NoError(t, err)
+
+		// Check for deprecation warning
+		foundPathsWarning := false
+		for _, warning := range config.DeprecationWarnings {
+			if strings.Contains(warning, "[dependencies.paths] is deprecated") {
+				foundPathsWarning = true
+				break
+			}
+		}
+		assert.True(t, foundPathsWarning, "expected deprecation warning for dependencies.paths section")
+	})
+
+	t.Run("deprecated paths with legacy cerebrium prefix", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		configPath := filepath.Join(tmpDir, "cerebrium.toml")
+
+		content := `[cerebrium.deployment]
+name = "test-app"
+
+[cerebrium.dependencies.paths]
+pip = "requirements.txt"
+`
+		err := os.WriteFile(configPath, []byte(content), 0644)
+		require.NoError(t, err)
+
+		config, err := Load(configPath)
+		require.NoError(t, err)
+
+		// Verify paths are parsed
+		assert.Equal(t, "requirements.txt", config.Dependencies.Paths.Pip)
+		assert.True(t, config.HasDeprecatedPaths())
+
+		// Should have warning with cerebrium. prefix
+		foundPathsWarning := false
+		for _, warning := range config.DeprecationWarnings {
+			if strings.Contains(warning, "[cerebrium.dependencies.paths] is deprecated") {
+				foundPathsWarning = true
+				break
+			}
+		}
+		assert.True(t, foundPathsWarning, "expected deprecation warning for cerebrium.dependencies.paths section")
 	})
 }

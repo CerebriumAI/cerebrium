@@ -193,23 +193,34 @@ func addCustomRuntimeDeprecationWarning(config *ProjectConfig, prefix string) {
 
 // checkDeprecatedDependencies checks for deprecated top-level dependencies section
 func checkDeprecatedDependencies(config *ProjectConfig, prefix string) {
+	// Determine the target runtime section for the deprecation message
+	runtimeType := config.GetRuntimeType()
+
+	// Check for deprecated [dependencies.paths] section
+	if config.HasDeprecatedPaths() {
+		config.DeprecationWarnings = append(config.DeprecationWarnings,
+			fmt.Sprintf("[%sdependencies.paths] is deprecated. Use _file_relative_path key inside dependency maps instead:\n"+
+				"  [%sdependencies.pip]\n"+
+				"  _file_relative_path = \"requirements.txt\"\n"+
+				"  torch = \"2.0.0\"  # inline deps merged on top of file",
+				prefix, prefix))
+	}
+
 	if !config.HasTopLevelDependencies() {
 		return
 	}
 
-	// Determine the target runtime section for the deprecation message
-	runtimeType := config.GetRuntimeType()
 	if runtimeType == "docker" {
 		// Docker runtime doesn't use dependencies - don't suggest moving them
 		return
 	}
 
 	config.DeprecationWarnings = append(config.DeprecationWarnings,
-		fmt.Sprintf("[%sdependencies] is deprecated. Please move to [%sruntime.%s.deps.*]:\n"+
-			"  [%sruntime.%s.deps.pip]\n"+
+		fmt.Sprintf("[%sdependencies] is deprecated. Please move to [%sruntime.%s.dependencies.*]:\n"+
+			"  [%sruntime.%s.dependencies.pip]\n"+
 			"  torch = \"2.0.0\"\n"+
 			"  \n"+
-			"  [%sruntime.%s.deps.apt]\n"+
+			"  [%sruntime.%s.dependencies.apt]\n"+
 			"  ffmpeg = \"\"",
 			prefix, prefix, runtimeType, prefix, runtimeType, prefix, runtimeType))
 }

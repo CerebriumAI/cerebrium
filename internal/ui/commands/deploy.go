@@ -948,19 +948,23 @@ func (m *DeployView) validateRuntime() tea.Msg {
 
 	// Include effective dependencies in the validation request
 	// The backend will validate if dependencies are appropriate for the runtime type
+	// Use GetPackages to strip out _file_relative_path before sending to backend
 	effectiveDeps := m.conf.Config.GetEffectiveDependencies()
-	if len(effectiveDeps.Pip) > 0 || len(effectiveDeps.Conda) > 0 || len(effectiveDeps.Apt) > 0 {
+	pipPkgs := projectconfig.GetPackages(effectiveDeps.Pip)
+	condaPkgs := projectconfig.GetPackages(effectiveDeps.Conda)
+	aptPkgs := projectconfig.GetPackages(effectiveDeps.Apt)
+	if len(pipPkgs) > 0 || len(condaPkgs) > 0 || len(aptPkgs) > 0 {
 		depsMap := make(map[string]any)
-		if len(effectiveDeps.Pip) > 0 {
-			depsMap["pip"] = effectiveDeps.Pip
+		if len(pipPkgs) > 0 {
+			depsMap["pip"] = pipPkgs
 		}
-		if len(effectiveDeps.Conda) > 0 {
-			depsMap["conda"] = effectiveDeps.Conda
+		if len(condaPkgs) > 0 {
+			depsMap["conda"] = condaPkgs
 		}
-		if len(effectiveDeps.Apt) > 0 {
-			depsMap["apt"] = effectiveDeps.Apt
+		if len(aptPkgs) > 0 {
+			depsMap["apt"] = aptPkgs
 		}
-		params["deps"] = depsMap
+		params["dependencies"] = depsMap
 	}
 
 	req := &api.ValidateRuntimeRequest{

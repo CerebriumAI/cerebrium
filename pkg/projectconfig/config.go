@@ -40,16 +40,18 @@ func (pc *ProjectConfig) GetRuntimeType() string {
 
 // GetEffectiveDependencies merges top-level and runtime-specific dependencies
 // Runtime dependencies take precedence over top-level dependencies (per-package)
+// The _file_relative_path key is also merged (runtime wins)
+// Deprecated [dependencies.paths] is supported for backwards compatibility
 func (pc *ProjectConfig) GetEffectiveDependencies() DependenciesConfig {
 	// Start with top-level dependencies as base
 	result := DependenciesConfig{
 		Pip:   make(map[string]string),
 		Conda: make(map[string]string),
 		Apt:   make(map[string]string),
-		Paths: pc.Dependencies.Paths,
+		Paths: pc.Dependencies.Paths, // Copy deprecated paths for backwards compatibility
 	}
 
-	// Copy top-level dependencies
+	// Copy top-level dependencies (including _file_relative_path if present)
 	maps.Copy(result.Pip, pc.Dependencies.Pip)
 	maps.Copy(result.Conda, pc.Dependencies.Conda)
 	maps.Copy(result.Apt, pc.Dependencies.Apt)
@@ -58,12 +60,12 @@ func (pc *ProjectConfig) GetEffectiveDependencies() DependenciesConfig {
 	if pc.Runtime != nil {
 		runtimeDeps := pc.Runtime.GetDependencies()
 		if runtimeDeps != nil {
-			// Merge pip, conda, apt (runtime wins per-package)
+			// Merge pip, conda, apt (runtime wins per-package, including _file_relative_path)
 			maps.Copy(result.Pip, runtimeDeps.Pip)
 			maps.Copy(result.Conda, runtimeDeps.Conda)
 			maps.Copy(result.Apt, runtimeDeps.Apt)
 
-			// Runtime paths override top-level paths
+			// Runtime paths override top-level paths (deprecated)
 			if runtimeDeps.Paths.Pip != "" {
 				result.Paths.Pip = runtimeDeps.Paths.Pip
 			}
@@ -81,10 +83,21 @@ func (pc *ProjectConfig) GetEffectiveDependencies() DependenciesConfig {
 
 // HasTopLevelDependencies returns true if any top-level dependencies are specified
 func (pc *ProjectConfig) HasTopLevelDependencies() bool {
-	return len(pc.Dependencies.Pip) > 0 ||
-		len(pc.Dependencies.Conda) > 0 ||
-		len(pc.Dependencies.Apt) > 0 ||
+	// Check if any dependencies are specified (excluding only the _file_relative_path key)
+	return len(GetPackages(pc.Dependencies.Pip)) > 0 ||
+		len(GetPackages(pc.Dependencies.Conda)) > 0 ||
+		len(GetPackages(pc.Dependencies.Apt)) > 0 ||
+		GetFilePath(pc.Dependencies.Pip) != "" ||
+		GetFilePath(pc.Dependencies.Conda) != "" ||
+		GetFilePath(pc.Dependencies.Apt) != "" ||
 		pc.Dependencies.Paths.Pip != "" ||
+		pc.Dependencies.Paths.Conda != "" ||
+		pc.Dependencies.Paths.Apt != ""
+}
+
+// HasDeprecatedPaths returns true if the deprecated [dependencies.paths] section is used
+func (pc *ProjectConfig) HasDeprecatedPaths() bool {
+	return pc.Dependencies.Paths.Pip != "" ||
 		pc.Dependencies.Paths.Conda != "" ||
 		pc.Dependencies.Paths.Apt != ""
 }
@@ -194,13 +207,14 @@ func (rc *RuntimeConfig) getStringSlice(key string) []string {
 }
 
 // GetDependencies extracts dependencies from runtime params, if present
-// This parses the [cerebrium.runtime.<type>.dependencies.*] sections
+// This parses the [runtime.<type>.dependencies.*] sections
+// The _file_relative_path key is preserved in the maps if present
 func (rc *RuntimeConfig) GetDependencies() *DependenciesConfig {
 	if rc == nil || rc.Params == nil {
 		return nil
 	}
 
-	depsRaw, ok := rc.Params["deps"]
+	depsRaw, ok := rc.Params["dependencies"]
 	if !ok {
 		return nil
 	}
@@ -216,28 +230,28 @@ func (rc *RuntimeConfig) GetDependencies() *DependenciesConfig {
 		Apt:   make(map[string]string),
 	}
 
-	// Parse pip dependencies
+	// Parse pip dependencies (including _file_relative_path if present)
 	if pipRaw, ok := depsMap["pip"].(map[string]any); ok {
 		for pkg, ver := range pipRaw {
 			deps.Pip[pkg] = anyToString(ver)
 		}
 	}
 
-	// Parse conda dependencies
+	// Parse conda dependencies (including _file_relative_path if present)
 	if condaRaw, ok := depsMap["conda"].(map[string]any); ok {
 		for pkg, ver := range condaRaw {
 			deps.Conda[pkg] = anyToString(ver)
 		}
 	}
 
-	// Parse apt dependencies
+	// Parse apt dependencies (including _file_relative_path if present)
 	if aptRaw, ok := depsMap["apt"].(map[string]any); ok {
 		for pkg, ver := range aptRaw {
 			deps.Apt[pkg] = anyToString(ver)
 		}
 	}
 
-	// Parse paths section
+	// Parse deprecated paths section for backwards compatibility
 	if pathsRaw, ok := depsMap["paths"].(map[string]any); ok {
 		if pipPath, ok := pathsRaw["pip"].(string); ok {
 			deps.Paths.Pip = pipPath
@@ -307,19 +321,49 @@ type ScalingConfig struct {
 	LoadBalancingAlgorithm    *string `mapstructure:"load_balancing_algorithm" toml:"load_balancing_algorithm,omitempty"`
 }
 
-// DependenciesConfig represents the [cerebrium.dependencies.*] sections
+// DependenciesConfig represents the [dependencies.*] sections
+// File paths can be specified either:
+// 1. Using the special "_file_relative_path" key within each map (recommended)
+// 2. Using the deprecated [dependencies.paths] section (backwards compatible)
+// When both file and inline packages are specified, they are merged (inline wins per-package)
 type DependenciesConfig struct {
 	Pip   map[string]string     `mapstructure:"pip" toml:"pip,omitempty"`
 	Conda map[string]string     `mapstructure:"conda" toml:"conda,omitempty"`
 	Apt   map[string]string     `mapstructure:"apt" toml:"apt,omitempty"`
-	Paths DependencyPathsConfig `mapstructure:"paths" toml:"paths,omitempty"`
+	Paths DependencyPathsConfig `mapstructure:"paths" toml:"paths,omitempty"` // Deprecated: use _file_relative_path key instead
 }
 
-// DependencyPathsConfig represents file paths for dependency files
+// DependencyPathsConfig represents file paths for dependency files (deprecated)
+// Use _file_relative_path key inside the dependency map instead
 type DependencyPathsConfig struct {
 	Pip   string `mapstructure:"pip" toml:"pip,omitempty"`
 	Conda string `mapstructure:"conda" toml:"conda,omitempty"`
 	Apt   string `mapstructure:"apt" toml:"apt,omitempty"`
+}
+
+// FileRelativePathKey is the special key used to specify a file path within dependency maps
+const FileRelativePathKey = "_file_relative_path"
+
+// GetFilePath returns the file path from a dependency map, if specified
+func GetFilePath(deps map[string]string) string {
+	if deps == nil {
+		return ""
+	}
+	return deps[FileRelativePathKey]
+}
+
+// GetPackages returns the dependency map without the special _file_relative_path key
+func GetPackages(deps map[string]string) map[string]string {
+	if deps == nil {
+		return nil
+	}
+	result := make(map[string]string)
+	for k, v := range deps {
+		if k != FileRelativePathKey {
+			result[k] = v
+		}
+	}
+	return result
 }
 
 
