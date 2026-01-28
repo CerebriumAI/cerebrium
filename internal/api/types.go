@@ -379,3 +379,16 @@ type BaseImageResponse struct {
 	Status string `json:"status"`
 	Digest string `json:"digest"`
 }
+
+// ValidateRuntimeRequest is the request payload for runtime validation
+type ValidateRuntimeRequest struct {
+	Runtime string         `json:"runtime"`
+	Params  map[string]any `json:"params"`
+}
+
+// ValidateRuntimeResponse is the response from runtime validation
+type ValidateRuntimeResponse struct {
+	Valid  bool     `json:"valid"`
+	Action string   `json:"action,omitempty"` // "create_app" or "create_partner_app"
+	Errors []string `json:"errors,omitempty"`
+}

@@ -84,7 +84,8 @@ func TestDeployView(t *testing.T) {
 				Msg:        tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}},
 				ViewGolden: "deploy_confirm_yes_transition",
 				ModelAssert: func(t *testing.T, m *DeployView) {
-					assert.Equal(t, StateLoadingFiles, m.state)
+					// After confirmation, state transitions to runtime validation
+					assert.Equal(t, StateValidatingRuntime, m.state)
 				},
 			}).
 			Run(t)
@@ -220,10 +221,11 @@ func TestDeployView(t *testing.T) {
 		harness := uitesting.NewTestHarness(t, model)
 		harness.
 			Step(uitesting.TestStep[*DeployView]{
-				Name:       "initial_loading_files",
-				ViewGolden: "deploy_loading_files",
+				Name:       "initial_validating_runtime",
+				ViewGolden: "deploy_validating_runtime",
 				ModelAssert: func(t *testing.T, m *DeployView) {
-					assert.Equal(t, StateLoadingFiles, m.state)
+					// Initial state is now runtime validation when confirmation is disabled
+					assert.Equal(t, StateValidatingRuntime, m.state)
 					assert.Empty(t, m.fileList)
 				},
 			}).
@@ -580,7 +582,7 @@ func TestDeployView(t *testing.T) {
 			Run(t)
 	})
 
-	t.Run("cancellation - signal during loading", func(t *testing.T) {
+	t.Run("cancellation - signal during validation", func(t *testing.T) {
 		mockClient := apimock.NewMockClient(t)
 
 		config := &projectconfig.ProjectConfig{
@@ -597,7 +599,7 @@ func TestDeployView(t *testing.T) {
 			Config:              config,
 			ProjectID:           "test-project",
 			Client:              mockClient,
-			DisableConfirmation: true, // Skip confirmation to test loading state
+			DisableConfirmation: true, // Skip confirmation to test validation state
 		})
 
 		harness := uitesting.NewTestHarness(t, model)
@@ -606,7 +608,7 @@ func TestDeployView(t *testing.T) {
 				Name: "cancel_early",
 				Msg:  ui.SignalCancelMsg{},
 				ViewAssert: func(t *testing.T, view string) {
-					uitesting.AssertContains(t, view, "Loading")
+					uitesting.AssertContains(t, view, "Validating runtime")
 				},
 				ModelAssert: func(t *testing.T, m *DeployView) {
 					assert.NotNil(t, m.err)
@@ -888,6 +890,23 @@ func TestDeployView_View(t *testing.T) {
 			Name: "view-test",
 		},
 	}
+
+	t.Run("view during validating runtime", func(t *testing.T) {
+		model := NewDeployView(t.Context(), DeployConfig{
+			DisplayConfig: ui.DisplayConfig{
+				IsInteractive:    true,
+				DisableAnimation: false,
+			},
+			Config:    config,
+			ProjectID: "test-project",
+			Client:    apimock.NewMockClient(t),
+		})
+
+		model.state = StateValidatingRuntime
+
+		view := model.View()
+		assert.Contains(t, view, "Validating runtime")
+	})
 
 	t.Run("view during loading files", func(t *testing.T) {
 		model := NewDeployView(t.Context(), DeployConfig{
