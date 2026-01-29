@@ -7,10 +7,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cerebriumai/cerebrium/internal/ui"
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	tea "github.com/charmbracelet/bubbletea"
+	"github.com/cerebriumai/cerebrium/internal/ui"
 )
 
 type viewerState int
@@ -46,14 +46,14 @@ type LogViewerModel struct {
 	scrollOffset  int
 	anchorBottom  bool                // Auto-scroll to show latest logs
 	printedLogIDs map[string]struct{} // Set of log IDs already printed (for AutoExpand mode)
-	headerPrinted bool                // Whether the "Build Logs" header has been printed
+	headerPrinted bool                // Whether the "Logs" header has been printed
 
 	err error
 }
 
 const (
-	// maxLogsInMemory is the hard limit for logs stored in memory
-	// When exceeded, oldest logs are evicted
+	// maxLogsInMemory is the hard limit for logs stored in memory.
+	// When exceeded, oldest logs are evicted.
 	maxLogsInMemory = 10_000
 )
 
@@ -72,7 +72,7 @@ func NewLogViewer(ctx context.Context, config LogViewerConfig) *LogViewerModel {
 		config:        config,
 		state:         viewerStateInitialising,
 		spinner:       ui.NewSpinner(),
-		logChan:       make(chan []Log, 10), // Buffered to prevent blocking provider
+		logChan:       make(chan []Log, 100), // Buffered to prevent blocking provider
 		doneChan:      make(chan error),
 		anchorBottom:  true,                      // Auto-scroll to bottom by default
 		printedLogIDs: make(map[string]struct{}), // Track printed logs by ID
@@ -111,7 +111,6 @@ func (m *LogViewerModel) Init() tea.Cmd {
 func (m *LogViewerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case logBatchReceivedMsg:
-		// Buffer logs silently (don't trigger render for every new log)
 		for _, log := range msg.logs {
 			m.logs = append(m.logs, log)
 
