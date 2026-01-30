@@ -113,3 +113,78 @@ func (_c *MockClient_StreamBuildLogs_Call) RunAndReturn(run func(ctx context.Con
 	_c.Call.Return(run)
 	return _c
 }
+
+// StreamAppLogs provides a mock function for the type MockClient
+func (_mock *MockClient) StreamAppLogs(ctx context.Context, projectID string, appID string, opts wsapi.AppLogStreamOptions, callback func(wsapi.AppLogMessage) error) error {
+	ret := _mock.Called(ctx, projectID, appID, opts, callback)
+
+	if len(ret) == 0 {
+		panic("no return value specified for StreamAppLogs")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, wsapi.AppLogStreamOptions, func(wsapi.AppLogMessage) error) error); ok {
+		r0 = returnFunc(ctx, projectID, appID, opts, callback)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockClient_StreamAppLogs_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'StreamAppLogs'
+type MockClient_StreamAppLogs_Call struct {
+	*mock.Call
+}
+
+// StreamAppLogs is a helper method to define mock.On call
+//   - ctx context.Context
+//   - projectID string
+//   - appID string
+//   - opts wsapi.AppLogStreamOptions
+//   - callback func(wsapi.AppLogMessage) error
+func (_e *MockClient_Expecter) StreamAppLogs(ctx interface{}, projectID interface{}, appID interface{}, opts interface{}, callback interface{}) *MockClient_StreamAppLogs_Call {
+	return &MockClient_StreamAppLogs_Call{Call: _e.mock.On("StreamAppLogs", ctx, projectID, appID, opts, callback)}
+}
+
+func (_c *MockClient_StreamAppLogs_Call) Run(run func(ctx context.Context, projectID string, appID string, opts wsapi.AppLogStreamOptions, callback func(wsapi.AppLogMessage) error)) *MockClient_StreamAppLogs_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
+		var arg3 wsapi.AppLogStreamOptions
+		if args[3] != nil {
+			arg3 = args[3].(wsapi.AppLogStreamOptions)
+		}
+		var arg4 func(wsapi.AppLogMessage) error
+		if args[4] != nil {
+			arg4 = args[4].(func(wsapi.AppLogMessage) error)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+			arg4,
+		)
+	})
+	return _c
+}
+
+func (_c *MockClient_StreamAppLogs_Call) Return(err error) *MockClient_StreamAppLogs_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockClient_StreamAppLogs_Call) RunAndReturn(run func(ctx context.Context, projectID string, appID string, opts wsapi.AppLogStreamOptions, callback func(wsapi.AppLogMessage) error) error) *MockClient_StreamAppLogs_Call {
+	_c.Call.Return(run)
+	return _c
+}

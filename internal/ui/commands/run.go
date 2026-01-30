@@ -17,6 +17,7 @@ import (
 	"github.com/cerebriumai/cerebrium/internal/files"
 	"github.com/cerebriumai/cerebrium/internal/ui"
 	"github.com/cerebriumai/cerebrium/internal/ui/logging"
+	"github.com/cerebriumai/cerebrium/internal/wsapi"
 	"github.com/cerebriumai/cerebrium/pkg/config"
 	"github.com/cerebriumai/cerebrium/pkg/projectconfig"
 	tea "github.com/charmbracelet/bubbletea"
@@ -53,6 +54,7 @@ type RunConfig struct {
 	Config       *projectconfig.ProjectConfig
 	ProjectID    string
 	Client       api.Client
+	WSClient     wsapi.Client // WebSocket client for streaming logs
 	Filename     string
 	FunctionName *string
 	Region       string
@@ -274,14 +276,12 @@ func (m *RunView) handleRunUploaded(msg runUploadedMsg) (tea.Model, tea.Cmd) {
 	m.runID = msg.runID
 	m.state = RunStateExecuting
 
-	// Initialize log viewer with polling provider
-	provider := logging.NewPollingAppLogProvider(logging.PollingAppLogProviderConfig{
-		Client:       m.conf.Client,
-		ProjectID:    m.conf.ProjectID,
-		AppID:        m.appID,
-		Follow:       true,
-		RunID:        m.runID,
-		PollInterval: ui.LOG_POLL_INTERVAL,
+	// Initialize log viewer with streaming WebSocket provider for real-time logs
+	provider := logging.NewStreamingAppLogProvider(logging.StreamingAppLogProviderConfig{
+		Client:    m.conf.WSClient,
+		ProjectID: m.conf.ProjectID,
+		AppID:     m.appID,
+		RunID:     m.runID,
 	})
 
 	m.logViewer = logging.NewLogViewer(m.ctx, logging.LogViewerConfig{
