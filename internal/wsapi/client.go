@@ -40,8 +40,17 @@ func NewClient(cfg *config.Config) Client {
 	}
 }
 
-// StreamBuildLogs implements Client.StreamBuildLogs.
-func (c *client) StreamBuildLogs(ctx context.Context, projectID, buildID string, from time.Time, callback func(BuildLogMessage) error) error {
+// wsConnectConfig holds configuration for establishing a WebSocket connection.
+type wsConnectConfig struct {
+	path       string
+	projectID  string
+	queryParams map[string]string
+	logContext []any // key-value pairs for slog
+}
+
+// streamWithReconnect is a generic WebSocket streaming function with reconnection logic.
+// It handles connection management, ping/pong keep-alive, and automatic reconnection.
+func (c *client) streamWithReconnect(ctx context.Context, cfg wsConnectConfig, messageHandler func([]byte) error) error {
 	reconnectAttempts := 0
 
 	for {
@@ -51,18 +60,15 @@ func (c *client) StreamBuildLogs(ctx context.Context, projectID, buildID string,
 		default:
 		}
 
-		err := c.streamBuildLogsOnce(ctx, projectID, buildID, from, callback)
+		err := c.streamOnce(ctx, cfg, messageHandler)
 		if err == nil {
-			// Clean exit (server closed connection normally)
-			return nil
+			return nil // Clean exit
 		}
 
-		// Check if context was cancelled
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
 
-		// Handle reconnection
 		reconnectAttempts++
 		if reconnectAttempts > maxReconnectAttempts {
 			return fmt.Errorf("max reconnection attempts (%d) exceeded: %w", maxReconnectAttempts, err)
@@ -78,41 +84,35 @@ func (c *client) StreamBuildLogs(ctx context.Context, projectID, buildID string,
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-time.After(reconnectDelay):
-			// Continue to reconnect
 		}
 	}
 }
 
-// streamBuildLogsOnce handles a single websocket connection session.
-func (c *client) streamBuildLogsOnce(ctx context.Context, projectID, buildID string, from time.Time, callback func(BuildLogMessage) error) error {
-	conn, err := c.connect(ctx, projectID, buildID, from)
+// streamOnce handles a single WebSocket connection session.
+func (c *client) streamOnce(ctx context.Context, cfg wsConnectConfig, messageHandler func([]byte) error) error {
+	conn, err := c.connectWS(ctx, cfg)
 	if err != nil {
 		return fmt.Errorf("failed to connect: %w", err)
 	}
 	defer conn.Close() //nolint:errcheck // Best effort close
 
-	// Set up pong handler for connection keep-alive
 	conn.SetPongHandler(func(string) error {
 		return conn.SetReadDeadline(time.Now().Add(pingInterval + pongTimeout))
 	})
 
-	// Start ping ticker in background
 	pingDone := make(chan struct{})
 	go c.pingLoop(ctx, conn, pingDone)
 	defer close(pingDone)
 
-	// Read messages
 	for {
 		select {
 		case <-ctx.Done():
-			// Send close frame before exiting
 			_ = conn.WriteMessage(websocket.CloseMessage,
 				websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
 			return ctx.Err()
 		default:
 		}
 
-		// Set read deadline
 		if err := conn.SetReadDeadline(time.Now().Add(pingInterval + pongTimeout)); err != nil {
 			return fmt.Errorf("failed to set read deadline: %w", err)
 		}
@@ -126,16 +126,74 @@ func (c *client) streamBuildLogsOnce(ctx context.Context, projectID, buildID str
 			return fmt.Errorf("read error: %w", err)
 		}
 
-		msg, err := c.parseMessage(message)
-		if err != nil {
-			slog.Warn("Failed to parse websocket message", "error", err)
-			continue
-		}
-
-		if err := callback(msg); err != nil {
-			return fmt.Errorf("callback error: %w", err)
+		if err := messageHandler(message); err != nil {
+			return fmt.Errorf("message handler error: %w", err)
 		}
 	}
+}
+
+// connectWS establishes a WebSocket connection with the given configuration.
+func (c *client) connectWS(ctx context.Context, cfg wsConnectConfig) (*websocket.Conn, error) {
+	token, err := c.getAuthToken(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get auth token: %w", err)
+	}
+
+	baseURL := c.cfg.GetEnvConfig().LogStreamUrl
+	wsURL, err := url.Parse(baseURL)
+	if err != nil {
+		return nil, fmt.Errorf("invalid logstream URL: %w", err)
+	}
+	wsURL.Path = cfg.path
+
+	query := wsURL.Query()
+	query.Set("projectID", cfg.projectID)
+	query.Set("token", token)
+	for k, v := range cfg.queryParams {
+		if v != "" {
+			query.Set(k, v)
+		}
+	}
+	wsURL.RawQuery = query.Encode()
+
+	logArgs := append([]any{"url", wsURL.Host + wsURL.Path, "projectID", cfg.projectID}, cfg.logContext...)
+	slog.Debug("Connecting to websocket", logArgs...)
+
+	dialer := websocket.Dialer{HandshakeTimeout: handshakeTimeout}
+	conn, resp, err := dialer.DialContext(ctx, wsURL.String(), nil)
+	if err != nil {
+		if resp != nil {
+			return nil, fmt.Errorf("websocket dial failed with status %d: %w", resp.StatusCode, err)
+		}
+		return nil, fmt.Errorf("websocket dial failed: %w", err)
+	}
+
+	slog.Info("Connected to websocket", logArgs...)
+	return conn, nil
+}
+
+// StreamBuildLogs implements Client.StreamBuildLogs.
+func (c *client) StreamBuildLogs(ctx context.Context, projectID, buildID string, from time.Time, callback func(BuildLogMessage) error) error {
+	cfg := wsConnectConfig{
+		path:      "/ws-build-logs",
+		projectID: projectID,
+		queryParams: map[string]string{
+			"buildID": buildID,
+		},
+		logContext: []any{"buildID", buildID},
+	}
+	if !from.IsZero() {
+		cfg.queryParams["after"] = from.Format(time.RFC3339Nano)
+	}
+
+	return c.streamWithReconnect(ctx, cfg, func(message []byte) error {
+		msg, err := c.parseBuildLogMessage(message)
+		if err != nil {
+			slog.Warn("Failed to parse websocket message", "error", err)
+			return nil // Continue on parse errors
+		}
+		return callback(msg)
+	})
 }
 
 // getAuthToken retrieves the authentication token (service account or user token)
@@ -189,60 +247,6 @@ func (c *client) getAuthToken(ctx context.Context) (string, error) {
 	return newToken, nil
 }
 
-// connect establishes a websocket connection to the build logs endpoint.
-func (c *client) connect(ctx context.Context, projectID, buildID string, from time.Time) (*websocket.Conn, error) {
-	// Get auth token
-	token, err := c.getAuthToken(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get auth token: %w", err)
-	}
-
-	// Build websocket URL with query parameters
-	baseURL := c.cfg.GetEnvConfig().LogStreamUrl
-	wsURL, err := url.Parse(baseURL)
-	if err != nil {
-		return nil, fmt.Errorf("invalid logstream URL: %w", err)
-	}
-	wsURL.Path = "/ws-build-logs"
-
-	query := wsURL.Query()
-	query.Set("projectID", projectID)
-	query.Set("buildID", buildID)
-	query.Set("token", token)
-	if !from.IsZero() {
-		query.Set("after", from.Format(time.RFC3339Nano))
-	}
-	wsURL.RawQuery = query.Encode()
-
-	slog.Debug("Connecting to build logs websocket",
-		"url", wsURL.Host+wsURL.Path,
-		"projectID", projectID,
-		"buildID", buildID,
-	)
-
-	// Connect with context
-	dialer := websocket.Dialer{
-		HandshakeTimeout: handshakeTimeout,
-	}
-
-	conn, resp, err := dialer.DialContext(ctx, wsURL.String(), nil)
-	if err != nil {
-		if resp != nil {
-			return nil, fmt.Errorf("websocket dial failed with status %d: %w", resp.StatusCode, err)
-		}
-		return nil, fmt.Errorf("websocket dial failed: %w", err)
-	}
-
-	// TODO(wes): Gracefully handle auth errors, like `client` does
-
-	slog.Info("Connected to build logs websocket",
-		"projectID", projectID,
-		"buildID", buildID,
-	)
-
-	return conn, nil
-}
-
 // pingLoop sends periodic ping messages to keep the connection alive.
 func (c *client) pingLoop(ctx context.Context, conn *websocket.Conn, done chan struct{}) {
 	ticker := time.NewTicker(pingInterval)
@@ -263,8 +267,8 @@ func (c *client) pingLoop(ctx context.Context, conn *websocket.Conn, done chan s
 	}
 }
 
-// parseMessage parses a raw websocket message into a BuildLogMessage.
-func (c *client) parseMessage(data []byte) (BuildLogMessage, error) {
+// parseBuildLogMessage parses a raw websocket message into a BuildLogMessage.
+func (c *client) parseBuildLogMessage(data []byte) (BuildLogMessage, error) {
 	var raw rawBuildLogMessage
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return BuildLogMessage{}, fmt.Errorf("failed to unmarshal message: %w", err)
@@ -283,159 +287,28 @@ func (c *client) parseMessage(data []byte) (BuildLogMessage, error) {
 
 // StreamAppLogs implements Client.StreamAppLogs.
 func (c *client) StreamAppLogs(ctx context.Context, projectID, appID string, opts AppLogStreamOptions, callback func(AppLogMessage) error) error {
-	reconnectAttempts := 0
-
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		default:
-		}
-
-		err := c.streamAppLogsOnce(ctx, projectID, appID, opts, callback)
-		if err == nil {
-			// Clean exit (server closed connection normally)
-			return nil
-		}
-
-		// Check if context was cancelled
-		if ctx.Err() != nil {
-			return ctx.Err()
-		}
-
-		// Handle reconnection
-		reconnectAttempts++
-		if reconnectAttempts > maxReconnectAttempts {
-			return fmt.Errorf("max reconnection attempts (%d) exceeded: %w", maxReconnectAttempts, err)
-		}
-
-		slog.Warn("WebSocket connection lost, reconnecting",
-			"attempt", reconnectAttempts,
-			"maxAttempts", maxReconnectAttempts,
-			"error", err,
-		)
-
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(reconnectDelay):
-			// Continue to reconnect
-		}
+	cfg := wsConnectConfig{
+		path:      "/ws-logs",
+		projectID: projectID,
+		queryParams: map[string]string{
+			"appID":       appID,
+			"containerID": opts.ContainerID,
+			"runID":       opts.RunID,
+		},
+		logContext: []any{"appID", appID, "runID", opts.RunID},
 	}
-}
-
-// streamAppLogsOnce handles a single websocket connection session for app logs.
-func (c *client) streamAppLogsOnce(ctx context.Context, projectID, appID string, opts AppLogStreamOptions, callback func(AppLogMessage) error) error {
-	conn, err := c.connectAppLogs(ctx, projectID, appID, opts)
-	if err != nil {
-		return fmt.Errorf("failed to connect: %w", err)
+	if !opts.From.IsZero() {
+		cfg.queryParams["after"] = opts.From.Format(time.RFC3339Nano)
 	}
-	defer conn.Close() //nolint:errcheck // Best effort close
 
-	// Set up pong handler for connection keep-alive
-	conn.SetPongHandler(func(string) error {
-		return conn.SetReadDeadline(time.Now().Add(pingInterval + pongTimeout))
-	})
-
-	// Start ping ticker in background
-	pingDone := make(chan struct{})
-	go c.pingLoop(ctx, conn, pingDone)
-	defer close(pingDone)
-
-	// Read messages
-	for {
-		select {
-		case <-ctx.Done():
-			// Send close frame before exiting
-			_ = conn.WriteMessage(websocket.CloseMessage,
-				websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
-			return ctx.Err()
-		default:
-		}
-
-		// Set read deadline
-		if err := conn.SetReadDeadline(time.Now().Add(pingInterval + pongTimeout)); err != nil {
-			return fmt.Errorf("failed to set read deadline: %w", err)
-		}
-
-		_, message, err := conn.ReadMessage()
-		if err != nil {
-			if websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
-				slog.Debug("WebSocket closed normally")
-				return nil
-			}
-			return fmt.Errorf("read error: %w", err)
-		}
-
+	return c.streamWithReconnect(ctx, cfg, func(message []byte) error {
 		msg, err := c.parseAppLogMessage(message)
 		if err != nil {
 			slog.Warn("Failed to parse websocket message", "error", err)
-			continue
+			return nil // Continue on parse errors
 		}
-
-		if err := callback(msg); err != nil {
-			return fmt.Errorf("callback error: %w", err)
-		}
-	}
-}
-
-// connectAppLogs establishes a websocket connection to the app logs endpoint.
-func (c *client) connectAppLogs(ctx context.Context, projectID, appID string, opts AppLogStreamOptions) (*websocket.Conn, error) {
-	// Get auth token
-	token, err := c.getAuthToken(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get auth token: %w", err)
-	}
-
-	// Build websocket URL with query parameters
-	baseURL := c.cfg.GetEnvConfig().LogStreamUrl
-	wsURL, err := url.Parse(baseURL)
-	if err != nil {
-		return nil, fmt.Errorf("invalid logstream URL: %w", err)
-	}
-	wsURL.Path = "/ws-logs"
-
-	query := wsURL.Query()
-	query.Set("projectID", projectID)
-	query.Set("appID", appID)
-	query.Set("token", token)
-	if !opts.From.IsZero() {
-		query.Set("after", opts.From.Format(time.RFC3339Nano))
-	}
-	if opts.ContainerID != "" {
-		query.Set("containerID", opts.ContainerID)
-	}
-	if opts.RunID != "" {
-		query.Set("runID", opts.RunID)
-	}
-	wsURL.RawQuery = query.Encode()
-
-	slog.Debug("Connecting to app logs websocket",
-		"url", wsURL.Host+wsURL.Path,
-		"projectID", projectID,
-		"appID", appID,
-		"runID", opts.RunID,
-	)
-
-	// Connect with context
-	dialer := websocket.Dialer{
-		HandshakeTimeout: handshakeTimeout,
-	}
-
-	conn, resp, err := dialer.DialContext(ctx, wsURL.String(), nil)
-	if err != nil {
-		if resp != nil {
-			return nil, fmt.Errorf("websocket dial failed with status %d: %w", resp.StatusCode, err)
-		}
-		return nil, fmt.Errorf("websocket dial failed: %w", err)
-	}
-
-	slog.Info("Connected to app logs websocket",
-		"projectID", projectID,
-		"appID", appID,
-	)
-
-	return conn, nil
+		return callback(msg)
+	})
 }
 
 // parseAppLogMessage parses a raw websocket message into an AppLogMessage.
