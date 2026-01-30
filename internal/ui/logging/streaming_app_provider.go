@@ -10,14 +10,16 @@ import (
 	"github.com/cerebriumai/cerebrium/internal/wsapi"
 )
 
+// streamingAppProvider implements LogProvider using WebSocket streaming for app runtime logs.
+// It connects to the /ws-logs endpoint and delivers logs in real-time as they arrive,
+// replacing the polling-based approach for better latency and reliability.
 type streamingAppProvider struct {
 	client    wsapi.Client
 	projectID string
 	appID     string
 	runID     string
 
-	// State for deduplication
-	seenIDs map[string]bool
+	seenIDs map[string]bool // Tracks seen log IDs to prevent duplicates on reconnection
 }
 
 // StreamingAppLogProviderConfig configures a streaming WebSocket provider for app runtime logs.
@@ -40,9 +42,12 @@ func NewStreamingAppLogProvider(cfg StreamingAppLogProviderConfig) LogProvider {
 	}
 }
 
+// Collect implements LogProvider.Collect by streaming logs via WebSocket.
+// It connects to the backend WebSocket endpoint and invokes the callback for each
+// batch of logs received. The connection is maintained until the context is cancelled.
 func (p *streamingAppProvider) Collect(ctx context.Context, callback func([]Log) error) error {
 	opts := wsapi.AppLogStreamOptions{
-		From:  time.Now().Add(-10 * time.Second), // Start from 10 seconds ago to catch recent logs
+		From:  time.Now().Add(-10 * time.Second), // Start slightly in the past to catch recent logs
 		RunID: p.runID,
 	}
 

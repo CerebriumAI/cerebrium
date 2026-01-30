@@ -42,10 +42,10 @@ func NewClient(cfg *config.Config) Client {
 
 // wsConnectConfig holds configuration for establishing a WebSocket connection.
 type wsConnectConfig struct {
-	path       string
-	projectID  string
-	queryParams map[string]string
-	logContext []any // key-value pairs for slog
+	path        string            // WebSocket endpoint path (e.g., "/ws-build-logs", "/ws-logs")
+	projectID   string            // Project ID for authentication
+	queryParams map[string]string // Additional query parameters (e.g., buildID, appID, runID)
+	logContext  []any             // Key-value pairs for structured logging
 }
 
 // streamWithReconnect is a generic WebSocket streaming function with reconnection logic.
