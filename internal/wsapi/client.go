@@ -62,13 +62,16 @@ func (c *client) streamWithReconnect(ctx context.Context, cfg wsConnectConfig, m
 
 		err := c.streamOnce(ctx, cfg, messageHandler)
 		if err == nil {
-			return nil // Clean exit
+			// Clean exit (server closed connection normally)
+			return nil
 		}
 
+		// Check if context was cancelled
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
 
+		// Handle reconnection
 		reconnectAttempts++
 		if reconnectAttempts > maxReconnectAttempts {
 			return fmt.Errorf("max reconnection attempts (%d) exceeded: %w", maxReconnectAttempts, err)
@@ -84,6 +87,7 @@ func (c *client) streamWithReconnect(ctx context.Context, cfg wsConnectConfig, m
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-time.After(reconnectDelay):
+			// Continue to reconnect
 		}
 	}
 }
