@@ -967,14 +967,16 @@ func (c *client) GetRunStatus(ctx context.Context, projectID, appName, runID str
 	return &status, nil
 }
 
-// CreateBaseImage creates a base image with dependencies, polling until ready
+// CreateBaseImage creates a base image with dependencies, polling until ready.
+// Polls every 2 seconds for up to 2 minutes (60 attempts).
 func (c *client) CreateBaseImage(ctx context.Context, projectID, appID, region string, payload BaseImagePayload) (string, error) {
 	queryParams := url.Values{}
 	queryParams.Add("region", region)
 	path := fmt.Sprintf("v3/projects/%s/apps/%s/base-image?%s", projectID, appID, queryParams.Encode())
 
-	const maxAttempts = 15
-	ticker := time.NewTicker(2 * time.Second)
+	const maxAttempts = 60 // 60 attempts × 2 seconds = 2 minutes max
+	const pollInterval = 2 * time.Second
+	ticker := time.NewTicker(pollInterval)
 	defer ticker.Stop()
 
 	for attempt := 0; attempt < maxAttempts; attempt++ {
@@ -1003,7 +1005,7 @@ func (c *client) CreateBaseImage(ctx context.Context, projectID, appID, region s
 		}
 	}
 
-	return "", fmt.Errorf("base image not ready after %d attempts", maxAttempts)
+	return "", fmt.Errorf("base image not ready after 2 minutes - the build may still be in progress, try again shortly")
 }
 
 // GetRuns retrieves the list of runs for a specific app

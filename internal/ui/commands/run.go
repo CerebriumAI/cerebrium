@@ -186,9 +186,13 @@ func (m *RunView) handleRunPrepared(msg runPreparedMsg) (tea.Model, tea.Cmd) {
 
 	// Check if we need to create a base image for dependencies
 	// We track this here but create the app first (required for base-image API auth)
+	// Support both inline dependencies and file paths (e.g., requirements.txt)
 	m.needsBaseImage = m.conf.Config != nil && (len(m.conf.Config.Dependencies.Pip) > 0 ||
 		len(m.conf.Config.Dependencies.Conda) > 0 ||
-		len(m.conf.Config.Dependencies.Apt) > 0)
+		len(m.conf.Config.Dependencies.Apt) > 0 ||
+		m.conf.Config.Dependencies.Paths.Pip != "" ||
+		m.conf.Config.Dependencies.Paths.Conda != "" ||
+		m.conf.Config.Dependencies.Paths.Apt != "")
 
 	if m.conf.SimpleOutput() {
 		fmt.Printf("✓ Prepared %d files\n", len(msg.fileList))
@@ -666,10 +670,17 @@ func (m *RunView) prepareRun() tea.Msg {
 }
 
 func (m *RunView) createBaseImage() tea.Msg {
+	// Use the same dependency resolution as deploy - handles file paths, validation, etc.
+	depFiles, err := files.GenerateDependencyFiles(m.conf.Config)
+	if err != nil {
+		return ui.NewValidationError(fmt.Errorf("failed to process dependencies: %w", err))
+	}
+
+	// Parse the generated file contents back into maps for the base-image API
 	depsJSON := map[string]any{
-		"pip":   m.conf.Config.Dependencies.Pip,
-		"conda": m.conf.Config.Dependencies.Conda,
-		"apt":   m.conf.Config.Dependencies.Apt,
+		"pip":   files.ParseRequirementsContent(depFiles["requirements.txt"]),
+		"conda": files.ParseRequirementsContent(depFiles["conda_pkglist.txt"]),
+		"apt":   files.ParseRequirementsContent(depFiles["pkglist.txt"]),
 	}
 
 	depsBytes, err := json.Marshal(depsJSON)

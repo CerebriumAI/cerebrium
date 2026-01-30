@@ -110,3 +110,51 @@ func generateShellCommandsContent(commands []string) string {
 	lines = append(lines, commands...)
 	return strings.Join(lines, "\n") + "\n"
 }
+
+// ParseRequirementsContent parses requirements.txt content into a map of package -> version.
+// This is the inverse of generateRequirementsContent.
+func ParseRequirementsContent(content string) map[string]string {
+	result := make(map[string]string)
+	for _, line := range strings.Split(content, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") || strings.HasPrefix(line, "-") {
+			continue // Skip empty lines, comments, and pip flags (-r, -e, etc.)
+		}
+		pkg, ver := parseDepLine(line)
+		if pkg != "" {
+			// Backend requires non-empty version string; use "latest" for packages without version
+			if ver == "" {
+				ver = "latest"
+			}
+			result[pkg] = ver
+		}
+	}
+	return result
+}
+
+// parseDepLine parses a single dependency line from a requirements file.
+// Returns (package_name, version_specifier) where version_specifier may be empty.
+// Handles: package, package==1.0, package>=1.0, package[extra], package[extra]>=1.0
+func parseDepLine(line string) (string, string) {
+	// Handle extras: package[extra] -> extract package name
+	pkgName := line
+	extraSuffix := ""
+	if bracketIdx := strings.Index(line, "["); bracketIdx > 0 {
+		if closeBracket := strings.Index(line, "]"); closeBracket > bracketIdx {
+			pkgName = line[:bracketIdx]
+			extraSuffix = line[bracketIdx : closeBracket+1]
+			line = pkgName + line[closeBracket+1:] // Remove extras for version parsing
+		}
+	}
+
+	// Handle version specifiers: ==, >=, <=, ~=, !=, >, <
+	for _, sep := range []string{"==", ">=", "<=", "~=", "!=", ">", "<"} {
+		if idx := strings.Index(line, sep); idx > 0 {
+			pkg := strings.TrimSpace(line[:idx])
+			ver := sep + strings.TrimSpace(line[idx+len(sep):])
+			return pkg + extraSuffix, ver
+		}
+	}
+	// No version specifier, just package name (possibly with extras)
+	return strings.TrimSpace(pkgName) + extraSuffix, ""
+}
