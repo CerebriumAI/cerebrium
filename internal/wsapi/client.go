@@ -96,23 +96,28 @@ func (c *client) streamOnce(ctx context.Context, cfg wsConnectConfig, messageHan
 	}
 	defer conn.Close() //nolint:errcheck // Best effort close
 
+	// Set up pong handler for connection keep-alive
 	conn.SetPongHandler(func(string) error {
 		return conn.SetReadDeadline(time.Now().Add(pingInterval + pongTimeout))
 	})
 
+	// Start ping ticker in background
 	pingDone := make(chan struct{})
 	go c.pingLoop(ctx, conn, pingDone)
 	defer close(pingDone)
 
+	// Read messages
 	for {
 		select {
 		case <-ctx.Done():
+			// Send close frame before exiting
 			_ = conn.WriteMessage(websocket.CloseMessage,
 				websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
 			return ctx.Err()
 		default:
 		}
 
+		// Set read deadline
 		if err := conn.SetReadDeadline(time.Now().Add(pingInterval + pongTimeout)); err != nil {
 			return fmt.Errorf("failed to set read deadline: %w", err)
 		}
