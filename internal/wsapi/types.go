@@ -43,6 +43,33 @@ type rawBuildLogMessage struct {
 	Stage      string `json:"stage"`
 }
 
+// AppLogMessage represents an app runtime log entry received from the websocket stream.
+type AppLogMessage struct {
+	// AppID is the application identifier
+	AppID string
+
+	// RunID is the run identifier (optional, for filtering)
+	RunID string
+
+	// Timestamp is when the log was created (parsed to local timezone)
+	Timestamp time.Time
+
+	// ContainerName is the container that produced the log
+	ContainerName string
+
+	// Log is the actual log message content
+	Log string
+}
+
+// rawAppLogMessage is the JSON structure received from the websocket server for app logs.
+type rawAppLogMessage struct {
+	AppID         string `json:"app_id"`
+	RunID         string `json:"run_id"`
+	Timestamp     string `json:"timestamp"`
+	ContainerName string `json:"container_name"`
+	Log           string `json:"log"`
+}
+
 // parseTimestamp parses a timestamp string and converts it to local timezone.
 func parseTimestamp(ts string) time.Time {
 	// Try RFC3339Nano first (most precise)

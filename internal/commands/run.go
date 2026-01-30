@@ -12,6 +12,7 @@ import (
 	"github.com/cerebriumai/cerebrium/internal/api"
 	"github.com/cerebriumai/cerebrium/internal/ui"
 	uiCommands "github.com/cerebriumai/cerebrium/internal/ui/commands"
+	"github.com/cerebriumai/cerebrium/internal/wsapi"
 	"github.com/cerebriumai/cerebrium/pkg/config"
 	"github.com/cerebriumai/cerebrium/pkg/projectconfig"
 	tea "github.com/charmbracelet/bubbletea"
@@ -126,6 +127,9 @@ func runRun(cmd *cobra.Command, filename string, dataMap map[string]any, region 
 		return ui.NewValidationError(fmt.Errorf("failed to create API client: %w", err))
 	}
 
+	// Create websocket client for streaming app logs
+	wsClient := wsapi.NewClient(cfg)
+
 	// Create context with timeout for run polling
 	ctx, cancel := context.WithTimeout(cmd.Context(), runPollingTimeout)
 	defer cancel()
@@ -135,6 +139,7 @@ func runRun(cmd *cobra.Command, filename string, dataMap map[string]any, region 
 		Config:        projectConfig,
 		ProjectID:     cfg.ProjectID,
 		Client:        client,
+		WSClient:      wsClient,
 		Filename:      filename,
 		FunctionName:  functionName,
 		Region:        region,
