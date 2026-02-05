@@ -237,7 +237,7 @@ func (m *RunView) handleAppCreated() (tea.Model, tea.Cmd) {
 		m.state = RunStateCheckingDependencies
 
 		if m.conf.SimpleOutput() {
-			fmt.Println("Checking dependencies...")
+			fmt.Println("Building base image...")
 			return m, m.createBaseImage
 		}
 
@@ -475,7 +475,7 @@ func (m *RunView) View() string {
 		output.WriteString(formatStateLine("-", "Create run app", ui.PendingStyle.Render))
 		output.WriteString("\n")
 		if m.needsBaseImage {
-			output.WriteString(formatStateLine("-", "Check dependencies", ui.PendingStyle.Render))
+			output.WriteString(formatStateLine("-", "Build base image", ui.PendingStyle.Render))
 			output.WriteString("\n")
 		}
 		output.WriteString(formatStateLine("-", "Create archive", ui.PendingStyle.Render))
@@ -489,7 +489,7 @@ func (m *RunView) View() string {
 		output.WriteString(formatStateLine(m.spinner.View(), "Creating run app...", ui.ActiveStyle.Render))
 		output.WriteString("\n")
 		if m.needsBaseImage {
-			output.WriteString(formatStateLine("-", "Check dependencies", ui.PendingStyle.Render))
+			output.WriteString(formatStateLine("-", "Build base image", ui.PendingStyle.Render))
 			output.WriteString("\n")
 		}
 		output.WriteString(formatStateLine("-", "Create archive", ui.PendingStyle.Render))
@@ -500,7 +500,7 @@ func (m *RunView) View() string {
 		output.WriteString("\n")
 
 	case RunStateCheckingDependencies, RunStateCreatingBaseImage:
-		output.WriteString(formatStateLine(m.spinner.View(), "Checking dependencies...", ui.ActiveStyle.Render))
+		output.WriteString(formatStateLine(m.spinner.View(), "Building base image...", ui.ActiveStyle.Render))
 		output.WriteString("\n")
 		output.WriteString(formatStateLine("-", "Create archive", ui.PendingStyle.Render))
 		output.WriteString("\n")

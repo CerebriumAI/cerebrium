@@ -178,6 +178,96 @@ func TestGenerateDependencyFiles_BothInlineAndFilePath(t *testing.T) {
 	assert.Contains(t, err.Error(), "please specify only one")
 }
 
+func TestParseDepLine(t *testing.T) {
+	tcs := []struct {
+		line    string
+		wantPkg string
+		wantVer string
+	}{
+		// bare package
+		{"requests", "requests", ""},
+		// pinned
+		{"numpy==1.24.0", "numpy", "==1.24.0"},
+		// range
+		{"flask>=2.0", "flask", ">=2.0"},
+		{"flask<=2.0", "flask", "<=2.0"},
+		{"flask~=2.0", "flask", "~=2.0"},
+		{"flask!=2.0", "flask", "!=2.0"},
+		{"flask>2.0", "flask", ">2.0"},
+		{"flask<3.0", "flask", "<3.0"},
+		// extras
+		{"uvicorn[standard]", "uvicorn[standard]", ""},
+		{"uvicorn[standard]>=0.20", "uvicorn[standard]", ">=0.20"},
+		{"package[extra1]==1.0.0", "package[extra1]", "==1.0.0"},
+		// whitespace
+		{"  requests  ", "requests", ""},
+		{"numpy == 1.24.0", "numpy", "==1.24.0"},
+		// git URL (no version specifier)
+		{"git+https://github.com/org/repo.git", "git+https://github.com/org/repo.git", ""},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.line, func(t *testing.T) {
+			pkg, ver := parseDepLine(tc.line)
+			assert.Equal(t, tc.wantPkg, pkg)
+			assert.Equal(t, tc.wantVer, ver)
+		})
+	}
+}
+
+func TestParseRequirementsContent(t *testing.T) {
+	tcs := []struct {
+		name    string
+		content string
+		want    map[string]string
+	}{
+		{
+			name:    "mixed formats",
+			content: "requests\nnumpy==1.24.0\nflask>=2.0\nuvicorn[standard]\n",
+			want: map[string]string{
+				"requests":          "latest",
+				"numpy":             "==1.24.0",
+				"flask":             ">=2.0",
+				"uvicorn[standard]": "latest",
+			},
+		},
+		{
+			name:    "skips comments and blanks",
+			content: "# this is a comment\nrequests\n\n# another comment\nflask\n",
+			want: map[string]string{
+				"requests": "latest",
+				"flask":    "latest",
+			},
+		},
+		{
+			name:    "skips pip flags",
+			content: "-r other.txt\n--index-url https://pypi.org\nrequests\n-e .\n",
+			want: map[string]string{
+				"requests": "latest",
+			},
+		},
+		{
+			name:    "empty content",
+			content: "",
+			want:    map[string]string{},
+		},
+		{
+			name:    "deduplicates packages keeping last",
+			content: "requests\nrequests==2.28.0\n",
+			want: map[string]string{
+				"requests": "==2.28.0",
+			},
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			got := ParseRequirementsContent(tc.content)
+			assert.Equal(t, tc.want, got)
+		})
+	}
+}
+
 func TestGenerateDependencyFiles_WithShellCommands(t *testing.T) {
 	config := &projectconfig.ProjectConfig{
 		Dependencies: projectconfig.DependenciesConfig{},
