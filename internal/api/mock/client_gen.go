@@ -1851,6 +1851,80 @@ func (_c *MockClient_UploadPart_Call) RunAndReturn(run func(ctx context.Context,
 	return _c
 }
 
+// ValidateRuntime provides a mock function for the type MockClient
+func (_mock *MockClient) ValidateRuntime(ctx context.Context, projectID string, req *api.ValidateRuntimeRequest) (*api.ValidateRuntimeResponse, error) {
+	ret := _mock.Called(ctx, projectID, req)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ValidateRuntime")
+	}
+
+	var r0 *api.ValidateRuntimeResponse
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, *api.ValidateRuntimeRequest) (*api.ValidateRuntimeResponse, error)); ok {
+		return returnFunc(ctx, projectID, req)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, *api.ValidateRuntimeRequest) *api.ValidateRuntimeResponse); ok {
+		r0 = returnFunc(ctx, projectID, req)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*api.ValidateRuntimeResponse)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, *api.ValidateRuntimeRequest) error); ok {
+		r1 = returnFunc(ctx, projectID, req)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockClient_ValidateRuntime_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ValidateRuntime'
+type MockClient_ValidateRuntime_Call struct {
+	*mock.Call
+}
+
+// ValidateRuntime is a helper method to define mock.On call
+//   - ctx context.Context
+//   - projectID string
+//   - req *api.ValidateRuntimeRequest
+func (_e *MockClient_Expecter) ValidateRuntime(ctx interface{}, projectID interface{}, req interface{}) *MockClient_ValidateRuntime_Call {
+	return &MockClient_ValidateRuntime_Call{Call: _e.mock.On("ValidateRuntime", ctx, projectID, req)}
+}
+
+func (_c *MockClient_ValidateRuntime_Call) Run(run func(ctx context.Context, projectID string, req *api.ValidateRuntimeRequest)) *MockClient_ValidateRuntime_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 *api.ValidateRuntimeRequest
+		if args[2] != nil {
+			arg2 = args[2].(*api.ValidateRuntimeRequest)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockClient_ValidateRuntime_Call) Return(validateRuntimeResponse *api.ValidateRuntimeResponse, err error) *MockClient_ValidateRuntime_Call {
+	_c.Call.Return(validateRuntimeResponse, err)
+	return _c
+}
+
+func (_c *MockClient_ValidateRuntime_Call) RunAndReturn(run func(ctx context.Context, projectID string, req *api.ValidateRuntimeRequest) (*api.ValidateRuntimeResponse, error)) *MockClient_ValidateRuntime_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // UploadZip provides a mock function for the type MockClient
 func (_mock *MockClient) UploadZip(ctx context.Context, uploadURL string, zipPath string) error {
 	ret := _mock.Called(ctx, uploadURL, zipPath)

@@ -262,6 +262,11 @@ func loadProjectConfigOrDefault() (*projectconfig.ProjectConfig, error) {
 		}
 	}
 
+	// Print deprecation warnings if any
+	for _, warning := range projectConfig.DeprecationWarnings {
+		fmt.Printf("⚠️  Deprecation warning: %s\n", warning)
+	}
+
 	return projectConfig, nil
 }
 

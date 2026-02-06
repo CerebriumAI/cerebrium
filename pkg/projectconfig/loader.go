@@ -9,18 +9,18 @@ import (
 
 // Default values matching Python implementation
 var (
-	DefaultPythonVersion            = "3.11"
-	DefaultDockerBaseImageURL       = "debian:bookworm-slim"
-	DefaultInclude                  = []string{"./*", "main.py", "cerebrium.toml"}
-	DefaultExclude                  = []string{".*"}
-	DefaultDisableAuth              = true
-	DefaultEntrypoint               = []string{"uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"}
-	DefaultPort                     = 8000
-	DefaultHealthcheckEndpoint      = ""
-	DefaultReadycheckEndpoint       = ""
-	DefaultProvider                 = "aws"
+	DefaultPythonVersion             = "3.11"
+	DefaultDockerBaseImageURL        = "debian:bookworm-slim"
+	DefaultInclude                   = []string{"./*", "main.py", "cerebrium.toml"}
+	DefaultExclude                   = []string{".*"}
+	DefaultDisableAuth               = true
+	DefaultEntrypoint                = []string{"uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"}
+	DefaultPort                      = 8000
+	DefaultHealthcheckEndpoint       = ""
+	DefaultReadycheckEndpoint        = ""
+	DefaultProvider                  = "aws"
 	DefaultEvaluationIntervalSeconds = 30
-	DefaultLoadBalancingAlgorithm   = "round-robin"
+	DefaultLoadBalancingAlgorithm    = "round-robin"
 )
 
 // Load reads and parses the cerebrium.toml configuration file
@@ -40,78 +40,79 @@ func Load(configPath string) (*ProjectConfig, error) {
 		return nil, fmt.Errorf("failed to read config file: %w", err)
 	}
 
-	// Check if 'cerebrium' key exists
-	if !v.IsSet("cerebrium") {
-		return nil, fmt.Errorf("'cerebrium' key not found in %s. Please ensure your config file is valid", configPath)
+	// Determine which format is being used
+	// Legacy format: [cerebrium.deployment], [cerebrium.hardware], etc.
+	// New format: [deployment], [hardware], etc.
+	useLegacyFormat := v.IsSet("cerebrium")
+	useNewFormat := v.IsSet("deployment") || v.IsSet("hardware") || v.IsSet("scaling") || v.IsSet("dependencies") || v.IsSet("runtime")
+
+	if useLegacyFormat && useNewFormat {
+		return nil, fmt.Errorf("cannot mix [cerebrium.*] format with new format. Please use one or the other")
+	}
+
+	if !useLegacyFormat && !useNewFormat {
+		return nil, fmt.Errorf("no valid configuration found in %s. Expected [deployment] section", configPath)
 	}
 
 	// Parse into config struct
 	var config ProjectConfig
+	config.DeprecationWarnings = []string{}
+
+	// Determine the key prefix based on format
+	prefix := ""
+	if useLegacyFormat {
+		prefix = "cerebrium."
+		config.DeprecationWarnings = append(config.DeprecationWarnings,
+			"[cerebrium.*] prefix is deprecated. Please remove the 'cerebrium.' prefix from all sections:\n"+
+				"  [cerebrium.deployment] → [deployment]\n"+
+				"  [cerebrium.hardware] → [hardware]\n"+
+				"  [cerebrium.scaling] → [scaling]\n"+
+				"  [cerebrium.runtime.cortex] → [runtime.cortex]")
+	}
 
 	// Parse deployment section (required)
-	if err := v.UnmarshalKey("cerebrium.deployment", &config.Deployment); err != nil {
+	deploymentKey := prefix + "deployment"
+	if !v.IsSet(deploymentKey) {
+		return nil, fmt.Errorf("[deployment] section not found in %s", configPath)
+	}
+	if err := v.UnmarshalKey(deploymentKey, &config.Deployment); err != nil {
 		return nil, fmt.Errorf("failed to parse deployment config: %w", err)
 	}
 
 	// Parse hardware section
-	if v.IsSet("cerebrium.hardware") {
-		if err := v.UnmarshalKey("cerebrium.hardware", &config.Hardware); err != nil {
+	hardwareKey := prefix + "hardware"
+	if v.IsSet(hardwareKey) {
+		if err := v.UnmarshalKey(hardwareKey, &config.Hardware); err != nil {
 			return nil, fmt.Errorf("failed to parse hardware config: %w", err)
 		}
 	}
 
 	// Parse scaling section
-	if v.IsSet("cerebrium.scaling") {
-		if err := v.UnmarshalKey("cerebrium.scaling", &config.Scaling); err != nil {
+	scalingKey := prefix + "scaling"
+	if v.IsSet(scalingKey) {
+		if err := v.UnmarshalKey(scalingKey, &config.Scaling); err != nil {
 			return nil, fmt.Errorf("failed to parse scaling config: %w", err)
 		}
 	}
 
 	// Parse dependencies section
-	if v.IsSet("cerebrium.dependencies") {
-		if err := v.UnmarshalKey("cerebrium.dependencies", &config.Dependencies); err != nil {
+	dependenciesKey := prefix + "dependencies"
+	if v.IsSet(dependenciesKey) {
+		if err := v.UnmarshalKey(dependenciesKey, &config.Dependencies); err != nil {
 			return nil, fmt.Errorf("failed to parse dependencies config: %w", err)
 		}
 	}
 
-	// Parse custom runtime section
-	if v.IsSet("cerebrium.runtime.custom") {
-		var customRuntime CustomRuntimeConfig
-		if err := v.UnmarshalKey("cerebrium.runtime.custom", &customRuntime); err != nil {
-			return nil, fmt.Errorf("failed to parse custom runtime config: %w", err)
-		}
-		config.CustomRuntime = &customRuntime
+	// Parse runtime sections (cortex, python, docker, etc.)
+	if err := parseRuntimeSections(v, &config, prefix); err != nil {
+		return nil, err
 	}
 
-	// Parse partner service sections (deepgram, rime, etc.)
-	partnerNames := []string{"deepgram", "rime"}
-	for _, partner := range partnerNames {
-		key := fmt.Sprintf("cerebrium.runtime.%s", partner)
-		if v.IsSet(key) {
-			partnerConfig := &PartnerServiceConfig{Name: partner}
+	// Check for deprecated deployment fields and add warnings
+	checkDeprecatedDeploymentFields(v, &config, prefix)
 
-			// Check if it's a map with port
-			if v.IsSet(key + ".port") {
-				port := v.GetInt(key + ".port")
-				partnerConfig.Port = &port
-			}
-
-			// Check for model_name (e.g., "arcana", "mist")
-			if v.IsSet(key + ".model_name") {
-				modelName := v.GetString(key + ".model_name")
-				partnerConfig.ModelName = &modelName
-			}
-
-			// Check for language (e.g., "en", "es")
-			if v.IsSet(key + ".language") {
-				language := v.GetString(key + ".language")
-				partnerConfig.Language = &language
-			}
-
-			config.PartnerService = partnerConfig
-			break // Only one partner service at a time
-		}
-	}
+	// Check for deprecated top-level dependencies and add warnings
+	checkDeprecatedDependencies(&config, prefix)
 
 	// Apply defaults for missing fields
 	applyDefaults(&config)
@@ -119,15 +120,136 @@ func Load(configPath string) (*ProjectConfig, error) {
 	return &config, nil
 }
 
+// parseRuntimeSections parses the runtime section from the config
+// The CLI accepts any [runtime.<name>] section and passes it to the backend
+func parseRuntimeSections(v *viper.Viper, config *ProjectConfig, prefix string) error {
+	// Get all keys under runtime (with appropriate prefix)
+	runtimeKey := prefix + "runtime"
+	runtimeSection := v.GetStringMap(runtimeKey)
+	if len(runtimeSection) == 0 {
+		return nil
+	}
+
+	// Find the runtime type(s) - there should be exactly one
+	var runtimeTypes []string
+	for key := range runtimeSection {
+		runtimeTypes = append(runtimeTypes, key)
+	}
+
+	if len(runtimeTypes) > 1 {
+		return fmt.Errorf("only one runtime type can be specified, found: %v", runtimeTypes)
+	}
+
+	if len(runtimeTypes) == 1 {
+		runtimeType := runtimeTypes[0]
+		key := fmt.Sprintf("%sruntime.%s", prefix, runtimeType)
+
+		// Parse the runtime params as a generic map
+		params := v.GetStringMap(key)
+
+		// Convert the params to map[string]any for proper type handling
+		runtimeParams := make(map[string]any)
+		for k := range params {
+			// Re-fetch with proper type preservation
+			paramKey := fmt.Sprintf("%s.%s", key, k)
+			runtimeParams[k] = v.Get(paramKey)
+		}
+
+		config.Runtime = &RuntimeConfig{
+			Type:   runtimeType,
+			Params: runtimeParams,
+		}
+
+		// Add deprecation warning for [runtime.custom]
+		if runtimeType == "custom" {
+			addCustomRuntimeDeprecationWarning(config, prefix)
+		}
+	}
+
+	return nil
+}
+
+// addCustomRuntimeDeprecationWarning adds a deprecation warning for [runtime.custom]
+func addCustomRuntimeDeprecationWarning(config *ProjectConfig, prefix string) {
+	if config.Runtime == nil || config.Runtime.Type != "custom" {
+		return
+	}
+
+	// Determine if this is a docker or python runtime based on dockerfile_path
+	if config.Runtime.GetDockerfilePath() != "" {
+		// This is a docker runtime
+		config.DeprecationWarnings = append(config.DeprecationWarnings,
+			fmt.Sprintf("[%sruntime.custom] is deprecated. Please migrate to [%sruntime.docker]:\n"+
+				"  [%sruntime.docker]\n"+
+				"  dockerfile_path = \"%s\"", prefix, prefix, prefix, config.Runtime.GetDockerfilePath()))
+	} else {
+		// This is a python runtime
+		config.DeprecationWarnings = append(config.DeprecationWarnings,
+			fmt.Sprintf("[%sruntime.custom] is deprecated. Please migrate to [%sruntime.python]:\n"+
+				"  [%sruntime.python]\n"+
+				"  entrypoint = [\"uvicorn\", \"app.main:app\", \"--host\", \"0.0.0.0\", \"--port\", \"8000\"]", prefix, prefix, prefix))
+	}
+}
+
+// checkDeprecatedDependencies checks for deprecated top-level dependencies section
+func checkDeprecatedDependencies(config *ProjectConfig, prefix string) {
+	// Determine the target runtime section for the deprecation message
+	runtimeType := config.GetRuntimeType()
+
+	// Check for deprecated [dependencies.paths] section
+	if config.HasDeprecatedPaths() {
+		config.DeprecationWarnings = append(config.DeprecationWarnings,
+			fmt.Sprintf("[%sdependencies.paths] is deprecated. Use _file_relative_path key inside dependency maps instead:\n"+
+				"  [%sdependencies.pip]\n"+
+				"  _file_relative_path = \"requirements.txt\"\n"+
+				"  torch = \"2.0.0\"  # inline deps merged on top of file",
+				prefix, prefix))
+	}
+
+	if !config.HasTopLevelDependencies() {
+		return
+	}
+
+	if runtimeType == "docker" {
+		// Docker runtime doesn't use dependencies - don't suggest moving them
+		return
+	}
+
+	config.DeprecationWarnings = append(config.DeprecationWarnings,
+		fmt.Sprintf("[%sdependencies] is deprecated. Please move to [%sruntime.%s.dependencies.*]:\n"+
+			"  [%sruntime.%s.dependencies.pip]\n"+
+			"  torch = \"2.0.0\"\n"+
+			"  \n"+
+			"  [%sruntime.%s.dependencies.apt]\n"+
+			"  ffmpeg = \"\"",
+			prefix, prefix, runtimeType, prefix, runtimeType, prefix, runtimeType))
+}
+
+// checkDeprecatedDeploymentFields checks for deprecated fields in the deployment section
+func checkDeprecatedDeploymentFields(v *viper.Viper, config *ProjectConfig, prefix string) {
+	deprecatedFields := []struct {
+		name   string
+		newLoc string
+	}{
+		{"python_version", "[runtime.cortex] or [runtime.python]"},
+		{"docker_base_image_url", "[runtime.cortex] or [runtime.python]"},
+		{"shell_commands", "[runtime.cortex] or [runtime.python]"},
+		{"pre_build_commands", "[runtime.cortex] or [runtime.python]"},
+		{"use_uv", "[runtime.cortex] or [runtime.python]"},
+	}
+
+	for _, field := range deprecatedFields {
+		key := prefix + "deployment." + field.name
+		if v.IsSet(key) {
+			config.DeprecationWarnings = append(config.DeprecationWarnings,
+				fmt.Sprintf("[%sdeployment].%s is deprecated. Please move to %s", prefix, field.name, field.newLoc))
+		}
+	}
+}
+
 // applyDefaults sets default values for fields that weren't specified in the config
 func applyDefaults(config *ProjectConfig) {
-	// Apply deployment defaults
-	if config.Deployment.PythonVersion == "" {
-		config.Deployment.PythonVersion = DefaultPythonVersion
-	}
-	if config.Deployment.DockerBaseImageURL == "" {
-		config.Deployment.DockerBaseImageURL = DefaultDockerBaseImageURL
-	}
+	// Apply deployment defaults (app-level only)
 	if len(config.Deployment.Include) == 0 {
 		config.Deployment.Include = DefaultInclude
 	}
@@ -152,20 +274,7 @@ func applyDefaults(config *ProjectConfig) {
 		config.Scaling.LoadBalancingAlgorithm = &DefaultLoadBalancingAlgorithm
 	}
 
-	// Apply custom runtime defaults
-	if config.CustomRuntime != nil {
-		if len(config.CustomRuntime.Entrypoint) == 0 {
-			config.CustomRuntime.Entrypoint = DefaultEntrypoint
-		}
-		if config.CustomRuntime.Port == 0 {
-			config.CustomRuntime.Port = DefaultPort
-		}
-		if config.CustomRuntime.HealthcheckEndpoint == "" {
-			config.CustomRuntime.HealthcheckEndpoint = DefaultHealthcheckEndpoint
-		}
-		if config.CustomRuntime.ReadycheckEndpoint == "" {
-			config.CustomRuntime.ReadycheckEndpoint = DefaultReadycheckEndpoint
-		}
-	}
-
+	// Runtime defaults are not applied here - the backend handles validation
+	// and defaults for runtime-specific parameters. This allows new runtimes
+	// to be added without modifying the CLI.
 }
