@@ -1016,13 +1016,11 @@ func (m *DeployView) createApp() tea.Msg {
 	dockerAuth, err := auth.GetDockerAuth()
 
 	if err != nil {
-		// Only warn if we expect this image might need auth
 		if isLikelyPrivateImage(baseImage) {
 			slog.Warn("Failed to read Docker auth (may be needed for private image)",
 				"error", err,
 				"image", baseImage)
 		} else {
-			// For public images, just debug log
 			slog.Debug("Docker auth read error (not needed for public image)",
 				"error", err,
 				"image", baseImage)
@@ -1031,13 +1029,20 @@ func (m *DeployView) createApp() tea.Msg {
 		slog.Info("Docker auth detected", "length", len(dockerAuth))
 		payload["dockerAuth"] = dockerAuth
 	} else {
-		// Only log if we might have expected auth
 		if isLikelyPrivateImage(baseImage) {
 			slog.Info("No Docker auth found (image may require authentication)",
 				"image", baseImage)
 		} else {
 			slog.Debug("No Docker auth (using public image)",
 				"image", baseImage)
+		}
+	}
+
+	// Surface Docker auth warnings for private images
+	if isLikelyPrivateImage(baseImage) {
+		warnings := auth.GetDockerAuthWarnings(baseImage)
+		for _, w := range warnings {
+			fmt.Printf("Warning: %s\n", w)
 		}
 	}
 

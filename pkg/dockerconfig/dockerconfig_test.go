@@ -128,3 +128,155 @@ func TestConfig_HasAuth(t *testing.T) {
 		assert.True(t, config.HasAuth())
 	})
 }
+
+func TestConfig_HasUsableAuth(t *testing.T) {
+	t.Run("returns false for nil config", func(t *testing.T) {
+		var config *Config
+		assert.False(t, config.HasUsableAuth())
+	})
+
+	t.Run("returns false when auth entries are empty (credential store)", func(t *testing.T) {
+		config := &Config{
+			Auths: map[string]Auth{
+				"docker.io": {Auth: ""},
+				"gcr.io":    {Auth: ""},
+			},
+		}
+		assert.False(t, config.HasUsableAuth())
+	})
+
+	t.Run("returns true when auth entries have credentials", func(t *testing.T) {
+		config := &Config{
+			Auths: map[string]Auth{
+				"docker.io": {Auth: "dXNlcjpwYXNz"},
+			},
+		}
+		assert.True(t, config.HasUsableAuth())
+	})
+
+	t.Run("returns true when mix of empty and valid entries", func(t *testing.T) {
+		config := &Config{
+			Auths: map[string]Auth{
+				"docker.io": {Auth: ""},
+				"gcr.io":    {Auth: "dXNlcjpwYXNz"},
+			},
+		}
+		assert.True(t, config.HasUsableAuth())
+	})
+}
+
+func TestConfig_HasCredsStore(t *testing.T) {
+	t.Run("returns false when no credsStore", func(t *testing.T) {
+		config := &Config{}
+		assert.False(t, config.HasCredsStore())
+	})
+
+	t.Run("returns true for Docker Desktop", func(t *testing.T) {
+		config := &Config{CredsStore: "desktop"}
+		assert.True(t, config.HasCredsStore())
+	})
+
+	t.Run("returns true for osxkeychain", func(t *testing.T) {
+		config := &Config{CredsStore: "osxkeychain"}
+		assert.True(t, config.HasCredsStore())
+	})
+}
+
+func TestConfig_Warnings(t *testing.T) {
+	t.Run("no warnings for valid config", func(t *testing.T) {
+		config := &Config{
+			Auths: map[string]Auth{
+				"docker.io": {Auth: "dXNlcjpwYXNz"},
+			},
+		}
+		warnings := config.Warnings("mycompany/private-image:latest")
+		assert.Empty(t, warnings)
+	})
+
+	t.Run("warns about credsStore with no usable auth", func(t *testing.T) {
+		config := &Config{
+			CredsStore: "desktop",
+			Auths: map[string]Auth{
+				"docker.io": {Auth: ""},
+			},
+		}
+		warnings := config.Warnings("mycompany/private-image:latest")
+		assert.Len(t, warnings, 1)
+		assert.Contains(t, warnings[0], "credential store")
+		assert.Contains(t, warnings[0], "desktop")
+		assert.Contains(t, warnings[0], "docker login -u")
+	})
+
+	t.Run("no warning for credsStore when usable auth exists", func(t *testing.T) {
+		config := &Config{
+			CredsStore: "desktop",
+			Auths: map[string]Auth{
+				"docker.io": {Auth: "dXNlcjpwYXNz"},
+			},
+		}
+		warnings := config.Warnings("mycompany/private-image:latest")
+		assert.Empty(t, warnings)
+	})
+
+	t.Run("warns about credHelpers with no usable auth", func(t *testing.T) {
+		config := &Config{
+			CredHelpers: map[string]string{
+				"gcr.io": "gcloud",
+			},
+			Auths: map[string]Auth{},
+		}
+		warnings := config.Warnings("gcr.io/my-project/image:latest")
+		assert.Len(t, warnings, 1)
+		assert.Contains(t, warnings[0], "credential helpers")
+		assert.Contains(t, warnings[0], "docker login -u")
+	})
+
+	t.Run("warns about empty auth entries", func(t *testing.T) {
+		config := &Config{
+			Auths: map[string]Auth{
+				"docker.io": {Auth: ""},
+			},
+		}
+		warnings := config.Warnings("mycompany/private-image:latest")
+		assert.Len(t, warnings, 1)
+		assert.Contains(t, warnings[0], "empty")
+	})
+
+	t.Run("warns when nil config and private image", func(t *testing.T) {
+		var config *Config
+		warnings := config.Warnings("mycompany/private-image:latest")
+		assert.Len(t, warnings, 1)
+		assert.Contains(t, warnings[0], "No Docker config found")
+	})
+
+	t.Run("no warnings when nil config and no private image", func(t *testing.T) {
+		var config *Config
+		warnings := config.Warnings("")
+		assert.Empty(t, warnings)
+	})
+
+	t.Run("loads credsStore from real Docker Desktop config", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		configPath := filepath.Join(tmpDir, "config.json")
+
+		// Real Docker Desktop config.json
+		configData := `{
+			"auths": {
+				"https://index.docker.io/v1/": {}
+			},
+			"credsStore": "desktop"
+		}`
+
+		err := os.WriteFile(configPath, []byte(configData), 0600)
+		require.NoError(t, err)
+
+		config, err := LoadFromPath(configPath)
+		require.NoError(t, err)
+		assert.True(t, config.HasCredsStore())
+		assert.Equal(t, "desktop", config.CredsStore)
+		assert.False(t, config.HasUsableAuth())
+
+		warnings := config.Warnings("mycompany/private-image:latest")
+		assert.NotEmpty(t, warnings)
+	})
+}
