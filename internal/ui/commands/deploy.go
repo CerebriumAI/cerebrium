@@ -2,6 +2,7 @@ package commands
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -35,6 +36,7 @@ type DeployState int
 
 const (
 	StateConfirmation DeployState = iota
+	StateValidatingRuntime
 	StateLoadingFiles
 	StateZippingFiles
 	StateCreatingApp
@@ -71,18 +73,18 @@ type DeployView struct {
 	state DeployState
 
 	// State data
-	isPartnerDeploy bool // Track if this is a partner app deployment
-	fileList        []string
-	zipPath         string
-	zipSize         int64
-	buildID         string
-	appResponse     *api.CreateAppResponse
-	logViewer       *logging.LogViewerModel
-	idleMsgIdx      int
-	buildStatus     string
-	spinner         *ui.SpinnerModel
-	message         string
-	err             *ui.UIError
+	deployAction string   // "create_app" or "create_partner_app" - set by runtime validation
+	fileList     []string
+	zipPath      string
+	zipSize      int64
+	buildID      string
+	appResponse  *api.CreateAppResponse
+	logViewer    *logging.LogViewerModel
+	idleMsgIdx   int
+	buildStatus  string
+	spinner      *ui.SpinnerModel
+	message      string
+	err          *ui.UIError
 
 	// Upload progress tracking
 	progressBar         progress.Model
@@ -102,14 +104,10 @@ type DeployView struct {
 // NewDeployView creates a new deploy view
 func NewDeployView(ctx context.Context, conf DeployConfig) *DeployView {
 	initialState := StateConfirmation
-	isPartnerDeploy := conf.Config.PartnerService != nil
 
 	if conf.DisableConfirmation {
-		if isPartnerDeploy {
-			initialState = StateCreatingApp
-		} else {
-			initialState = StateLoadingFiles
-		}
+		// Skip confirmation, go directly to runtime validation
+		initialState = StateValidatingRuntime
 	}
 
 	prog := progress.New(
@@ -120,14 +118,13 @@ func NewDeployView(ctx context.Context, conf DeployConfig) *DeployView {
 	ctx, cancel := context.WithCancel(ctx)
 
 	return &DeployView{
-		ctx:             ctx,
-		ctxCancel:       cancel,
-		state:           initialState,
-		isPartnerDeploy: isPartnerDeploy,
-		spinner:         ui.NewSpinner(),
-		progressBar:     prog,
+		ctx:                 ctx,
+		ctxCancel:           cancel,
+		state:               initialState,
+		spinner:             ui.NewSpinner(),
+		progressBar:         prog,
 		atomicBytesUploaded: &atomic.Int64{},
-		conf:            conf,
+		conf:                conf,
 	}
 }
 
@@ -139,9 +136,9 @@ func (m *DeployView) Error() error {
 }
 
 // isPartnerService returns true if this is a partner service deployment
-// (runtime is not cortex or custom) - these don't require file upload
+// (determined by runtime validation) - these don't require file upload
 func (m *DeployView) isPartnerService() bool {
-	return m.isPartnerDeploy
+	return m.deployAction == "create_partner_app"
 }
 
 func (m *DeployView) Init() tea.Cmd {
@@ -155,20 +152,15 @@ func (m *DeployView) Init() tea.Cmd {
 		return nil
 	}
 
-	// Confirmation disabled - start appropriate flow
-	if m.isPartnerService() {
-		// Partner services skip file loading/zipping, go directly to create app
+	// Confirmation disabled - start with runtime validation
+	if m.state == StateValidatingRuntime {
 		return tea.Batch(
 			m.spinner.Init(),
-			m.createApp,
+			m.validateRuntime,
 		)
 	}
 
-	// Standard flow: start loading files
-	return tea.Batch(
-		m.spinner.Init(),
-		m.loadFiles,
-	)
+	return nil
 }
 
 // Update handles messages
@@ -250,6 +242,38 @@ func (m *DeployView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.ctxCancel() // Stop all subprocesses
 		return m, tea.Quit
 
+	case runtimeValidatedMsg:
+		m.deployAction = msg.action
+
+		if m.conf.SimpleOutput() {
+			fmt.Println("✓ Runtime validated")
+		}
+
+		// Determine next step based on action from backend
+		if m.deployAction == "create_partner_app" {
+			// Partner services skip file loading/zipping, go directly to create app
+			m.state = StateCreatingApp
+
+			if !m.conf.SimpleOutput() {
+				return m, tea.Batch(
+					tea.Println(ui.SuccessStyle.Render("✓  Runtime validated")),
+					m.createApp,
+				)
+			}
+			return m, m.createApp
+		}
+
+		// Standard flow: start loading files
+		m.state = StateLoadingFiles
+
+		if !m.conf.SimpleOutput() {
+			return m, tea.Batch(
+				tea.Println(ui.SuccessStyle.Render("✓  Runtime validated")),
+				m.loadFiles,
+			)
+		}
+		return m, m.loadFiles
+
 	case filesLoadedMsg:
 		m.fileList = msg.fileList
 		m.state = StateZippingFiles
@@ -288,7 +312,7 @@ func (m *DeployView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.buildStatus = msg.response.Status
 
 		// Partner services skip upload - go directly to build monitoring
-		if m.isPartnerDeploy {
+		if m.isPartnerService() {
 			m.state = StateBuildingApp
 
 			if m.conf.SimpleOutput() {
@@ -576,18 +600,11 @@ func (m *DeployView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case confirmationResponseMsg:
 		// Handle non-TTY confirmation response
 		if msg.confirmed {
-			if m.isPartnerService() {
-				// Partner services skip file loading/zipping, go directly to create app
-				m.state = StateCreatingApp
-				return m, tea.Batch(
-					m.spinner.Init(),
-					m.createApp,
-				)
-			}
-			m.state = StateLoadingFiles
+			// After confirmation, validate runtime first
+			m.state = StateValidatingRuntime
 			return m, tea.Batch(
 				m.spinner.Init(),
-				m.loadFiles,
+				m.validateRuntime,
 			)
 		}
 		// User cancelled
@@ -702,6 +719,20 @@ func (m *DeployView) View() string {
 
 	// Show active state and pending states (completed states are printed via tea.Println)
 	switch m.state {
+	case StateValidatingRuntime:
+		output.WriteString(formatStateLine(m.spinner.View(), "Validating runtime...", ui.ActiveStyle.Render))
+		output.WriteString("\n")
+		output.WriteString(formatStateLine("-", "Load files", ui.PendingStyle.Render))
+		output.WriteString("\n")
+		output.WriteString(formatStateLine("-", "Zip files", ui.PendingStyle.Render))
+		output.WriteString("\n")
+		output.WriteString(formatStateLine("-", "Create app", ui.PendingStyle.Render))
+		output.WriteString("\n")
+		output.WriteString(formatStateLine("-", "Upload to Cerebrium", ui.PendingStyle.Render))
+		output.WriteString("\n")
+		output.WriteString(formatStateLine("-", "Build app", ui.PendingStyle.Render))
+		output.WriteString("\n")
+
 	case StateLoadingFiles:
 		output.WriteString(formatStateLine(m.spinner.View(), "Loading files...", ui.ActiveStyle.Render))
 		output.WriteString("\n")
@@ -789,19 +820,11 @@ func (m *DeployView) onKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.state == StateConfirmation {
 		switch msg.String() {
 		case "y", "Y", "enter":
-			// User confirmed deployment
-			if m.isPartnerService() {
-				// Partner services skip file loading/zipping, go directly to create app
-				m.state = StateCreatingApp
-				return m, tea.Batch(
-					m.spinner.Init(),
-					m.createApp,
-				)
-			}
-			m.state = StateLoadingFiles
+			// User confirmed deployment - start with runtime validation
+			m.state = StateValidatingRuntime
 			return m, tea.Batch(
 				m.spinner.Init(),
-				m.loadFiles,
+				m.validateRuntime,
 			)
 
 		case "n", "N", "esc", "ctrl+c":
@@ -905,7 +928,65 @@ type confirmationResponseMsg struct {
 
 type uploadProgressTickMsg time.Time
 
+type runtimeValidatedMsg struct {
+	action string // "create_app" or "create_partner_app"
+}
+
 // Commands (async operations)
+
+func (m *DeployView) validateRuntime() tea.Msg {
+	runtimeType := m.conf.Config.GetRuntimeType()
+	params := make(map[string]any)
+
+	// Include runtime params if available
+	if m.conf.Config.Runtime != nil && m.conf.Config.Runtime.Params != nil {
+		// Copy runtime params
+		for k, v := range m.conf.Config.Runtime.Params {
+			params[k] = v
+		}
+	}
+
+	// Include effective dependencies in the validation request
+	// The backend will validate if dependencies are appropriate for the runtime type
+	// Use GetPackages to strip out _file_relative_path before sending to backend
+	effectiveDeps := m.conf.Config.GetEffectiveDependencies()
+	pipPkgs := projectconfig.GetPackages(effectiveDeps.Pip)
+	condaPkgs := projectconfig.GetPackages(effectiveDeps.Conda)
+	aptPkgs := projectconfig.GetPackages(effectiveDeps.Apt)
+	if len(pipPkgs) > 0 || len(condaPkgs) > 0 || len(aptPkgs) > 0 {
+		depsMap := make(map[string]any)
+		if len(pipPkgs) > 0 {
+			depsMap["pip"] = pipPkgs
+		}
+		if len(condaPkgs) > 0 {
+			depsMap["conda"] = condaPkgs
+		}
+		if len(aptPkgs) > 0 {
+			depsMap["apt"] = aptPkgs
+		}
+		params["dependencies"] = depsMap
+	}
+
+	req := &api.ValidateRuntimeRequest{
+		Runtime: runtimeType,
+		Params:  params,
+	}
+
+	resp, err := m.conf.Client.ValidateRuntime(m.ctx, m.conf.ProjectID, req)
+	if err != nil {
+		return ui.NewAPIError(fmt.Errorf("failed to validate runtime: %w", err))
+	}
+
+	if !resp.Valid {
+		errMsg := "runtime validation failed"
+		if len(resp.Errors) > 0 {
+			errMsg = strings.Join(resp.Errors, "; ")
+		}
+		return ui.NewValidationError(errors.New(errMsg))
+	}
+
+	return runtimeValidatedMsg{action: resp.Action}
+}
 
 func (m *DeployView) loadFiles() tea.Msg {
 	fileList, err := files.DetermineIncludes(
@@ -1048,7 +1129,8 @@ func (m *DeployView) createApp() tea.Msg {
 
 	var response *api.CreateAppResponse
 
-	if m.isPartnerDeploy {
+	// Use deployAction (set by runtime validation) to determine which endpoint to call
+	if m.deployAction == "create_partner_app" {
 		response, err = m.conf.Client.CreatePartnerApp(m.ctx, m.conf.ProjectID, payload)
 	} else {
 		response, err = m.conf.Client.CreateApp(m.ctx, m.conf.ProjectID, payload)
@@ -1304,77 +1386,74 @@ func (m *DeployView) waitForConfirmation() tea.Msg {
 
 // getRuntimeType returns a user-friendly runtime type name
 func getRuntimeType(config *projectconfig.ProjectConfig) string {
-	if config.PartnerService != nil {
-		// Return partner service name (capitalize first letter)
-		if config.PartnerService.Name != "" {
-			return strings.ToUpper(string(config.PartnerService.Name[0])) + config.PartnerService.Name[1:]
-		}
-		return config.PartnerService.Name
-	}
+	runtimeType := config.GetRuntimeType()
 
-	if config.CustomRuntime != nil {
-		if config.CustomRuntime.DockerfilePath != "" {
-			return "Custom Docker"
+	switch runtimeType {
+	case "custom":
+		// Legacy deprecated runtime - map to appropriate type
+		if config.Runtime != nil && config.Runtime.GetDockerfilePath() != "" {
+			return "Docker"
 		}
-		return "Custom Python (ASGI/WSGI)"
+		return "Python"
+	default:
+		// Capitalize first letter for all runtime types
+		// cortex → Cortex, docker → Docker, python → Python, rime → Rime, etc.
+		if len(runtimeType) > 0 {
+			return strings.ToUpper(string(runtimeType[0])) + runtimeType[1:]
+		}
+		return runtimeType
 	}
-
-	return "Cortex"
 }
 
 // isCustomDocker returns true if this is a Custom Docker deployment
 func isCustomDocker(config *projectconfig.ProjectConfig) bool {
-	return config.CustomRuntime != nil && config.CustomRuntime.DockerfilePath != ""
-}
-
-// isCustomPython returns true if this is a Custom Python deployment
-func isCustomPython(config *projectconfig.ProjectConfig) bool {
-	return config.CustomRuntime != nil && config.CustomRuntime.DockerfilePath == ""
-}
-
-// isPartnerServiceRuntime returns true if this is a Partner Service deployment
-func isPartnerServiceRuntime(config *projectconfig.ProjectConfig) bool {
-	return config.PartnerService != nil
-}
-
-// isCortexRuntime returns true if this is a Cortex (default) deployment
-func isCortexRuntime(config *projectconfig.ProjectConfig) bool {
-	return config.CustomRuntime == nil && config.PartnerService == nil
+	runtimeType := config.GetRuntimeType()
+	if runtimeType == "docker" {
+		return true
+	}
+	// Also check for deprecated custom runtime with dockerfile
+	if runtimeType == "custom" && config.Runtime != nil && config.Runtime.GetDockerfilePath() != "" {
+		return true
+	}
+	return false
 }
 
 // renderRuntimeSpecificSettings returns runtime-specific configuration as a string
 func renderRuntimeSpecificSettings(config *projectconfig.ProjectConfig) string {
-	if config.CustomRuntime != nil {
-		// Custom Docker or Custom Python
-		var settings []string
-
-		if config.CustomRuntime.DockerfilePath != "" {
-			settings = append(settings, fmt.Sprintf("Dockerfile: %s", config.CustomRuntime.DockerfilePath))
-		}
-
-		// Port is required for custom runtimes, always show it
-		settings = append(settings, fmt.Sprintf("Port: %d", config.CustomRuntime.Port))
-
-		if len(config.CustomRuntime.Entrypoint) > 0 {
-			settings = append(settings, fmt.Sprintf("Entrypoint: %s", strings.Join(config.CustomRuntime.Entrypoint, " ")))
-		}
-
-		if config.CustomRuntime.HealthcheckEndpoint != "" {
-			settings = append(settings, fmt.Sprintf("Healthcheck: %s", config.CustomRuntime.HealthcheckEndpoint))
-		}
-
-		if config.CustomRuntime.ReadycheckEndpoint != "" {
-			settings = append(settings, fmt.Sprintf("Readycheck: %s", config.CustomRuntime.ReadycheckEndpoint))
-		}
-
-		return strings.Join(settings, "\n")
+	if config.Runtime == nil {
+		return "" // Cortex with defaults has no runtime-specific settings
 	}
 
-	if config.PartnerService != nil && config.PartnerService.Port != nil {
-		return fmt.Sprintf("Port: %d", *config.PartnerService.Port)
+	runtimeType := config.GetRuntimeType()
+	var settings []string
+
+	// Show dockerfile path for docker runtime
+	dockerfilePath := config.Runtime.GetDockerfilePath()
+	if dockerfilePath != "" {
+		settings = append(settings, fmt.Sprintf("Dockerfile: %s", dockerfilePath))
 	}
 
-	return "" // Cortex has no runtime-specific settings
+	// Show port for non-cortex runtimes
+	if runtimeType != "cortex" {
+		port := config.Runtime.GetPort()
+		settings = append(settings, fmt.Sprintf("Port: %d", port))
+	}
+
+	// Show entrypoint if set
+	entrypoint := config.Runtime.GetEntrypoint()
+	if len(entrypoint) > 0 {
+		settings = append(settings, fmt.Sprintf("Entrypoint: %s", strings.Join(entrypoint, " ")))
+	}
+
+	// Show health/ready check endpoints if set
+	if healthcheck, ok := config.Runtime.Params["healthcheck_endpoint"].(string); ok && healthcheck != "" {
+		settings = append(settings, fmt.Sprintf("Healthcheck: %s", healthcheck))
+	}
+	if readycheck, ok := config.Runtime.Params["readycheck_endpoint"].(string); ok && readycheck != "" {
+		settings = append(settings, fmt.Sprintf("Readycheck: %s", readycheck))
+	}
+
+	return strings.Join(settings, "\n")
 }
 
 // renderDeploymentSummary creates the deployment configuration summary
@@ -1482,13 +1561,16 @@ func (m *DeployView) renderDeploymentSummary() string {
 		}
 
 		// DEPENDENCIES (only show if not using Dockerfile)
-		if m.conf.Config.CustomRuntime == nil || m.conf.Config.CustomRuntime.DockerfilePath == "" {
+		if !isCustomDocker(m.conf.Config) {
 			var depItems []string
 
+			// Get effective dependencies (merged from top-level and runtime-specific)
+			effectiveDeps := m.conf.Config.GetEffectiveDependencies()
+
 			// Pip packages
-			if len(m.conf.Config.Dependencies.Pip) > 0 {
+			if len(effectiveDeps.Pip) > 0 {
 				var pkgs []string
-				for pkg, ver := range m.conf.Config.Dependencies.Pip {
+				for pkg, ver := range effectiveDeps.Pip {
 					if ver == "" {
 						pkgs = append(pkgs, pkg)
 					} else {
@@ -1502,9 +1584,9 @@ func (m *DeployView) renderDeploymentSummary() string {
 			}
 
 			// Apt packages
-			if len(m.conf.Config.Dependencies.Apt) > 0 {
+			if len(effectiveDeps.Apt) > 0 {
 				var pkgs []string
-				for pkg, ver := range m.conf.Config.Dependencies.Apt {
+				for pkg, ver := range effectiveDeps.Apt {
 					if ver == "" {
 						pkgs = append(pkgs, pkg)
 					} else {
@@ -1518,9 +1600,9 @@ func (m *DeployView) renderDeploymentSummary() string {
 			}
 
 			// Conda packages
-			if len(m.conf.Config.Dependencies.Conda) > 0 {
+			if len(effectiveDeps.Conda) > 0 {
 				var pkgs []string
-				for pkg, ver := range m.conf.Config.Dependencies.Conda {
+				for pkg, ver := range effectiveDeps.Conda {
 					if ver == "" {
 						pkgs = append(pkgs, pkg)
 					} else {
@@ -1655,13 +1737,16 @@ func (m *DeployView) renderDeploymentSummary() string {
 	}
 
 	// DEPENDENCIES (only show if not using Dockerfile)
-	if m.conf.Config.CustomRuntime == nil || m.conf.Config.CustomRuntime.DockerfilePath == "" {
+	if !isCustomDocker(m.conf.Config) {
 		var depRows []ui.TableRow
 
+		// Get effective dependencies (merged from top-level and runtime-specific)
+		effectiveDeps := m.conf.Config.GetEffectiveDependencies()
+
 		// Pip packages
-		if len(m.conf.Config.Dependencies.Pip) > 0 {
+		if len(effectiveDeps.Pip) > 0 {
 			var pkgs []string
-			for pkg, ver := range m.conf.Config.Dependencies.Pip {
+			for pkg, ver := range effectiveDeps.Pip {
 				if ver == "" {
 					pkgs = append(pkgs, pkg)
 				} else {
@@ -1675,9 +1760,9 @@ func (m *DeployView) renderDeploymentSummary() string {
 		}
 
 		// Apt packages
-		if len(m.conf.Config.Dependencies.Apt) > 0 {
+		if len(effectiveDeps.Apt) > 0 {
 			var pkgs []string
-			for pkg, ver := range m.conf.Config.Dependencies.Apt {
+			for pkg, ver := range effectiveDeps.Apt {
 				if ver == "" {
 					pkgs = append(pkgs, pkg)
 				} else {
@@ -1691,9 +1776,9 @@ func (m *DeployView) renderDeploymentSummary() string {
 		}
 
 		// Conda packages
-		if len(m.conf.Config.Dependencies.Conda) > 0 {
+		if len(effectiveDeps.Conda) > 0 {
 			var pkgs []string
-			for pkg, ver := range m.conf.Config.Dependencies.Conda {
+			for pkg, ver := range effectiveDeps.Conda {
 				if ver == "" {
 					pkgs = append(pkgs, pkg)
 				} else {
