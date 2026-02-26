@@ -255,6 +255,38 @@ func TestConfig_Warnings(t *testing.T) {
 		assert.Empty(t, warnings)
 	})
 
+	t.Run("warns about registry mismatch", func(t *testing.T) {
+		config := &Config{
+			Auths: map[string]Auth{
+				"https://index.docker.io/v1/": {Auth: "dXNlcjpwYXNz"},
+			},
+		}
+		warnings := config.Warnings("123456.dkr.ecr.us-east-1.amazonaws.com/my-image:latest")
+		assert.Len(t, warnings, 1)
+		assert.Contains(t, warnings[0], "credentials found for")
+		assert.Contains(t, warnings[0], "123456.dkr.ecr.us-east-1.amazonaws.com")
+	})
+
+	t.Run("no mismatch warning when Docker Hub auth matches Docker Hub image", func(t *testing.T) {
+		config := &Config{
+			Auths: map[string]Auth{
+				"https://index.docker.io/v1/": {Auth: "dXNlcjpwYXNz"},
+			},
+		}
+		warnings := config.Warnings("mycompany/private-image:latest")
+		assert.Empty(t, warnings)
+	})
+
+	t.Run("no mismatch warning when ECR auth matches ECR image", func(t *testing.T) {
+		config := &Config{
+			Auths: map[string]Auth{
+				"123456.dkr.ecr.us-east-1.amazonaws.com": {Auth: "dXNlcjpwYXNz"},
+			},
+		}
+		warnings := config.Warnings("123456.dkr.ecr.us-east-1.amazonaws.com/my-image:latest")
+		assert.Empty(t, warnings)
+	})
+
 	t.Run("loads credsStore from real Docker Desktop config", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		configPath := filepath.Join(tmpDir, "config.json")

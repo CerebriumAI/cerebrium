@@ -177,7 +177,82 @@ func (c *Config) Warnings(privateImage string) []string {
 			privateImage))
 	}
 
+	// Registry mismatch: have usable auth but none match the image's registry
+	if c.HasUsableAuth() && privateImage != "" {
+		imageRegistry := extractRegistry(privateImage)
+		if imageRegistry != "" {
+			usable := c.UsableAuthRegistries()
+			matched := false
+			for _, reg := range usable {
+				if registriesMatch(reg, imageRegistry) {
+					matched = true
+					break
+				}
+			}
+			if !matched {
+				warnings = append(warnings, fmt.Sprintf(
+					"Docker credentials found for [%s] but your image '%s' is from '%s'. "+
+						"Run: docker login -u <username> %s",
+					strings.Join(usable, ", "), privateImage, imageRegistry, imageRegistry))
+			}
+		}
+	}
+
 	return warnings
+}
+
+// extractRegistry extracts the registry hostname from a Docker image URL.
+// Returns "" for Docker Hub official images (no namespace).
+func extractRegistry(imageURL string) string {
+	// Strip tag
+	image := strings.Split(imageURL, ":")[0]
+
+	parts := strings.Split(image, "/")
+	if len(parts) == 1 {
+		// Official image like "debian" — no registry
+		return ""
+	}
+
+	// If first part has a dot or colon, it's a registry hostname
+	// e.g., "gcr.io/project/image", "123456.dkr.ecr.us-east-1.amazonaws.com/image"
+	if strings.Contains(parts[0], ".") || strings.Contains(parts[0], ":") {
+		return parts[0]
+	}
+
+	// namespace/image format → Docker Hub
+	return "docker.io"
+}
+
+// registriesMatch checks if a credential registry entry matches a target registry.
+// Handles Docker Hub aliases (docker.io, index.docker.io, registry-1.docker.io, etc.)
+func registriesMatch(credRegistry, targetRegistry string) bool {
+	credRegistry = normalizeRegistry(credRegistry)
+	targetRegistry = normalizeRegistry(targetRegistry)
+	return credRegistry == targetRegistry
+}
+
+func normalizeRegistry(reg string) string {
+	reg = strings.TrimPrefix(reg, "https://")
+	reg = strings.TrimPrefix(reg, "http://")
+	reg = strings.TrimSuffix(reg, "/")
+	// Remove common Docker Hub path suffixes
+	reg = strings.TrimSuffix(reg, "/v1")
+	reg = strings.TrimSuffix(reg, "/v2")
+
+	// Normalize all Docker Hub variants to "docker.io"
+	dockerHubAliases := []string{
+		"index.docker.io",
+		"registry-1.docker.io",
+		"registry.docker.io",
+		"registry.hub.docker.com",
+	}
+	for _, alias := range dockerHubAliases {
+		if reg == alias {
+			return "docker.io"
+		}
+	}
+
+	return reg
 }
 
 // IsOAuthTokenRegistry checks if a registry URL is an OAuth-style token entry
