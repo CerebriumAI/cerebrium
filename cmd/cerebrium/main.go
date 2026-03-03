@@ -2,11 +2,13 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
 
 	"github.com/cerebriumai/cerebrium/internal/commands"
+	ui "github.com/cerebriumai/cerebrium/internal/ui"
 	cerebrium_bugsnag "github.com/cerebriumai/cerebrium/pkg/bugsnag"
 )
 
@@ -22,6 +24,15 @@ func main() {
 
 	rootCmd := commands.NewRootCmd()
 	if err := rootCmd.Execute(); err != nil {
+		// Check if this is a UIError with SilentExit (already shown in UI)
+		var uiErr *ui.UIError
+		if errors.As(err, &uiErr) && uiErr.SilentExit {
+			if uiErr.Type == ui.ErrorTypeUserCancelled {
+				os.Exit(0)
+			}
+			os.Exit(1)
+		}
+
 		// Commands handle their own error presentation logic
 		// If we get an error here, check if it's an unknown command error
 		// and show usage if so

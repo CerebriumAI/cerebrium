@@ -1,7 +1,6 @@
 package files
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -127,11 +126,8 @@ func runCp(cmd *cobra.Command, args []string, region string) error {
 		return fmt.Errorf("unexpected model type")
 	}
 
-	// Check for errors
-	// Handle UIError - check if it should be silent
-	var uiErr *ui.UIError
-	if errors.As(m.Error(), &uiErr) && !uiErr.SilentExit {
-		return uiErr
+	if err := m.Error(); err != nil {
+		return err
 	}
 
 	return nil

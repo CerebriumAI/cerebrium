@@ -124,9 +124,6 @@ func runLogsCommand(cmd *cobra.Command, appName string, noFollow bool, since str
 	//nolint:errcheck // Type assertion guaranteed by Bubbletea model structure
 	m := finalModel.(*uiCommands.LogsView)
 	if uiErr := m.GetError(); uiErr != nil {
-		if uiErr.SilentExit {
-			return nil
-		}
 		return uiErr
 	}
 
