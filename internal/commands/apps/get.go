@@ -1,7 +1,6 @@
 package apps
 
 import (
-	"errors"
 	"fmt"
 
 	"github.com/cerebriumai/cerebrium/internal/api"
@@ -94,11 +93,8 @@ func runGet(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("unexpected model type")
 	}
 
-	// Check if there were any errors during execution
-	// Handle UIError - check if it should be silent
-	var uiErr *ui.UIError
-	if errors.As(m.Error(), &uiErr) && !uiErr.SilentExit {
-		return uiErr
+	if err := m.Error(); err != nil {
+		return err
 	}
 
 	return nil

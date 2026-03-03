@@ -193,11 +193,6 @@ func runDeploy(cmd *cobra.Command, opts deployOptions, disableConfirmation bool)
 
 	// Handle error from model
 	if uiErr := m.GetError(); uiErr != nil {
-		if uiErr.SilentExit {
-			// Error was already shown in UI or should be silent - exit cleanly
-			return nil
-		}
-		// Return error for Cobra/main.go to print
 		return uiErr
 	}
 

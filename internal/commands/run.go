@@ -170,9 +170,6 @@ func runRun(cmd *cobra.Command, filename string, dataMap map[string]any, region 
 	}
 
 	if uiErr := m.GetError(); uiErr != nil {
-		if uiErr.SilentExit {
-			return nil
-		}
 		return uiErr
 	}
 

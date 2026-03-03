@@ -1,7 +1,6 @@
 package commands
 
 import (
-	"errors"
 	"fmt"
 	"os"
 
@@ -86,14 +85,7 @@ func runLogin(cmd *cobra.Command, args []string) error {
 	// Check if there were any errors during execution
 	if m, ok := finalModel.(*uiCommands.LoginView); ok {
 		if uiErr := m.GetError(); uiErr != nil {
-			// Handle UIError
-			var uiErrTyped *ui.UIError
-			if errors.As(uiErr, &uiErrTyped) && !uiErrTyped.SilentExit {
-				// Error was already shown in UI or should be silent
-				return uiErr
-			}
-			// Return error for printing
-			return nil
+			return uiErr
 		}
 	}
 
