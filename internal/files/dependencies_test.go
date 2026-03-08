@@ -127,8 +127,8 @@ func TestGenerateDependencyFiles_WithFilePaths(t *testing.T) {
 
 	config := &projectconfig.ProjectConfig{
 		Dependencies: projectconfig.DependenciesConfig{
-			Paths: projectconfig.DependencyPathsConfig{
-				Pip: requirementsPath,
+			Pip: map[string]string{
+				projectconfig.FileRelativePathKey: requirementsPath,
 			},
 		},
 	}
@@ -137,14 +137,16 @@ func TestGenerateDependencyFiles_WithFilePaths(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Len(t, files, 1)
-	assert.Equal(t, requirementsContent, files["requirements.txt"])
+	// Output is re-generated from parsed content, not raw file content
+	assert.Contains(t, files["requirements.txt"], "django==4.2.0")
+	assert.Contains(t, files["requirements.txt"], "celery>=5.0.0")
 }
 
 func TestGenerateDependencyFiles_FileNotFound(t *testing.T) {
 	config := &projectconfig.ProjectConfig{
 		Dependencies: projectconfig.DependenciesConfig{
-			Paths: projectconfig.DependencyPathsConfig{
-				Pip: "/nonexistent/requirements.txt",
+			Pip: map[string]string{
+				projectconfig.FileRelativePathKey: "/nonexistent/requirements.txt",
 			},
 		},
 	}
@@ -154,28 +156,32 @@ func TestGenerateDependencyFiles_FileNotFound(t *testing.T) {
 	assert.Contains(t, err.Error(), "was not found")
 }
 
-func TestGenerateDependencyFiles_BothInlineAndFilePath(t *testing.T) {
+func TestGenerateDependencyFiles_MergesFileAndInlineDeps(t *testing.T) {
 	tmpDir := t.TempDir()
 	requirementsPath := filepath.Join(tmpDir, "requirements.txt")
-	requirementsContent := "django==4.2.0\n"
+	// File has django and numpy (older version)
+	requirementsContent := "django==4.2.0\nnumpy==1.23.0\n"
 	err := os.WriteFile(requirementsPath, []byte(requirementsContent), 0644)
 	require.NoError(t, err)
 
 	config := &projectconfig.ProjectConfig{
 		Dependencies: projectconfig.DependenciesConfig{
 			Pip: map[string]string{
-				"numpy": "1.24.0",
-			},
-			Paths: projectconfig.DependencyPathsConfig{
-				Pip: requirementsPath,
+				projectconfig.FileRelativePathKey: requirementsPath,
+				"numpy":                           "1.24.0", // Override file version
+				"requests":                        "2.28.0", // Add new package
 			},
 		},
 	}
 
-	_, err = GenerateDependencyFiles(config)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "both")
-	assert.Contains(t, err.Error(), "please specify only one")
+	files, err := GenerateDependencyFiles(config)
+	require.NoError(t, err)
+
+	// Inline wins for numpy, file's django preserved, new requests added
+	assert.Contains(t, files["requirements.txt"], "django==4.2.0")
+	assert.Contains(t, files["requirements.txt"], "numpy==1.24.0") // Inline wins
+	assert.Contains(t, files["requirements.txt"], "requests==2.28.0")
+	assert.NotContains(t, files["requirements.txt"], "numpy==1.23.0") // File version overwritten
 }
 
 func TestParseDepLine(t *testing.T) {
@@ -299,4 +305,202 @@ func TestGenerateDependencyFiles_WithShellCommands(t *testing.T) {
 	assert.Contains(t, preBuildContent, "#!/bin/bash")
 	assert.Contains(t, preBuildContent, "set -e")
 	assert.Contains(t, preBuildContent, "apt-get update")
+}
+
+func TestGenerateDependencyFiles_WithRuntimeDependencies(t *testing.T) {
+	config := &projectconfig.ProjectConfig{
+		Dependencies: projectconfig.DependenciesConfig{},
+		Runtime: &projectconfig.RuntimeConfig{
+			Type: "cortex",
+			Params: map[string]any{
+				"python_version": "3.12",
+				"dependencies": map[string]any{
+					"pip": map[string]any{
+						"torch": "2.0.0",
+						"numpy": "latest",
+					},
+					"apt": map[string]any{
+						"ffmpeg": "",
+					},
+				},
+			},
+		},
+	}
+
+	files, err := GenerateDependencyFiles(config)
+	require.NoError(t, err)
+
+	assert.Len(t, files, 2)
+	assert.Equal(t, "numpy\ntorch==2.0.0\n", files["requirements.txt"])
+	assert.Equal(t, "ffmpeg\n", files["pkglist.txt"])
+}
+
+func TestGenerateDependencyFiles_MergeTopLevelAndRuntimeDependencies(t *testing.T) {
+	config := &projectconfig.ProjectConfig{
+		Dependencies: projectconfig.DependenciesConfig{
+			Pip: map[string]string{
+				"requests": "2.28.0",
+				"numpy":    "1.23.0", // Will be overridden by runtime
+			},
+			Apt: map[string]string{
+				"git": "",
+			},
+		},
+		Runtime: &projectconfig.RuntimeConfig{
+			Type: "cortex",
+			Params: map[string]any{
+				"python_version": "3.12",
+				"dependencies": map[string]any{
+					"pip": map[string]any{
+						"torch": "2.0.0",
+						"numpy": "1.24.0", // Overrides top-level
+					},
+					"apt": map[string]any{
+						"ffmpeg": "",
+					},
+				},
+			},
+		},
+	}
+
+	files, err := GenerateDependencyFiles(config)
+	require.NoError(t, err)
+
+	// Pip should have merged deps with runtime winning
+	assert.Contains(t, files["requirements.txt"], "numpy==1.24.0") // Runtime wins
+	assert.Contains(t, files["requirements.txt"], "torch==2.0.0")
+	assert.Contains(t, files["requirements.txt"], "requests==2.28.0")
+
+	// Apt should have merged deps
+	assert.Contains(t, files["pkglist.txt"], "ffmpeg")
+	assert.Contains(t, files["pkglist.txt"], "git")
+}
+
+func TestGenerateDependencyFiles_RuntimeShellCommands(t *testing.T) {
+	config := &projectconfig.ProjectConfig{
+		Dependencies: projectconfig.DependenciesConfig{},
+		Runtime: &projectconfig.RuntimeConfig{
+			Type: "cortex",
+			Params: map[string]any{
+				"shell_commands":     []any{"echo 'from runtime'"},
+				"pre_build_commands": []any{"apt-get update"},
+			},
+		},
+	}
+
+	files, err := GenerateDependencyFiles(config)
+	require.NoError(t, err)
+
+	assert.Len(t, files, 2)
+	assert.Contains(t, files["shell_commands.sh"], "echo 'from runtime'")
+	assert.Contains(t, files["pre_build_commands.sh"], "apt-get update")
+}
+
+func TestGenerateDependencyFiles_RuntimeShellCommandsOverrideDeployment(t *testing.T) {
+	config := &projectconfig.ProjectConfig{
+		Dependencies: projectconfig.DependenciesConfig{},
+		Deployment: projectconfig.DeploymentConfig{
+			ShellCommands: []string{"echo 'from deployment'"},
+		},
+		Runtime: &projectconfig.RuntimeConfig{
+			Type: "cortex",
+			Params: map[string]any{
+				"shell_commands": []any{"echo 'from runtime'"},
+			},
+		},
+	}
+
+	files, err := GenerateDependencyFiles(config)
+	require.NoError(t, err)
+
+	// Runtime shell commands should override deprecated deployment shell commands
+	assert.Contains(t, files["shell_commands.sh"], "echo 'from runtime'")
+	assert.NotContains(t, files["shell_commands.sh"], "echo 'from deployment'")
+}
+
+func TestGenerateDependencyFiles_DeprecatedPathsSection(t *testing.T) {
+	// Create temp requirements file
+	tmpDir := t.TempDir()
+	requirementsPath := filepath.Join(tmpDir, "requirements.txt")
+	requirementsContent := "django==4.2.0\ncelery>=5.0.0\n"
+	err := os.WriteFile(requirementsPath, []byte(requirementsContent), 0644)
+	require.NoError(t, err)
+
+	config := &projectconfig.ProjectConfig{
+		Dependencies: projectconfig.DependenciesConfig{
+			Paths: projectconfig.DependencyPathsConfig{
+				Pip: requirementsPath,
+			},
+		},
+	}
+
+	files, err := GenerateDependencyFiles(config)
+	require.NoError(t, err)
+
+	assert.Len(t, files, 1)
+	assert.Contains(t, files["requirements.txt"], "django==4.2.0")
+	assert.Contains(t, files["requirements.txt"], "celery>=5.0.0")
+}
+
+func TestGenerateDependencyFiles_NewPathKeyTakesPrecedenceOverDeprecated(t *testing.T) {
+	// Create two temp requirements files with different content
+	tmpDir := t.TempDir()
+
+	// Old deprecated path file
+	deprecatedPath := filepath.Join(tmpDir, "old_requirements.txt")
+	err := os.WriteFile(deprecatedPath, []byte("old-package==1.0.0\n"), 0644)
+	require.NoError(t, err)
+
+	// New _file_relative_path file
+	newPath := filepath.Join(tmpDir, "new_requirements.txt")
+	err = os.WriteFile(newPath, []byte("new-package==2.0.0\n"), 0644)
+	require.NoError(t, err)
+
+	config := &projectconfig.ProjectConfig{
+		Dependencies: projectconfig.DependenciesConfig{
+			Pip: map[string]string{
+				projectconfig.FileRelativePathKey: newPath,
+			},
+			Paths: projectconfig.DependencyPathsConfig{
+				Pip: deprecatedPath,
+			},
+		},
+	}
+
+	files, err := GenerateDependencyFiles(config)
+	require.NoError(t, err)
+
+	// New _file_relative_path should take precedence
+	assert.Contains(t, files["requirements.txt"], "new-package==2.0.0")
+	assert.NotContains(t, files["requirements.txt"], "old-package==1.0.0")
+}
+
+func TestGenerateDependencyFiles_DeprecatedPathsWithInlineMerge(t *testing.T) {
+	// Create temp requirements file
+	tmpDir := t.TempDir()
+	requirementsPath := filepath.Join(tmpDir, "requirements.txt")
+	requirementsContent := "django==4.2.0\nnumpy==1.23.0\n"
+	err := os.WriteFile(requirementsPath, []byte(requirementsContent), 0644)
+	require.NoError(t, err)
+
+	config := &projectconfig.ProjectConfig{
+		Dependencies: projectconfig.DependenciesConfig{
+			Pip: map[string]string{
+				"numpy":    "1.24.0", // Override file version
+				"requests": "2.28.0", // Add new package
+			},
+			Paths: projectconfig.DependencyPathsConfig{
+				Pip: requirementsPath,
+			},
+		},
+	}
+
+	files, err := GenerateDependencyFiles(config)
+	require.NoError(t, err)
+
+	// Inline wins for numpy, file's django preserved, new requests added
+	assert.Contains(t, files["requirements.txt"], "django==4.2.0")
+	assert.Contains(t, files["requirements.txt"], "numpy==1.24.0") // Inline wins
+	assert.Contains(t, files["requirements.txt"], "requests==2.28.0")
+	assert.NotContains(t, files["requirements.txt"], "numpy==1.23.0") // File version overwritten
 }

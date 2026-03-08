@@ -153,15 +153,17 @@ func runInit(cmd *cobra.Command, name string, dir string) error {
 
 // createDefaultConfig creates a cerebrium.toml file with sensible defaults
 func createDefaultConfig(path string, name string) error {
-	// Manually construct TOML to match Python output exactly
-	// Using double quotes for strings and avoiding empty [cerebrium.dependencies] section
+	// Manually construct TOML with new runtime configuration structure
+	// Using double quotes for strings and avoiding empty sections
 	content := fmt.Sprintf(`[cerebrium.deployment]
 name = "%s"
-python_version = "3.11"
-docker_base_image_url = "debian:bookworm-slim"
 disable_auth = true
 include = ['./*', 'main.py', 'cerebrium.toml']
 exclude = ['.*']
+
+[cerebrium.runtime.cortex]
+python_version = "3.11"
+docker_base_image_url = "debian:bookworm-slim"
 
 [cerebrium.hardware]
 cpu = 2.0

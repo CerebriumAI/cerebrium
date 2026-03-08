@@ -101,6 +101,14 @@ func runDeploy(cmd *cobra.Command, opts deployOptions, disableConfirmation bool)
 		return ui.NewValidationError(err)
 	}
 
+	// Print deprecation warnings if any
+	for _, warning := range projectConfig.DeprecationWarnings {
+		fmt.Printf("⚠️  Deprecation warning: %s\n", warning)
+	}
+	if len(projectConfig.DeprecationWarnings) > 0 {
+		fmt.Println() // Add spacing after warnings
+	}
+
 	// Validate project config
 	if err := projectconfig.Validate(projectConfig); err != nil {
 		return ui.NewValidationError(fmt.Errorf("invalid configuration: %w", err))
