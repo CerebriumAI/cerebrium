@@ -47,6 +47,7 @@ type ScalingConfig struct {
 	RollOutDurationSeconds    *int    `mapstructure:"roll_out_duration_seconds" toml:"roll_out_duration_seconds,omitempty"`
 	EvaluationIntervalSeconds *int    `mapstructure:"evaluation_interval_seconds" toml:"evaluation_interval_seconds,omitempty"`
 	LoadBalancingAlgorithm    *string `mapstructure:"load_balancing_algorithm" toml:"load_balancing_algorithm,omitempty"`
+	ComputeTier               *string `mapstructure:"compute_tier" toml:"compute_tier,omitempty"`
 }
 
 // DependenciesConfig represents the [cerebrium.dependencies.*] sections

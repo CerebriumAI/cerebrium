@@ -21,6 +21,7 @@ var (
 	DefaultProvider                 = "aws"
 	DefaultEvaluationIntervalSeconds = 30
 	DefaultLoadBalancingAlgorithm   = "round-robin"
+	DefaultComputeTier              = "interruptible"
 )
 
 // Load reads and parses the cerebrium.toml configuration file
@@ -116,6 +117,14 @@ func Load(configPath string) (*ProjectConfig, error) {
 	// Apply defaults for missing fields
 	applyDefaults(&config)
 
+	// Validate compute_tier
+	if config.Scaling.ComputeTier != nil {
+		tier := *config.Scaling.ComputeTier
+		if tier != "interruptible" && tier != "protected" {
+			return nil, fmt.Errorf("invalid compute_tier %q: must be \"interruptible\" or \"protected\"", tier)
+		}
+	}
+
 	return &config, nil
 }
 
@@ -150,6 +159,9 @@ func applyDefaults(config *ProjectConfig) {
 	}
 	if config.Scaling.LoadBalancingAlgorithm == nil {
 		config.Scaling.LoadBalancingAlgorithm = &DefaultLoadBalancingAlgorithm
+	}
+	if config.Scaling.ComputeTier == nil {
+		config.Scaling.ComputeTier = &DefaultComputeTier
 	}
 
 	// Apply custom runtime defaults
