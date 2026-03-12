@@ -114,16 +114,16 @@ func Load(configPath string) (*ProjectConfig, error) {
 		}
 	}
 
-	// Apply defaults for missing fields
-	applyDefaults(&config)
-
-	// Validate compute_tier
+	// Validate compute_tier before applying defaults
 	if config.Scaling.ComputeTier != nil {
 		tier := *config.Scaling.ComputeTier
 		if tier != "interruptible" && tier != "protected" {
 			return nil, fmt.Errorf("invalid compute_tier %q: must be \"interruptible\" or \"protected\"", tier)
 		}
 	}
+
+	// Apply defaults for missing fields
+	applyDefaults(&config)
 
 	return &config, nil
 }

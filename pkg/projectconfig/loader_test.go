@@ -66,6 +66,59 @@ disable_auth = true
 		assert.Contains(t, err.Error(), "config file not found")
 	})
 
+	t.Run("applies default compute_tier when not specified", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		configPath := filepath.Join(tmpDir, "cerebrium.toml")
+
+		content := `[cerebrium.deployment]
+name = "test-app"
+`
+		err := os.WriteFile(configPath, []byte(content), 0644)
+		require.NoError(t, err)
+
+		config, err := Load(configPath)
+		require.NoError(t, err)
+		require.NotNil(t, config.Scaling.ComputeTier)
+		assert.Equal(t, "interruptible", *config.Scaling.ComputeTier)
+	})
+
+	t.Run("preserves explicit compute_tier protected", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		configPath := filepath.Join(tmpDir, "cerebrium.toml")
+
+		content := `[cerebrium.deployment]
+name = "test-app"
+
+[cerebrium.scaling]
+compute_tier = "protected"
+`
+		err := os.WriteFile(configPath, []byte(content), 0644)
+		require.NoError(t, err)
+
+		config, err := Load(configPath)
+		require.NoError(t, err)
+		require.NotNil(t, config.Scaling.ComputeTier)
+		assert.Equal(t, "protected", *config.Scaling.ComputeTier)
+	})
+
+	t.Run("returns error for invalid compute_tier", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		configPath := filepath.Join(tmpDir, "cerebrium.toml")
+
+		content := `[cerebrium.deployment]
+name = "test-app"
+
+[cerebrium.scaling]
+compute_tier = "bogus"
+`
+		err := os.WriteFile(configPath, []byte(content), 0644)
+		require.NoError(t, err)
+
+		_, err = Load(configPath)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid compute_tier")
+	})
+
 	t.Run("returns error when cerebrium key missing", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		configPath := filepath.Join(tmpDir, "cerebrium.toml")
