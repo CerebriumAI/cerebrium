@@ -113,6 +113,14 @@ func Load(configPath string) (*ProjectConfig, error) {
 		}
 	}
 
+	// Validate compute_tier before applying defaults
+	if config.Scaling.ComputeTier != nil {
+		tier := *config.Scaling.ComputeTier
+		if tier != "interruptible" && tier != "protected" {
+			return nil, fmt.Errorf("invalid compute_tier %q: must be \"interruptible\" or \"protected\"", tier)
+		}
+	}
+
 	// Apply defaults for missing fields
 	applyDefaults(&config)
 
@@ -151,7 +159,6 @@ func applyDefaults(config *ProjectConfig) {
 	if config.Scaling.LoadBalancingAlgorithm == nil {
 		config.Scaling.LoadBalancingAlgorithm = &DefaultLoadBalancingAlgorithm
 	}
-
 	// Apply custom runtime defaults
 	if config.CustomRuntime != nil {
 		if len(config.CustomRuntime.Entrypoint) == 0 {
