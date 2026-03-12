@@ -66,7 +66,7 @@ disable_auth = true
 		assert.Contains(t, err.Error(), "config file not found")
 	})
 
-	t.Run("applies default compute_tier when not specified", func(t *testing.T) {
+	t.Run("compute_tier is nil when not specified", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		configPath := filepath.Join(tmpDir, "cerebrium.toml")
 
@@ -78,8 +78,7 @@ name = "test-app"
 
 		config, err := Load(configPath)
 		require.NoError(t, err)
-		require.NotNil(t, config.Scaling.ComputeTier)
-		assert.Equal(t, "interruptible", *config.Scaling.ComputeTier)
+		assert.Nil(t, config.Scaling.ComputeTier)
 	})
 
 	t.Run("preserves explicit compute_tier protected", func(t *testing.T) {
