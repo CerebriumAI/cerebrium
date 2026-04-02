@@ -30,12 +30,14 @@ type DeploymentConfig struct {
 
 // HardwareConfig represents the [cerebrium.hardware] section
 type HardwareConfig struct {
-	CPU      *float64 `mapstructure:"cpu" toml:"cpu,omitempty"`
-	Memory   *float64 `mapstructure:"memory" toml:"memory,omitempty"`
-	Compute  *string  `mapstructure:"compute" toml:"compute,omitempty"`
-	GPUCount *int     `mapstructure:"gpu_count" toml:"gpu_count,omitempty"`
-	Provider *string  `mapstructure:"provider" toml:"provider,omitempty"`
-	Region   *string  `mapstructure:"region" toml:"region,omitempty"`
+	CPU              *float64    `mapstructure:"cpu" toml:"cpu,omitempty"`
+	Memory           *float64    `mapstructure:"memory" toml:"memory,omitempty"`
+	ComputeRaw       interface{} `mapstructure:"compute" toml:"compute,omitempty"`
+	Compute          *string     `mapstructure:"-" toml:"-"`
+	ComputeFallbacks []string    `mapstructure:"-" toml:"-"`
+	GPUCount         *int        `mapstructure:"gpu_count" toml:"gpu_count,omitempty"`
+	Provider         *string     `mapstructure:"provider" toml:"provider,omitempty"`
+	Region           *string     `mapstructure:"region" toml:"region,omitempty"`
 }
 
 // ScalingConfig represents the [cerebrium.scaling] section
@@ -122,7 +124,12 @@ func (pc *ProjectConfig) ToPayload() map[string]any {
 		payload["memory"] = *pc.Hardware.Memory
 	}
 	if pc.Hardware.Compute != nil {
-		payload["compute"] = *pc.Hardware.Compute
+		if len(pc.Hardware.ComputeFallbacks) > 0 {
+			all := append([]string{*pc.Hardware.Compute}, pc.Hardware.ComputeFallbacks...)
+			payload["compute"] = all
+		} else {
+			payload["compute"] = *pc.Hardware.Compute
+		}
 	}
 	if pc.Hardware.GPUCount != nil && pc.Hardware.Compute != nil && *pc.Hardware.Compute != "CPU" {
 		payload["gpuCount"] = *pc.Hardware.GPUCount
