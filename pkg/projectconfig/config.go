@@ -160,6 +160,9 @@ func (pc *ProjectConfig) ToPayload() map[string]any {
 	if pc.Scaling.LoadBalancingAlgorithm != nil {
 		payload["loadBalancingAlgorithm"] = *pc.Scaling.LoadBalancingAlgorithm
 	}
+	if pc.Scaling.ComputeTier != nil {
+		payload["computeTier"] = *pc.Scaling.ComputeTier
+	}
 
 	// Runtime configuration
 	if pc.CustomRuntime != nil && pc.PartnerService != nil {
