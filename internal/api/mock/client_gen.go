@@ -262,80 +262,6 @@ func (_c *MockClient_CreateApp_Call) RunAndReturn(run func(ctx context.Context, 
 	return _c
 }
 
-// CreatePartnerApp provides a mock function for the type MockClient
-func (_mock *MockClient) CreatePartnerApp(ctx context.Context, projectID string, payload map[string]any) (*api.CreateAppResponse, error) {
-	ret := _mock.Called(ctx, projectID, payload)
-
-	if len(ret) == 0 {
-		panic("no return value specified for CreatePartnerApp")
-	}
-
-	var r0 *api.CreateAppResponse
-	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, map[string]any) (*api.CreateAppResponse, error)); ok {
-		return returnFunc(ctx, projectID, payload)
-	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, map[string]any) *api.CreateAppResponse); ok {
-		r0 = returnFunc(ctx, projectID, payload)
-	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*api.CreateAppResponse)
-		}
-	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, string, map[string]any) error); ok {
-		r1 = returnFunc(ctx, projectID, payload)
-	} else {
-		r1 = ret.Error(1)
-	}
-	return r0, r1
-}
-
-// MockClient_CreatePartnerApp_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'CreatePartnerApp'
-type MockClient_CreatePartnerApp_Call struct {
-	*mock.Call
-}
-
-// CreatePartnerApp is a helper method to define mock.On call
-//   - ctx context.Context
-//   - projectID string
-//   - payload map[string]any
-func (_e *MockClient_Expecter) CreatePartnerApp(ctx interface{}, projectID interface{}, payload interface{}) *MockClient_CreatePartnerApp_Call {
-	return &MockClient_CreatePartnerApp_Call{Call: _e.mock.On("CreatePartnerApp", ctx, projectID, payload)}
-}
-
-func (_c *MockClient_CreatePartnerApp_Call) Run(run func(ctx context.Context, projectID string, payload map[string]any)) *MockClient_CreatePartnerApp_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 context.Context
-		if args[0] != nil {
-			arg0 = args[0].(context.Context)
-		}
-		var arg1 string
-		if args[1] != nil {
-			arg1 = args[1].(string)
-		}
-		var arg2 map[string]any
-		if args[2] != nil {
-			arg2 = args[2].(map[string]any)
-		}
-		run(
-			arg0,
-			arg1,
-			arg2,
-		)
-	})
-	return _c
-}
-
-func (_c *MockClient_CreatePartnerApp_Call) Return(createAppResponse *api.CreateAppResponse, err error) *MockClient_CreatePartnerApp_Call {
-	_c.Call.Return(createAppResponse, err)
-	return _c
-}
-
-func (_c *MockClient_CreatePartnerApp_Call) RunAndReturn(run func(ctx context.Context, projectID string, payload map[string]any) (*api.CreateAppResponse, error)) *MockClient_CreatePartnerApp_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
 // CreateBaseImage provides a mock function for the type MockClient
 func (_mock *MockClient) CreateBaseImage(ctx context.Context, projectID string, appID string, region string, payload api.BaseImagePayload) (string, error) {
 	ret := _mock.Called(ctx, projectID, appID, region, payload)
@@ -416,6 +342,80 @@ func (_c *MockClient_CreateBaseImage_Call) Return(s string, err error) *MockClie
 }
 
 func (_c *MockClient_CreateBaseImage_Call) RunAndReturn(run func(ctx context.Context, projectID string, appID string, region string, payload api.BaseImagePayload) (string, error)) *MockClient_CreateBaseImage_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// CreatePartnerApp provides a mock function for the type MockClient
+func (_mock *MockClient) CreatePartnerApp(ctx context.Context, projectID string, payload map[string]any) (*api.CreateAppResponse, error) {
+	ret := _mock.Called(ctx, projectID, payload)
+
+	if len(ret) == 0 {
+		panic("no return value specified for CreatePartnerApp")
+	}
+
+	var r0 *api.CreateAppResponse
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, map[string]any) (*api.CreateAppResponse, error)); ok {
+		return returnFunc(ctx, projectID, payload)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, map[string]any) *api.CreateAppResponse); ok {
+		r0 = returnFunc(ctx, projectID, payload)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*api.CreateAppResponse)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, map[string]any) error); ok {
+		r1 = returnFunc(ctx, projectID, payload)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockClient_CreatePartnerApp_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'CreatePartnerApp'
+type MockClient_CreatePartnerApp_Call struct {
+	*mock.Call
+}
+
+// CreatePartnerApp is a helper method to define mock.On call
+//   - ctx context.Context
+//   - projectID string
+//   - payload map[string]any
+func (_e *MockClient_Expecter) CreatePartnerApp(ctx interface{}, projectID interface{}, payload interface{}) *MockClient_CreatePartnerApp_Call {
+	return &MockClient_CreatePartnerApp_Call{Call: _e.mock.On("CreatePartnerApp", ctx, projectID, payload)}
+}
+
+func (_c *MockClient_CreatePartnerApp_Call) Run(run func(ctx context.Context, projectID string, payload map[string]any)) *MockClient_CreatePartnerApp_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 map[string]any
+		if args[2] != nil {
+			arg2 = args[2].(map[string]any)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockClient_CreatePartnerApp_Call) Return(createAppResponse *api.CreateAppResponse, err error) *MockClient_CreatePartnerApp_Call {
+	_c.Call.Return(createAppResponse, err)
+	return _c
+}
+
+func (_c *MockClient_CreatePartnerApp_Call) RunAndReturn(run func(ctx context.Context, projectID string, payload map[string]any) (*api.CreateAppResponse, error)) *MockClient_CreatePartnerApp_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -1191,13 +1191,16 @@ func (_c *MockClient_GetFileSize_Call) Run(run func(ctx context.Context, url str
 		if args[1] != nil {
 			arg1 = args[1].(string)
 		}
-		run(arg0, arg1)
+		run(
+			arg0,
+			arg1,
+		)
 	})
 	return _c
 }
 
-func (_c *MockClient_GetFileSize_Call) Return(size int64, err error) *MockClient_GetFileSize_Call {
-	_c.Call.Return(size, err)
+func (_c *MockClient_GetFileSize_Call) Return(n int64, err error) *MockClient_GetFileSize_Call {
+	_c.Call.Return(n, err)
 	return _c
 }
 
@@ -1514,32 +1517,78 @@ func (_c *MockClient_InitiateUpload_Call) RunAndReturn(run func(ctx context.Cont
 	return _c
 }
 
-// ListFiles provides a mock function for the type MockClient
-func (_mock *MockClient) ListFiles(ctx context.Context, projectID string, path string, region string) ([]api.FileInfo, error) {
-	ret := _mock.Called(ctx, projectID, path, region)
+// ListAppSecrets provides a mock function for the type MockClient
+func (_mock *MockClient) ListAppSecrets(ctx context.Context, projectID string, appID string) (map[string]string, error) {
+	ret := _mock.Called(ctx, projectID, appID)
 
 	if len(ret) == 0 {
-		panic("no return value specified for ListFiles")
+		panic("no return value specified for ListAppSecrets")
 	}
 
-	var r0 []api.FileInfo
+	var r0 map[string]string
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, string) ([]api.FileInfo, error)); ok {
-		return returnFunc(ctx, projectID, path, region)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) (map[string]string, error)); ok {
+		return returnFunc(ctx, projectID, appID)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, string) []api.FileInfo); ok {
-		r0 = returnFunc(ctx, projectID, path, region)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) map[string]string); ok {
+		r0 = returnFunc(ctx, projectID, appID)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).([]api.FileInfo)
+			r0 = ret.Get(0).(map[string]string)
 		}
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string, string) error); ok {
-		r1 = returnFunc(ctx, projectID, path, region)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string) error); ok {
+		r1 = returnFunc(ctx, projectID, appID)
 	} else {
 		r1 = ret.Error(1)
 	}
 	return r0, r1
+}
+
+// MockClient_ListAppSecrets_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ListAppSecrets'
+type MockClient_ListAppSecrets_Call struct {
+	*mock.Call
+}
+
+// ListAppSecrets is a helper method to define mock.On call
+//   - ctx context.Context
+//   - projectID string
+//   - appID string
+func (_e *MockClient_Expecter) ListAppSecrets(ctx interface{}, projectID interface{}, appID interface{}) *MockClient_ListAppSecrets_Call {
+	return &MockClient_ListAppSecrets_Call{Call: _e.mock.On("ListAppSecrets", ctx, projectID, appID)}
+}
+
+func (_c *MockClient_ListAppSecrets_Call) Run(run func(ctx context.Context, projectID string, appID string)) *MockClient_ListAppSecrets_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockClient_ListAppSecrets_Call) Return(stringToString map[string]string, err error) *MockClient_ListAppSecrets_Call {
+	_c.Call.Return(stringToString, err)
+	return _c
+}
+
+func (_c *MockClient_ListAppSecrets_Call) RunAndReturn(run func(ctx context.Context, projectID string, appID string) (map[string]string, error)) *MockClient_ListAppSecrets_Call {
+	_c.Call.Return(run)
+	return _c
 }
 
 // ListContainers provides a mock function for the type MockClient
@@ -1616,6 +1665,34 @@ func (_c *MockClient_ListContainers_Call) RunAndReturn(run func(ctx context.Cont
 	return _c
 }
 
+// ListFiles provides a mock function for the type MockClient
+func (_mock *MockClient) ListFiles(ctx context.Context, projectID string, path string, region string) ([]api.FileInfo, error) {
+	ret := _mock.Called(ctx, projectID, path, region)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ListFiles")
+	}
+
+	var r0 []api.FileInfo
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, string) ([]api.FileInfo, error)); ok {
+		return returnFunc(ctx, projectID, path, region)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, string) []api.FileInfo); ok {
+		r0 = returnFunc(ctx, projectID, path, region)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]api.FileInfo)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string, string) error); ok {
+		r1 = returnFunc(ctx, projectID, path, region)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
 // MockClient_ListFiles_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ListFiles'
 type MockClient_ListFiles_Call struct {
 	*mock.Call
@@ -1664,6 +1741,74 @@ func (_c *MockClient_ListFiles_Call) Return(fileInfos []api.FileInfo, err error)
 }
 
 func (_c *MockClient_ListFiles_Call) RunAndReturn(run func(ctx context.Context, projectID string, path string, region string) ([]api.FileInfo, error)) *MockClient_ListFiles_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// ListSecrets provides a mock function for the type MockClient
+func (_mock *MockClient) ListSecrets(ctx context.Context, projectID string) (map[string]string, error) {
+	ret := _mock.Called(ctx, projectID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ListSecrets")
+	}
+
+	var r0 map[string]string
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) (map[string]string, error)); ok {
+		return returnFunc(ctx, projectID)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) map[string]string); ok {
+		r0 = returnFunc(ctx, projectID)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(map[string]string)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string) error); ok {
+		r1 = returnFunc(ctx, projectID)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockClient_ListSecrets_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ListSecrets'
+type MockClient_ListSecrets_Call struct {
+	*mock.Call
+}
+
+// ListSecrets is a helper method to define mock.On call
+//   - ctx context.Context
+//   - projectID string
+func (_e *MockClient_Expecter) ListSecrets(ctx interface{}, projectID interface{}) *MockClient_ListSecrets_Call {
+	return &MockClient_ListSecrets_Call{Call: _e.mock.On("ListSecrets", ctx, projectID)}
+}
+
+func (_c *MockClient_ListSecrets_Call) Run(run func(ctx context.Context, projectID string)) *MockClient_ListSecrets_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockClient_ListSecrets_Call) Return(stringToString map[string]string, err error) *MockClient_ListSecrets_Call {
+	_c.Call.Return(stringToString, err)
+	return _c
+}
+
+func (_c *MockClient_ListSecrets_Call) RunAndReturn(run func(ctx context.Context, projectID string) (map[string]string, error)) *MockClient_ListSecrets_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -1853,6 +1998,138 @@ func (_c *MockClient_UpdateApp_Call) RunAndReturn(run func(ctx context.Context, 
 	return _c
 }
 
+// UpdateAppSecrets provides a mock function for the type MockClient
+func (_mock *MockClient) UpdateAppSecrets(ctx context.Context, projectID string, appID string, secrets map[string]string) error {
+	ret := _mock.Called(ctx, projectID, appID, secrets)
+
+	if len(ret) == 0 {
+		panic("no return value specified for UpdateAppSecrets")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, map[string]string) error); ok {
+		r0 = returnFunc(ctx, projectID, appID, secrets)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockClient_UpdateAppSecrets_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'UpdateAppSecrets'
+type MockClient_UpdateAppSecrets_Call struct {
+	*mock.Call
+}
+
+// UpdateAppSecrets is a helper method to define mock.On call
+//   - ctx context.Context
+//   - projectID string
+//   - appID string
+//   - secrets map[string]string
+func (_e *MockClient_Expecter) UpdateAppSecrets(ctx interface{}, projectID interface{}, appID interface{}, secrets interface{}) *MockClient_UpdateAppSecrets_Call {
+	return &MockClient_UpdateAppSecrets_Call{Call: _e.mock.On("UpdateAppSecrets", ctx, projectID, appID, secrets)}
+}
+
+func (_c *MockClient_UpdateAppSecrets_Call) Run(run func(ctx context.Context, projectID string, appID string, secrets map[string]string)) *MockClient_UpdateAppSecrets_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
+		var arg3 map[string]string
+		if args[3] != nil {
+			arg3 = args[3].(map[string]string)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+		)
+	})
+	return _c
+}
+
+func (_c *MockClient_UpdateAppSecrets_Call) Return(err error) *MockClient_UpdateAppSecrets_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockClient_UpdateAppSecrets_Call) RunAndReturn(run func(ctx context.Context, projectID string, appID string, secrets map[string]string) error) *MockClient_UpdateAppSecrets_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// UpdateSecrets provides a mock function for the type MockClient
+func (_mock *MockClient) UpdateSecrets(ctx context.Context, projectID string, secrets map[string]string) error {
+	ret := _mock.Called(ctx, projectID, secrets)
+
+	if len(ret) == 0 {
+		panic("no return value specified for UpdateSecrets")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, map[string]string) error); ok {
+		r0 = returnFunc(ctx, projectID, secrets)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockClient_UpdateSecrets_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'UpdateSecrets'
+type MockClient_UpdateSecrets_Call struct {
+	*mock.Call
+}
+
+// UpdateSecrets is a helper method to define mock.On call
+//   - ctx context.Context
+//   - projectID string
+//   - secrets map[string]string
+func (_e *MockClient_Expecter) UpdateSecrets(ctx interface{}, projectID interface{}, secrets interface{}) *MockClient_UpdateSecrets_Call {
+	return &MockClient_UpdateSecrets_Call{Call: _e.mock.On("UpdateSecrets", ctx, projectID, secrets)}
+}
+
+func (_c *MockClient_UpdateSecrets_Call) Run(run func(ctx context.Context, projectID string, secrets map[string]string)) *MockClient_UpdateSecrets_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 map[string]string
+		if args[2] != nil {
+			arg2 = args[2].(map[string]string)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockClient_UpdateSecrets_Call) Return(err error) *MockClient_UpdateSecrets_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockClient_UpdateSecrets_Call) RunAndReturn(run func(ctx context.Context, projectID string, secrets map[string]string) error) *MockClient_UpdateSecrets_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // UploadPart provides a mock function for the type MockClient
 func (_mock *MockClient) UploadPart(ctx context.Context, url string, data []byte) (string, error) {
 	ret := _mock.Called(ctx, url, data)
@@ -1984,280 +2261,6 @@ func (_c *MockClient_UploadZip_Call) Return(err error) *MockClient_UploadZip_Cal
 }
 
 func (_c *MockClient_UploadZip_Call) RunAndReturn(run func(ctx context.Context, uploadURL string, zipPath string) error) *MockClient_UploadZip_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
-// ListSecrets provides a mock function for the type MockClient
-func (_mock *MockClient) ListSecrets(ctx context.Context, projectID string) (map[string]string, error) {
-	ret := _mock.Called(ctx, projectID)
-
-	if len(ret) == 0 {
-		panic("no return value specified for ListSecrets")
-	}
-
-	var r0 map[string]string
-	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string) (map[string]string, error)); ok {
-		return returnFunc(ctx, projectID)
-	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string) map[string]string); ok {
-		r0 = returnFunc(ctx, projectID)
-	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(map[string]string)
-		}
-	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, string) error); ok {
-		r1 = returnFunc(ctx, projectID)
-	} else {
-		r1 = ret.Error(1)
-	}
-	return r0, r1
-}
-
-// MockClient_ListSecrets_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ListSecrets'
-type MockClient_ListSecrets_Call struct {
-	*mock.Call
-}
-
-// ListSecrets is a helper method to define mock.On call
-//   - ctx context.Context
-//   - projectID string
-func (_e *MockClient_Expecter) ListSecrets(ctx interface{}, projectID interface{}) *MockClient_ListSecrets_Call {
-	return &MockClient_ListSecrets_Call{Call: _e.mock.On("ListSecrets", ctx, projectID)}
-}
-
-func (_c *MockClient_ListSecrets_Call) Run(run func(ctx context.Context, projectID string)) *MockClient_ListSecrets_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 context.Context
-		if args[0] != nil {
-			arg0 = args[0].(context.Context)
-		}
-		var arg1 string
-		if args[1] != nil {
-			arg1 = args[1].(string)
-		}
-		run(
-			arg0,
-			arg1,
-		)
-	})
-	return _c
-}
-
-func (_c *MockClient_ListSecrets_Call) Return(secrets map[string]string, err error) *MockClient_ListSecrets_Call {
-	_c.Call.Return(secrets, err)
-	return _c
-}
-
-func (_c *MockClient_ListSecrets_Call) RunAndReturn(run func(ctx context.Context, projectID string) (map[string]string, error)) *MockClient_ListSecrets_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
-// UpdateSecrets provides a mock function for the type MockClient
-func (_mock *MockClient) UpdateSecrets(ctx context.Context, projectID string, secrets map[string]string) error {
-	ret := _mock.Called(ctx, projectID, secrets)
-
-	if len(ret) == 0 {
-		panic("no return value specified for UpdateSecrets")
-	}
-
-	var r0 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, map[string]string) error); ok {
-		r0 = returnFunc(ctx, projectID, secrets)
-	} else {
-		r0 = ret.Error(0)
-	}
-	return r0
-}
-
-// MockClient_UpdateSecrets_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'UpdateSecrets'
-type MockClient_UpdateSecrets_Call struct {
-	*mock.Call
-}
-
-// UpdateSecrets is a helper method to define mock.On call
-//   - ctx context.Context
-//   - projectID string
-//   - secrets map[string]string
-func (_e *MockClient_Expecter) UpdateSecrets(ctx interface{}, projectID interface{}, secrets interface{}) *MockClient_UpdateSecrets_Call {
-	return &MockClient_UpdateSecrets_Call{Call: _e.mock.On("UpdateSecrets", ctx, projectID, secrets)}
-}
-
-func (_c *MockClient_UpdateSecrets_Call) Run(run func(ctx context.Context, projectID string, secrets map[string]string)) *MockClient_UpdateSecrets_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 context.Context
-		if args[0] != nil {
-			arg0 = args[0].(context.Context)
-		}
-		var arg1 string
-		if args[1] != nil {
-			arg1 = args[1].(string)
-		}
-		var arg2 map[string]string
-		if args[2] != nil {
-			arg2 = args[2].(map[string]string)
-		}
-		run(
-			arg0,
-			arg1,
-			arg2,
-		)
-	})
-	return _c
-}
-
-func (_c *MockClient_UpdateSecrets_Call) Return(err error) *MockClient_UpdateSecrets_Call {
-	_c.Call.Return(err)
-	return _c
-}
-
-func (_c *MockClient_UpdateSecrets_Call) RunAndReturn(run func(ctx context.Context, projectID string, secrets map[string]string) error) *MockClient_UpdateSecrets_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
-// ListAppSecrets provides a mock function for the type MockClient
-func (_mock *MockClient) ListAppSecrets(ctx context.Context, projectID string, appID string) (map[string]string, error) {
-	ret := _mock.Called(ctx, projectID, appID)
-
-	if len(ret) == 0 {
-		panic("no return value specified for ListAppSecrets")
-	}
-
-	var r0 map[string]string
-	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) (map[string]string, error)); ok {
-		return returnFunc(ctx, projectID, appID)
-	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) map[string]string); ok {
-		r0 = returnFunc(ctx, projectID, appID)
-	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(map[string]string)
-		}
-	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string) error); ok {
-		r1 = returnFunc(ctx, projectID, appID)
-	} else {
-		r1 = ret.Error(1)
-	}
-	return r0, r1
-}
-
-// MockClient_ListAppSecrets_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ListAppSecrets'
-type MockClient_ListAppSecrets_Call struct {
-	*mock.Call
-}
-
-// ListAppSecrets is a helper method to define mock.On call
-//   - ctx context.Context
-//   - projectID string
-//   - appID string
-func (_e *MockClient_Expecter) ListAppSecrets(ctx interface{}, projectID interface{}, appID interface{}) *MockClient_ListAppSecrets_Call {
-	return &MockClient_ListAppSecrets_Call{Call: _e.mock.On("ListAppSecrets", ctx, projectID, appID)}
-}
-
-func (_c *MockClient_ListAppSecrets_Call) Run(run func(ctx context.Context, projectID string, appID string)) *MockClient_ListAppSecrets_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 context.Context
-		if args[0] != nil {
-			arg0 = args[0].(context.Context)
-		}
-		var arg1 string
-		if args[1] != nil {
-			arg1 = args[1].(string)
-		}
-		var arg2 string
-		if args[2] != nil {
-			arg2 = args[2].(string)
-		}
-		run(
-			arg0,
-			arg1,
-			arg2,
-		)
-	})
-	return _c
-}
-
-func (_c *MockClient_ListAppSecrets_Call) Return(secrets map[string]string, err error) *MockClient_ListAppSecrets_Call {
-	_c.Call.Return(secrets, err)
-	return _c
-}
-
-func (_c *MockClient_ListAppSecrets_Call) RunAndReturn(run func(ctx context.Context, projectID string, appID string) (map[string]string, error)) *MockClient_ListAppSecrets_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
-// UpdateAppSecrets provides a mock function for the type MockClient
-func (_mock *MockClient) UpdateAppSecrets(ctx context.Context, projectID string, appID string, secrets map[string]string) error {
-	ret := _mock.Called(ctx, projectID, appID, secrets)
-
-	if len(ret) == 0 {
-		panic("no return value specified for UpdateAppSecrets")
-	}
-
-	var r0 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, map[string]string) error); ok {
-		r0 = returnFunc(ctx, projectID, appID, secrets)
-	} else {
-		r0 = ret.Error(0)
-	}
-	return r0
-}
-
-// MockClient_UpdateAppSecrets_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'UpdateAppSecrets'
-type MockClient_UpdateAppSecrets_Call struct {
-	*mock.Call
-}
-
-// UpdateAppSecrets is a helper method to define mock.On call
-//   - ctx context.Context
-//   - projectID string
-//   - appID string
-//   - secrets map[string]string
-func (_e *MockClient_Expecter) UpdateAppSecrets(ctx interface{}, projectID interface{}, appID interface{}, secrets interface{}) *MockClient_UpdateAppSecrets_Call {
-	return &MockClient_UpdateAppSecrets_Call{Call: _e.mock.On("UpdateAppSecrets", ctx, projectID, appID, secrets)}
-}
-
-func (_c *MockClient_UpdateAppSecrets_Call) Run(run func(ctx context.Context, projectID string, appID string, secrets map[string]string)) *MockClient_UpdateAppSecrets_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 context.Context
-		if args[0] != nil {
-			arg0 = args[0].(context.Context)
-		}
-		var arg1 string
-		if args[1] != nil {
-			arg1 = args[1].(string)
-		}
-		var arg2 string
-		if args[2] != nil {
-			arg2 = args[2].(string)
-		}
-		var arg3 map[string]string
-		if args[3] != nil {
-			arg3 = args[3].(map[string]string)
-		}
-		run(
-			arg0,
-			arg1,
-			arg2,
-			arg3,
-		)
-	})
-	return _c
-}
-
-func (_c *MockClient_UpdateAppSecrets_Call) Return(err error) *MockClient_UpdateAppSecrets_Call {
-	_c.Call.Return(err)
-	return _c
-}
-
-func (_c *MockClient_UpdateAppSecrets_Call) RunAndReturn(run func(ctx context.Context, projectID string, appID string, secrets map[string]string) error) *MockClient_UpdateAppSecrets_Call {
 	_c.Call.Return(run)
 	return _c
 }
