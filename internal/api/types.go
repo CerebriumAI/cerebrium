@@ -358,6 +358,28 @@ func (r *Run) GetDisplayStatus() string {
 	}
 }
 
+// Container represents a recent container record for a Cerebrium app.
+// Mirrors the response from GET /v2/projects/{project_id}/apps/{app_id}/containers,
+// which is sourced from ClickHouse billing telemetry and includes pods that are
+// being torn down (flagged via IsTerminating).
+type Container struct {
+	AppID                         string    `json:"appId"`
+	ProjectID                     string    `json:"projectId"`
+	ContainerID                   string    `json:"containerId"`
+	ContainerState                string    `json:"containerState"` // RUNNING, PENDING, SUCCEEDED, etc.
+	Timestamp                     time.Time `json:"timestamp"`
+	ContainerStartTimestamp       time.Time `json:"containerStartTimestamp"`
+	ContainerTerminationTimestamp time.Time `json:"containerTerminationTimestamp"`
+	ContainerRunningTimeMs        int64     `json:"containerRunningTimeMs"`
+	ContainerRestartCount         int64     `json:"containerRestartCount"`
+	HostIP                        string    `json:"hostIp"`
+	ContainerIP                   string    `json:"containerIp"`
+	HardwareProvider              string    `json:"hardwareProvider"`
+	Region                        string    `json:"region"`
+	BuildID                       string    `json:"buildId"`
+	IsTerminating                 bool      `json:"isTerminating"`
+}
+
 // AppBuild represents a build for a Cerebrium application
 type AppBuild struct {
 	Id        string `json:"id"`

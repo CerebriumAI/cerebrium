@@ -9,6 +9,7 @@ type Client interface {
 	UpdateApp(ctx context.Context, projectID, appID string, updates map[string]any) error
 	GetProjects(ctx context.Context) ([]Project, error)
 	GetRuns(ctx context.Context, projectID, appID string, asyncOnly bool) ([]Run, error)
+	ListContainers(ctx context.Context, projectID, appID string) ([]Container, error)
 	FetchAppLogs(ctx context.Context, projectID, appID string, opts AppLogOptions) (*AppLogsResponse, error)
 
 	// Deploy methods
