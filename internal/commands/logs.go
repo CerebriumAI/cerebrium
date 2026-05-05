@@ -1,8 +1,10 @@
 package commands
 
 import (
+	"context"
 	"fmt"
 	"regexp"
+	"strings"
 
 	"github.com/cerebriumai/cerebrium/internal/api"
 	"github.com/cerebriumai/cerebrium/internal/timeutil"
@@ -86,6 +88,16 @@ func runLogsCommand(cmd *cobra.Command, appName string, noFollow bool, since, co
 		return ui.NewValidationError(fmt.Errorf("failed to create API client: %w", err))
 	}
 
+	// The backend exact-matches container_id against the full pod name. If the
+	// user gave us anything shorter (e.g. just the "<replicaset>-<pod>" suffix
+	// they copied from `containers list`), look it up and expand to the full id.
+	if containerID != "" {
+		containerID, err = resolveContainerID(cmd.Context(), client, projectID, appID, containerID)
+		if err != nil {
+			return ui.NewValidationError(err)
+		}
+	}
+
 	// Get display options
 	displayOpts, err := ui.GetDisplayConfigFromContext(cmd)
 	if err != nil {
@@ -134,6 +146,36 @@ func runLogsCommand(cmd *cobra.Command, appName string, noFollow bool, since, co
 	}
 
 	return nil
+}
+
+// resolveContainerID expands a partial container id (e.g. "74d8f9d9cf-nlc5n")
+// to the full pod name the backend stores. If the supplied value already matches
+// a container id exactly, it is returned unchanged. Otherwise we list the app's
+// containers and look for any whose id has the supplied value as a suffix.
+func resolveContainerID(ctx context.Context, client api.Client, projectID, appID, supplied string) (string, error) {
+	containers, err := client.ListContainers(ctx, projectID, appID)
+	if err != nil {
+		return "", fmt.Errorf("look up containers for %s: %w", appID, err)
+	}
+
+	var matches []string
+	for _, c := range containers {
+		if c.ContainerID == supplied {
+			return supplied, nil
+		}
+		if strings.HasSuffix(c.ContainerID, supplied) {
+			matches = append(matches, c.ContainerID)
+		}
+	}
+
+	switch len(matches) {
+	case 1:
+		return matches[0], nil
+	case 0:
+		return "", fmt.Errorf("no container matching %q found for app %s — run `cerebrium containers list %s` to see available containers", supplied, appID, appID)
+	default:
+		return "", fmt.Errorf("container id %q is ambiguous, matches multiple containers: %s", supplied, strings.Join(matches, ", "))
+	}
 }
 
 // determineAppID determines the full app ID from the user input
