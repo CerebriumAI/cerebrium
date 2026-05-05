@@ -359,9 +359,6 @@ func (r *Run) GetDisplayStatus() string {
 }
 
 // Container represents a recent container record for a Cerebrium app.
-// Mirrors the response from GET /v2/projects/{project_id}/apps/{app_id}/containers,
-// which is sourced from ClickHouse billing telemetry and includes pods that are
-// being torn down (flagged via IsTerminating).
 type Container struct {
 	AppID                         string    `json:"appId"`
 	ProjectID                     string    `json:"projectId"`
