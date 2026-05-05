@@ -63,17 +63,18 @@ func runList(cmd *cobra.Command, appName string) error {
 		return nil
 	}
 
-	fmt.Printf("%-50s %-12s %-10s %s\n", "CONTAINER ID", "STATE", "RESTARTS", "REGION")
+	fmt.Printf("%-50s %-12s %-10s %-15s %s\n", "CONTAINER ID", "STATE", "RESTARTS", "REGION", "BUILD")
 	for _, c := range containers {
 		state := c.ContainerState
 		if c.IsTerminating {
 			state = "TERMINATING"
 		}
-		fmt.Printf("%-50s %-12s %-10d %s\n",
+		fmt.Printf("%-50s %-12s %-10d %-15s %s\n",
 			c.ContainerID,
 			state,
 			c.ContainerRestartCount,
 			c.Region,
+			c.BuildID,
 		)
 	}
 
