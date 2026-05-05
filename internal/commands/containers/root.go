@@ -8,7 +8,7 @@ func NewContainersCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "containers",
 		Short: "Manage and inspect app containers",
-		Long:  "Commands for inspecting the containers (knative pods) running your Cerebrium apps",
+		Long:  "Commands for inspecting the containers running your Cerebrium apps",
 	}
 
 	cmd.AddCommand(newListCmd())
