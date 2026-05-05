@@ -16,6 +16,7 @@ import (
 func NewLogsCmd() *cobra.Command {
 	var noFollow bool
 	var since string
+	var containerID string
 
 	cmd := &cobra.Command{
 		Use:   "logs APP_NAME",
@@ -33,20 +34,24 @@ Examples:
   cerebrium logs app-name --since "2d"
 
   # Get logs since a specific datetime
-  cerebrium logs app-name --since "2023-12-01 10:00:00"`,
+  cerebrium logs app-name --since "2023-12-01 10:00:00"
+
+  # Only show logs from a specific container
+  cerebrium logs app-name --container-id <container-id>`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runLogsCommand(cmd, args[0], noFollow, since)
+			return runLogsCommand(cmd, args[0], noFollow, since, containerID)
 		},
 	}
 
 	cmd.Flags().BoolVar(&noFollow, "no-follow", false, "Don't follow log output (fetch once and exit)")
 	cmd.Flags().StringVar(&since, "since", "", "Show logs since timestamp. Supports relative ('w|d|h|m|s') or absolute ('YYYY-MM-DD HH:mm:ss')")
+	cmd.Flags().StringVar(&containerID, "container-id", "", "Only show logs from the specified container ID")
 
 	return cmd
 }
 
-func runLogsCommand(cmd *cobra.Command, appName string, noFollow bool, since string) error {
+func runLogsCommand(cmd *cobra.Command, appName string, noFollow bool, since, containerID string) error {
 	cmd.SilenceUsage = true
 
 	// Get config from context
@@ -96,6 +101,7 @@ func runLogsCommand(cmd *cobra.Command, appName string, noFollow bool, since str
 		AppName:       appName, // Keep original name for display
 		Follow:        !noFollow,
 		SinceTime:     sinceTime,
+		ContainerID:   containerID,
 	})
 
 	// Configure Bubbletea program

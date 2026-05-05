@@ -31,8 +31,9 @@ type LogsConfig struct {
 	ProjectID string
 	AppID     string // Full app ID (may include project prefix)
 	AppName   string // Display name (original input)
-	Follow    bool   // If false, fetch once and exit
-	SinceTime string // ISO timestamp to start from
+	Follow      bool   // If false, fetch once and exit
+	SinceTime   string // ISO timestamp to start from
+	ContainerID string // Filter logs to a single container (optional)
 }
 
 // LogsView is the Bubbletea model for the logs command
@@ -64,11 +65,12 @@ func (m *LogsView) Error() error {
 func (m *LogsView) Init() tea.Cmd {
 	// Create log provider using the app ID (already determined in command)
 	provider := logging.NewPollingAppLogProvider(logging.PollingAppLogProviderConfig{
-		Client:    m.conf.Client,
-		ProjectID: m.conf.ProjectID,
-		AppID:     m.conf.AppID,
-		Follow:    m.conf.Follow,
-		SinceTime: m.conf.SinceTime,
+		Client:      m.conf.Client,
+		ProjectID:   m.conf.ProjectID,
+		AppID:       m.conf.AppID,
+		Follow:      m.conf.Follow,
+		SinceTime:   m.conf.SinceTime,
+		ContainerID: m.conf.ContainerID,
 	})
 
 	// Create log viewer with the provider
