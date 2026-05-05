@@ -3,10 +3,25 @@ package files
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/bmatcuk/doublestar/v4"
 )
+
+// EnsureFile appends path to fileList if not already present, normalizing it
+// to the forward-slash, no-leading-"./" form produced by DetermineIncludes.
+// Returns the list unchanged if path is empty.
+func EnsureFile(fileList []string, path string) []string {
+	if path == "" {
+		return fileList
+	}
+	normalized := strings.TrimPrefix(filepath.ToSlash(path), "./")
+	if slices.Contains(fileList, normalized) {
+		return fileList
+	}
+	return append(fileList, normalized)
+}
 
 // DetermineIncludes walks the directory and returns files matching include/exclude patterns
 func DetermineIncludes(include, exclude []string) ([]string, error) {

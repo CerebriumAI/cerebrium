@@ -245,3 +245,56 @@ func TestDetermineIncludes_ExcludeSubdirectory(t *testing.T) {
 	assert.ElementsMatch(t, expected, result,
 		"Exclude patterns should work on subdirectories")
 }
+
+func TestEnsureFile(t *testing.T) {
+	tcs := []struct {
+		name     string
+		fileList []string
+		path     string
+		expected []string
+	}{
+		{
+			name:     "empty path is a no-op",
+			fileList: []string{"main.py"},
+			path:     "",
+			expected: []string{"main.py"},
+		},
+		{
+			name:     "appends when missing",
+			fileList: []string{"main.py"},
+			path:     "cerebrium.toml",
+			expected: []string{"main.py", "cerebrium.toml"},
+		},
+		{
+			name:     "dedups when already present",
+			fileList: []string{"main.py", "cerebrium.toml"},
+			path:     "cerebrium.toml",
+			expected: []string{"main.py", "cerebrium.toml"},
+		},
+		{
+			name:     "strips leading ./ before dedup",
+			fileList: []string{"main.py", "cerebrium.toml"},
+			path:     "./cerebrium.toml",
+			expected: []string{"main.py", "cerebrium.toml"},
+		},
+		{
+			name:     "appends custom config name",
+			fileList: []string{"main.py"},
+			path:     "./custom-config.toml",
+			expected: []string{"main.py", "custom-config.toml"},
+		},
+		{
+			name:     "appends dot-prefixed config",
+			fileList: []string{"main.py"},
+			path:     ".cerebrium.toml",
+			expected: []string{"main.py", ".cerebrium.toml"},
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result := EnsureFile(tc.fileList, tc.path)
+			assert.Equal(t, tc.expected, result)
+		})
+	}
+}
