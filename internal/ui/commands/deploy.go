@@ -51,10 +51,11 @@ const (
 type DeployConfig struct {
 	ui.DisplayConfig
 
-	Config    *projectconfig.ProjectConfig
-	ProjectID string
-	Client    api.Client
-	WSClient  wsapi.Client
+	Config     *projectconfig.ProjectConfig
+	ConfigPath string // Path to the project config file (always included in the zip)
+	ProjectID  string
+	Client     api.Client
+	WSClient   wsapi.Client
 
 	// Display config
 	DisableBuildLogs    bool
@@ -919,6 +920,10 @@ func (m *DeployView) loadFiles() tea.Msg {
 	if len(fileList) == 0 {
 		return ui.NewFileSystemError(fmt.Errorf("no files to upload. Please ensure you have files in your project"))
 	}
+
+	// Always include the project config file, even when include/exclude patterns
+	// would otherwise drop it (e.g. user-specified includes, custom config name, dot-prefixed name).
+	fileList = files.EnsureFile(fileList, m.conf.ConfigPath)
 
 	return filesLoadedMsg{fileList: fileList}
 }

@@ -122,6 +122,7 @@ func runDeploy(cmd *cobra.Command, opts deployOptions, disableConfirmation bool)
 	if len(testFiles) == 0 {
 		return ui.NewValidationError(fmt.Errorf("no files found matching include patterns. Please check your include/exclude patterns in cerebrium.toml"))
 	}
+	testFiles = files.EnsureFile(testFiles, opts.configFile)
 
 	// Warn about development folders
 	devFolders := files.DetectDevFolders(testFiles)
@@ -144,6 +145,7 @@ func runDeploy(cmd *cobra.Command, opts deployOptions, disableConfirmation bool)
 	model := uiCommands.NewDeployView(cmd.Context(), uiCommands.DeployConfig{
 		DisplayConfig:       displayOpts,
 		Config:              projectConfig,
+		ConfigPath:          opts.configFile,
 		ProjectID:           cfg.ProjectID,
 		Client:              client,
 		WSClient:            wsClient,
