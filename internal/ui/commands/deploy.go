@@ -485,7 +485,7 @@ func (m *DeployView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if ui.IsTerminalStatus(msg.status) {
 			// Terminal status detected, trigger completion
 			return m, func() tea.Msg {
-				return buildCompleteMsg{status: msg.status}
+				return buildCompleteMsg{status: msg.status, initError: msg.initError}
 			}
 		}
 
@@ -506,7 +506,7 @@ func (m *DeployView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// Wait 2 seconds to allow remaining logs to arrive
 		return m, tea.Tick(2*time.Second, func(t time.Time) tea.Msg {
-			return logDrainCompleteMsg(msg)
+			return logDrainCompleteMsg{status: msg.status, initError: msg.initError}
 		})
 
 	case logDrainCompleteMsg:
@@ -563,15 +563,23 @@ func (m *DeployView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			if m.conf.SimpleOutput() {
 				fmt.Printf("✗ Build failed with status: %s\n", msg.status)
+				if msg.initError != nil && *msg.initError != "" {
+					fmt.Println()
+					fmt.Println(*msg.initError)
+				}
 				return m, tea.Quit
 			}
 
 			// Print error message to scrollback in interactive mode
-			return m, tea.Sequence(
+			cmds := []tea.Cmd{
 				tea.Println(""),
 				tea.Println(ui.ErrorStyle.Render(fmt.Sprintf("✗ Build failed with status: %s", msg.status))),
-				tea.Quit,
-			)
+			}
+			if msg.initError != nil && *msg.initError != "" {
+				cmds = append(cmds, tea.Println(""), tea.Println(*msg.initError))
+			}
+			cmds = append(cmds, tea.Quit)
+			return m, tea.Sequence(cmds...)
 		}
 
 	case confirmationResponseMsg:
@@ -880,8 +888,9 @@ type appCreatedMsg struct {
 type zipUploadedMsg struct{}
 
 type buildStatusUpdateMsg struct {
-	buildID string
-	status  string
+	buildID   string
+	status    string
+	initError *string
 }
 
 type buildStatusPollErrorMsg struct {
@@ -889,11 +898,13 @@ type buildStatusPollErrorMsg struct {
 }
 
 type buildCompleteMsg struct {
-	status string
+	status    string
+	initError *string
 }
 
 type logDrainCompleteMsg struct {
-	status string // Final build status to use for completion
+	status    string  // Final build status to use for completion
+	initError *string // User-facing error message persisted on the build
 }
 
 type buildCancelledMsg struct {
@@ -1213,8 +1224,9 @@ func (m *DeployView) pollBuildStatus() tea.Msg {
 
 	// Return status update message
 	return buildStatusUpdateMsg{
-		buildID: build.Id,
-		status:  build.Status,
+		buildID:   build.Id,
+		status:    build.Status,
+		initError: build.InitError,
 	}
 }
 
