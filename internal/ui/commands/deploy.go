@@ -829,7 +829,7 @@ func (m *DeployView) onKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	if msg.String() == tea.KeyCtrlC.String() {
+	if key := msg.String(); key == tea.KeyCtrlC.String() || key == tea.KeyEsc.String() {
 		// In detach mode, don't cancel the build - just exit cleanly
 		if m.conf.Detach {
 			m.err = ui.NewUserCancelledError()
