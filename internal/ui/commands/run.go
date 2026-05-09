@@ -597,10 +597,10 @@ func (m *RunView) prepareRun() tea.Msg {
 		cfg, err := config.Load()
 		if err == nil && cfg.DefaultRegion != "" {
 			region = cfg.DefaultRegion
-		} else {
-			region = "us-east-1"
 		}
 	}
+	// If still empty, send through as-is — the backend resolves the run region
+	// (e.g. from the app's deployed region) when one isn't provided.
 
 	appName := ""
 	if m.conf.Config != nil && m.conf.Config.Deployment.Name != "" {

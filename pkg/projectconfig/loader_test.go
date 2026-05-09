@@ -10,7 +10,7 @@ import (
 )
 
 func TestLoad(t *testing.T) {
-	t.Run("applies default DisableAuth when not specified", func(t *testing.T) {
+	t.Run("DisableAuth is nil when not specified (backend applies default)", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		configPath := filepath.Join(tmpDir, "cerebrium.toml")
 
@@ -22,8 +22,7 @@ name = "test-app"
 
 		config, err := Load(configPath)
 		require.NoError(t, err)
-		require.NotNil(t, config.Deployment.DisableAuth)
-		assert.Equal(t, true, *config.Deployment.DisableAuth)
+		assert.Nil(t, config.Deployment.DisableAuth)
 	})
 
 	t.Run("preserves explicit DisableAuth false", func(t *testing.T) {
