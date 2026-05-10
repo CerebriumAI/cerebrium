@@ -6,10 +6,23 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"time"
 
 	"github.com/cerebriumai/cerebrium/pkg/projectconfig"
 )
+
+// zipEpoch pins every entry's modified time to a fixed value so that two
+// invocations of CreateZip on byte-identical content produce byte-identical
+// zips. 1980-01-01 is the MS-DOS date format minimum that the zip format
+// can represent, and is the convention used by reproducible-build tooling
+// (Bazel, SOURCE_DATE_EPOCH consumers, etc.).
+//
+// Without this, the upload's S3 ETag becomes a per-deploy nonce because
+// every dependency file was stamped with time.Now() and every project file
+// inherited its filesystem mtime — fingerprint-based duplicate detection
+// in the backend was effectively dead.
+var zipEpoch = time.Date(1980, 1, 1, 0, 0, 0, 0, time.UTC)
 
 // CreateZip creates a zip file containing all files in fileList with zip bomb protection
 func CreateZip(fileList []string, outputPath string, config *projectconfig.ProjectConfig) (int64, error) {
@@ -106,8 +119,8 @@ func addFileToZip(zipWriter *zip.Writer, filePath string) (int64, error) {
 	// Set the name to the relative path
 	header.Name = filepath.ToSlash(filePath)
 
-	// Set modified time to UTC
-	header.Modified = info.ModTime().UTC()
+	// Pin modified time to a fixed epoch for reproducible output (see zipEpoch).
+	header.Modified = zipEpoch
 
 	// Use deflate compression
 	header.Method = zip.Deflate
@@ -128,23 +141,32 @@ func addFileToZip(zipWriter *zip.Writer, filePath string) (int64, error) {
 	return info.Size(), nil
 }
 
-// AddDependencyFiles adds generated dependency files to the zip
+// AddDependencyFiles adds generated dependency files to the zip.
+//
+// Iteration order is sorted by filename so the output is reproducible —
+// Go's map iteration is randomized, so a plain `range` would write
+// dependency files into the zip in a different order on every invocation
+// even with byte-identical content.
 func AddDependencyFiles(zipWriter *zip.Writer, files map[string]string) error {
-	for filename, content := range files {
-		// Create zip header
+	filenames := make([]string, 0, len(files))
+	for filename := range files {
+		filenames = append(filenames, filename)
+	}
+	sort.Strings(filenames)
+
+	for _, filename := range filenames {
+		content := files[filename]
 		header := &zip.FileHeader{
 			Name:     filename,
 			Method:   zip.Deflate,
-			Modified: time.Now().UTC(),
+			Modified: zipEpoch,
 		}
 
-		// Create writer
 		writer, err := zipWriter.CreateHeader(header)
 		if err != nil {
 			return fmt.Errorf("failed to create header for %s: %w", filename, err)
 		}
 
-		// Write content
 		if _, err := writer.Write([]byte(content)); err != nil {
 			return fmt.Errorf("failed to write %s: %w", filename, err)
 		}
