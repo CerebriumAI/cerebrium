@@ -1357,8 +1357,9 @@ func renderRuntimeSpecificSettings(config *projectconfig.ProjectConfig) string {
 			settings = append(settings, fmt.Sprintf("Dockerfile: %s", config.CustomRuntime.DockerfilePath))
 		}
 
-		// Port is required for custom runtimes, always show it
-		settings = append(settings, fmt.Sprintf("Port: %d", config.CustomRuntime.Port))
+		if config.CustomRuntime.Port != 0 {
+			settings = append(settings, fmt.Sprintf("Port: %d", config.CustomRuntime.Port))
+		}
 
 		if len(config.CustomRuntime.Entrypoint) > 0 {
 			settings = append(settings, fmt.Sprintf("Entrypoint: %s", strings.Join(config.CustomRuntime.Entrypoint, " ")))
