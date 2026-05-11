@@ -1416,9 +1416,6 @@ func (m *DeployView) renderDeploymentSummary() string {
 		if m.conf.Config.Hardware.Region != nil {
 			hardwareItems = append(hardwareItems, fmt.Sprintf("Region: %s", *m.conf.Config.Hardware.Region))
 		}
-		if m.conf.Config.Hardware.Provider != nil {
-			hardwareItems = append(hardwareItems, fmt.Sprintf("Provider: %s", *m.conf.Config.Hardware.Provider))
-		}
 		if len(hardwareItems) > 0 {
 			formatSection("HARDWARE PARAMETERS", hardwareItems)
 		}
@@ -1566,9 +1563,6 @@ func (m *DeployView) renderDeploymentSummary() string {
 	}
 	if m.conf.Config.Hardware.Region != nil {
 		hardwareRows = append(hardwareRows, ui.TableRow{Label: "Region:", Value: *m.conf.Config.Hardware.Region})
-	}
-	if m.conf.Config.Hardware.Provider != nil {
-		hardwareRows = append(hardwareRows, ui.TableRow{Label: "Provider:", Value: *m.conf.Config.Hardware.Provider})
 	}
 	if len(hardwareRows) > 0 {
 		sections = append(sections, ui.TableSection{
