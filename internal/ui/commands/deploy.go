@@ -1357,8 +1357,9 @@ func renderRuntimeSpecificSettings(config *projectconfig.ProjectConfig) string {
 			settings = append(settings, fmt.Sprintf("Dockerfile: %s", config.CustomRuntime.DockerfilePath))
 		}
 
-		// Port is required for custom runtimes, always show it
-		settings = append(settings, fmt.Sprintf("Port: %d", config.CustomRuntime.Port))
+		if config.CustomRuntime.Port != 0 {
+			settings = append(settings, fmt.Sprintf("Port: %d", config.CustomRuntime.Port))
+		}
 
 		if len(config.CustomRuntime.Entrypoint) > 0 {
 			settings = append(settings, fmt.Sprintf("Entrypoint: %s", strings.Join(config.CustomRuntime.Entrypoint, " ")))
@@ -1414,9 +1415,6 @@ func (m *DeployView) renderDeploymentSummary() string {
 		}
 		if m.conf.Config.Hardware.Region != nil {
 			hardwareItems = append(hardwareItems, fmt.Sprintf("Region: %s", *m.conf.Config.Hardware.Region))
-		}
-		if m.conf.Config.Hardware.Provider != nil {
-			hardwareItems = append(hardwareItems, fmt.Sprintf("Provider: %s", *m.conf.Config.Hardware.Provider))
 		}
 		if len(hardwareItems) > 0 {
 			formatSection("HARDWARE PARAMETERS", hardwareItems)
@@ -1565,9 +1563,6 @@ func (m *DeployView) renderDeploymentSummary() string {
 	}
 	if m.conf.Config.Hardware.Region != nil {
 		hardwareRows = append(hardwareRows, ui.TableRow{Label: "Region:", Value: *m.conf.Config.Hardware.Region})
-	}
-	if m.conf.Config.Hardware.Provider != nil {
-		hardwareRows = append(hardwareRows, ui.TableRow{Label: "Provider:", Value: *m.conf.Config.Hardware.Provider})
 	}
 	if len(hardwareRows) > 0 {
 		sections = append(sections, ui.TableSection{

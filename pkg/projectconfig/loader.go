@@ -7,20 +7,13 @@ import (
 	"github.com/spf13/viper"
 )
 
-// Default values matching Python implementation
+// Default values for CLI-only file-packaging concerns.
+// All payload defaults (pythonVersion, baseImage, provider, region, scaling, auth,
+// entrypoint, port, healthcheck, etc.) are intentionally not set here — the backend
+// applies them when fields are absent from the request.
 var (
-	DefaultPythonVersion            = "3.11"
-	DefaultDockerBaseImageURL       = "debian:bookworm-slim"
-	DefaultInclude                  = []string{"./*", "main.py", "cerebrium.toml"}
-	DefaultExclude                  = []string{".*"}
-	DefaultDisableAuth              = true
-	DefaultEntrypoint               = []string{"uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"}
-	DefaultPort                     = 8000
-	DefaultHealthcheckEndpoint      = ""
-	DefaultReadycheckEndpoint       = ""
-	DefaultProvider                 = "aws"
-	DefaultEvaluationIntervalSeconds = 30
-	DefaultLoadBalancingAlgorithm   = "round-robin"
+	DefaultInclude = []string{"./*", "main.py", "cerebrium.toml"}
+	DefaultExclude = []string{".*"}
 )
 
 // Load reads and parses the cerebrium.toml configuration file
@@ -127,52 +120,15 @@ func Load(configPath string) (*ProjectConfig, error) {
 	return &config, nil
 }
 
-// applyDefaults sets default values for fields that weren't specified in the config
+// applyDefaults sets default values for CLI-only fields that weren't specified in the config.
+// Payload fields (pythonVersion, baseImage, provider, region, scaling, auth, entrypoint,
+// port, healthcheck, etc.) are deliberately left unset so the backend can apply its own defaults.
 func applyDefaults(config *ProjectConfig) {
-	// Apply deployment defaults
-	if config.Deployment.PythonVersion == "" {
-		config.Deployment.PythonVersion = DefaultPythonVersion
-	}
-	if config.Deployment.DockerBaseImageURL == "" {
-		config.Deployment.DockerBaseImageURL = DefaultDockerBaseImageURL
-	}
+	// File-packaging defaults — these aren't sent to the backend; they drive the deploy zip.
 	if len(config.Deployment.Include) == 0 {
 		config.Deployment.Include = DefaultInclude
 	}
 	if len(config.Deployment.Exclude) == 0 {
 		config.Deployment.Exclude = DefaultExclude
 	}
-	if config.Deployment.DisableAuth == nil {
-		disableAuth := DefaultDisableAuth
-		config.Deployment.DisableAuth = &disableAuth
-	}
-
-	// Apply hardware defaults
-	if config.Hardware.Provider == nil {
-		config.Hardware.Provider = &DefaultProvider
-	}
-
-	// Apply scaling defaults
-	if config.Scaling.EvaluationIntervalSeconds == nil {
-		config.Scaling.EvaluationIntervalSeconds = &DefaultEvaluationIntervalSeconds
-	}
-	if config.Scaling.LoadBalancingAlgorithm == nil {
-		config.Scaling.LoadBalancingAlgorithm = &DefaultLoadBalancingAlgorithm
-	}
-	// Apply custom runtime defaults
-	if config.CustomRuntime != nil {
-		if len(config.CustomRuntime.Entrypoint) == 0 {
-			config.CustomRuntime.Entrypoint = DefaultEntrypoint
-		}
-		if config.CustomRuntime.Port == 0 {
-			config.CustomRuntime.Port = DefaultPort
-		}
-		if config.CustomRuntime.HealthcheckEndpoint == "" {
-			config.CustomRuntime.HealthcheckEndpoint = DefaultHealthcheckEndpoint
-		}
-		if config.CustomRuntime.ReadycheckEndpoint == "" {
-			config.CustomRuntime.ReadycheckEndpoint = DefaultReadycheckEndpoint
-		}
-	}
-
 }

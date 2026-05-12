@@ -89,8 +89,12 @@ func (pc *ProjectConfig) ToPayload() map[string]any {
 
 	// Deployment fields
 	payload["name"] = pc.Deployment.Name
-	payload["pythonVersion"] = pc.Deployment.PythonVersion
-	payload["baseImage"] = pc.Deployment.DockerBaseImageURL
+	if pc.Deployment.PythonVersion != "" {
+		payload["pythonVersion"] = pc.Deployment.PythonVersion
+	}
+	if pc.Deployment.DockerBaseImageURL != "" {
+		payload["baseImage"] = pc.Deployment.DockerBaseImageURL
+	}
 	payload["include"] = pc.Deployment.Include
 	payload["exclude"] = pc.Deployment.Exclude
 	payload["shellCommands"] = pc.Deployment.ShellCommands
@@ -167,11 +171,7 @@ func (pc *ProjectConfig) ToPayload() map[string]any {
 	// Runtime configuration
 	if pc.CustomRuntime != nil && pc.PartnerService != nil {
 		// Both custom runtime and partner service
-		payload["entrypoint"] = pc.CustomRuntime.Entrypoint
-		payload["port"] = pc.CustomRuntime.Port
-		payload["healthcheckEndpoint"] = pc.CustomRuntime.HealthcheckEndpoint
-		payload["readycheckEndpoint"] = pc.CustomRuntime.ReadycheckEndpoint
-		payload["dockerfilePath"] = pc.CustomRuntime.DockerfilePath
+		addCustomRuntimePayload(payload, pc.CustomRuntime)
 		payload["partnerService"] = pc.PartnerService.Name
 		payload["runtime"] = pc.PartnerService.Name
 		if pc.PartnerService.ModelName != nil {
@@ -182,11 +182,7 @@ func (pc *ProjectConfig) ToPayload() map[string]any {
 		}
 	} else if pc.CustomRuntime != nil {
 		// Custom runtime only
-		payload["entrypoint"] = pc.CustomRuntime.Entrypoint
-		payload["port"] = pc.CustomRuntime.Port
-		payload["healthcheckEndpoint"] = pc.CustomRuntime.HealthcheckEndpoint
-		payload["readycheckEndpoint"] = pc.CustomRuntime.ReadycheckEndpoint
-		payload["dockerfilePath"] = pc.CustomRuntime.DockerfilePath
+		addCustomRuntimePayload(payload, pc.CustomRuntime)
 		payload["runtime"] = "custom"
 	} else if pc.PartnerService != nil {
 		// Partner service only
@@ -207,4 +203,24 @@ func (pc *ProjectConfig) ToPayload() map[string]any {
 	}
 
 	return payload
+}
+
+// addCustomRuntimePayload only adds custom-runtime fields to the payload when the user
+// set them in cerebrium.toml. Unset fields are omitted so the backend can apply defaults.
+func addCustomRuntimePayload(payload map[string]any, cr *CustomRuntimeConfig) {
+	if len(cr.Entrypoint) > 0 {
+		payload["entrypoint"] = cr.Entrypoint
+	}
+	if cr.Port != 0 {
+		payload["port"] = cr.Port
+	}
+	if cr.HealthcheckEndpoint != "" {
+		payload["healthcheckEndpoint"] = cr.HealthcheckEndpoint
+	}
+	if cr.ReadycheckEndpoint != "" {
+		payload["readycheckEndpoint"] = cr.ReadycheckEndpoint
+	}
+	if cr.DockerfilePath != "" {
+		payload["dockerfilePath"] = cr.DockerfilePath
+	}
 }
