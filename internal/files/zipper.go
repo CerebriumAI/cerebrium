@@ -18,10 +18,9 @@ import (
 // can represent, and is the convention used by reproducible-build tooling
 // (Bazel, SOURCE_DATE_EPOCH consumers, etc.).
 //
-// Without this, the upload's S3 ETag becomes a per-deploy nonce because
-// every dependency file was stamped with time.Now() and every project file
-// inherited its filesystem mtime — fingerprint-based duplicate detection
-// in the backend was effectively dead.
+// Without this, dependency files stamped with time.Now() and project files
+// carrying their filesystem mtimes would make every zip differ even when
+// the input content is identical.
 var zipEpoch = time.Date(1980, 1, 1, 0, 0, 0, 0, time.UTC)
 
 // CreateZip creates a zip file containing all files in fileList with zip bomb protection

@@ -16,11 +16,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestCreateZip_Reproducible verifies the central guarantee of the deterministic
-// zip work: two CreateZip calls on byte-identical content produce byte-identical
-// zip output, which means the same content uploaded by two different users
-// (or by the same user twice) gets the same S3 ETag and therefore the same
-// fingerprint in the backend's app-build-fingerprints table.
+// TestCreateZip_Reproducible verifies that two CreateZip calls on byte-identical
+// content produce byte-identical zip output.
 //
 // The test deliberately mutates each source file's mtime between the two zip
 // builds to prove that filesystem mtimes don't leak into the zip output.
