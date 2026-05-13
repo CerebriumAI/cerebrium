@@ -317,38 +317,14 @@ func (m *DeployView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			if m.conf.SimpleOutput() {
 				fmt.Println("Building app...")
+				return m, m.pollBuildStatus
 			}
 
-			// Initialize log viewer with streaming provider
-			provider := logging.NewStreamingBuildLogProvider(logging.StreamingBuildLogProviderConfig{
-				Client:    m.conf.WSClient,
-				ProjectID: m.conf.ProjectID,
-				BuildID:   m.buildID,
-			})
-			tickInterval := 50 * time.Millisecond
-
-			m.logViewer = logging.NewLogViewer(m.ctx, logging.LogViewerConfig{
-				DisplayConfig: m.conf.DisplayConfig,
-				Provider:      provider,
-				TickInterval:  tickInterval,
-				ShowHelp:      true,
-				AutoExpand:    true,
-			})
-
-			if !m.conf.SimpleOutput() {
-				printCmds := tea.Sequence(
-					tea.Println(ui.SuccessStyle.Render(fmt.Sprintf("✓  Created app (Build ID: %s)", msg.response.BuildID))),
-					tea.Println(""),
-				)
-				return m, tea.Batch(
-					printCmds,
-					m.logViewer.Init(),
-					m.pollBuildStatus,
-				)
-			}
-
+			// Partner services don't emit build logs - skip the log viewer
+			// and just poll status until the build completes.
 			return m, tea.Batch(
-				m.logViewer.Init(),
+				tea.Println(ui.SuccessStyle.Render(fmt.Sprintf("✓  Created app (Build ID: %s)", msg.response.BuildID))),
+				tea.Println(""),
 				m.pollBuildStatus,
 			)
 		}
