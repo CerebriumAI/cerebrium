@@ -117,6 +117,82 @@ compute_tier = "bogus"
 		assert.Contains(t, err.Error(), "invalid compute_tier")
 	})
 
+	t.Run("container_runtime is nil when not specified", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		configPath := filepath.Join(tmpDir, "cerebrium.toml")
+
+		content := `[cerebrium.deployment]
+name = "test-app"
+`
+		err := os.WriteFile(configPath, []byte(content), 0644)
+		require.NoError(t, err)
+
+		config, err := Load(configPath)
+		require.NoError(t, err)
+		assert.Nil(t, config.ContainerRuntime)
+	})
+
+	t.Run("preserves explicit container_runtime v2", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		configPath := filepath.Join(tmpDir, "cerebrium.toml")
+
+		content := `[cerebrium.deployment]
+name = "test-app"
+
+[cerebrium.runtime]
+container_runtime = "v2"
+`
+		err := os.WriteFile(configPath, []byte(content), 0644)
+		require.NoError(t, err)
+
+		config, err := Load(configPath)
+		require.NoError(t, err)
+		require.NotNil(t, config.ContainerRuntime)
+		assert.Equal(t, "v2", *config.ContainerRuntime)
+	})
+
+	t.Run("container_runtime coexists with custom runtime sub-table", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		configPath := filepath.Join(tmpDir, "cerebrium.toml")
+
+		content := `[cerebrium.deployment]
+name = "test-app"
+
+[cerebrium.runtime]
+container_runtime = "v2"
+
+[cerebrium.runtime.custom]
+port = 9000
+`
+		err := os.WriteFile(configPath, []byte(content), 0644)
+		require.NoError(t, err)
+
+		config, err := Load(configPath)
+		require.NoError(t, err)
+		require.NotNil(t, config.ContainerRuntime)
+		assert.Equal(t, "v2", *config.ContainerRuntime)
+		require.NotNil(t, config.CustomRuntime)
+		assert.Equal(t, 9000, config.CustomRuntime.Port)
+	})
+
+	t.Run("returns error for invalid container_runtime", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		configPath := filepath.Join(tmpDir, "cerebrium.toml")
+
+		content := `[cerebrium.deployment]
+name = "test-app"
+
+[cerebrium.runtime]
+container_runtime = "v3"
+`
+		err := os.WriteFile(configPath, []byte(content), 0644)
+		require.NoError(t, err)
+
+		_, err = Load(configPath)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid container_runtime")
+	})
+
 	t.Run("returns error when cerebrium key missing", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		configPath := filepath.Join(tmpDir, "cerebrium.toml")
