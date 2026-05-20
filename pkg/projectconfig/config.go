@@ -8,6 +8,10 @@ type ProjectConfig struct {
 	Dependencies   DependenciesConfig    `mapstructure:"dependencies" toml:"dependencies"`
 	CustomRuntime  *CustomRuntimeConfig  `mapstructure:"custom" toml:"runtime,omitempty"`
 	PartnerService *PartnerServiceConfig `mapstructure:"partner" toml:"partner,omitempty"`
+
+	// ContainerRuntime selects the runtime variant for the app.
+	// Read from [cerebrium.runtime] container_runtime in cerebrium.toml.
+	ContainerRuntime *string `toml:"-"`
 }
 
 // DeploymentConfig represents the [cerebrium.deployment] section
@@ -166,6 +170,10 @@ func (pc *ProjectConfig) ToPayload() map[string]any {
 	}
 	if pc.Scaling.ComputeTier != nil {
 		payload["computeTier"] = *pc.Scaling.ComputeTier
+	}
+
+	if pc.ContainerRuntime != nil {
+		payload["containerRuntime"] = *pc.ContainerRuntime
 	}
 
 	// Runtime configuration

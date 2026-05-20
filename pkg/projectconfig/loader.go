@@ -76,6 +76,16 @@ func Load(configPath string) (*ProjectConfig, error) {
 		config.CustomRuntime = &customRuntime
 	}
 
+	// Parse container_runtime scalar from [cerebrium.runtime].
+	// Coexists with [cerebrium.runtime.custom] / [cerebrium.runtime.<partner>] sub-tables.
+	if v.IsSet("cerebrium.runtime.container_runtime") {
+		cr := v.GetString("cerebrium.runtime.container_runtime")
+		if cr != "v1" && cr != "v2" {
+			return nil, fmt.Errorf("invalid container_runtime %q: must be \"v1\" or \"v2\"", cr)
+		}
+		config.ContainerRuntime = &cr
+	}
+
 	// Parse partner service sections (deepgram, rime, etc.)
 	partnerNames := []string{"deepgram", "rime"}
 	for _, partner := range partnerNames {
