@@ -9,7 +9,7 @@ type ProjectConfig struct {
 	CustomRuntime  *CustomRuntimeConfig  `mapstructure:"custom" toml:"runtime,omitempty"`
 	PartnerService *PartnerServiceConfig `mapstructure:"partner" toml:"partner,omitempty"`
 
-	// ContainerRuntime selects the sandbox runtime ("v1" runc / "v2" gvisor).
+	// ContainerRuntime selects the runtime variant for the app.
 	// Read from [cerebrium.runtime] container_runtime in cerebrium.toml.
 	ContainerRuntime *string `toml:"-"`
 }
