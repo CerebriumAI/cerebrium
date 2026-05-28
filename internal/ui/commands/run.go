@@ -617,8 +617,8 @@ func (m *RunView) prepareRun() tea.Msg {
 	hardwareInfo := ""
 	if m.conf.Config != nil {
 		var info []string
-		if m.conf.Config.Hardware.Compute != nil && *m.conf.Config.Hardware.Compute != "" {
-			info = append(info, fmt.Sprintf("Compute: %s", *m.conf.Config.Hardware.Compute))
+		if m.conf.Config.Hardware.Compute.IsSet() {
+			info = append(info, fmt.Sprintf("Compute: %s", m.conf.Config.Hardware.Compute.Primary()))
 		}
 		if m.conf.Config.Hardware.GPUCount != nil && *m.conf.Config.Hardware.GPUCount > 0 {
 			info = append(info, fmt.Sprintf("GPU: %d", *m.conf.Config.Hardware.GPUCount))
@@ -848,8 +848,8 @@ func (m *RunView) uploadRun() tea.Msg {
 	// Build hardware config
 	hardwareConfig := make(map[string]any)
 	if m.conf.Config != nil {
-		if m.conf.Config.Hardware.Compute != nil && *m.conf.Config.Hardware.Compute != "" {
-			hardwareConfig["computeType"] = *m.conf.Config.Hardware.Compute
+		if m.conf.Config.Hardware.Compute.IsSet() {
+			hardwareConfig["computeType"] = m.conf.Config.Hardware.Compute.Primary()
 		}
 		if m.conf.Config.Hardware.GPUCount != nil && *m.conf.Config.Hardware.GPUCount > 0 {
 			hardwareConfig["gpuCount"] = *m.conf.Config.Hardware.GPUCount

@@ -30,14 +30,41 @@ type DeploymentConfig struct {
 
 // HardwareConfig represents the [cerebrium.hardware] section
 type HardwareConfig struct {
-	CPU              *float64    `mapstructure:"cpu" toml:"cpu,omitempty"`
-	Memory           *float64    `mapstructure:"memory" toml:"memory,omitempty"`
-	ComputeRaw       interface{} `mapstructure:"compute" toml:"compute,omitempty"`
-	Compute          *string     `mapstructure:"-" toml:"-"`
-	ComputeFallbacks []string    `mapstructure:"-" toml:"-"`
-	GPUCount         *int        `mapstructure:"gpu_count" toml:"gpu_count,omitempty"`
-	Provider         *string     `mapstructure:"provider" toml:"provider,omitempty"`
-	Region           *string     `mapstructure:"region" toml:"region,omitempty"`
+	CPU      *float64     `mapstructure:"cpu" toml:"cpu,omitempty"`
+	Memory   *float64     `mapstructure:"memory" toml:"memory,omitempty"`
+	Compute  ComputeField `mapstructure:"compute" toml:"compute,omitempty"`
+	GPUCount *int         `mapstructure:"gpu_count" toml:"gpu_count,omitempty"`
+	Provider *string      `mapstructure:"provider" toml:"provider,omitempty"`
+	Region   *string      `mapstructure:"region" toml:"region,omitempty"`
+}
+
+// ComputeField accepts either a single value (`compute = "HOPPER_H100"`) or an
+// array (`compute = ["HOPPER_H100", "HOPPER_H200"]`). The first element is the
+// preferred compute type; the remainder are fallbacks the backend may schedule
+// onto when the primary is unavailable. Mirrors the backend's StringOrStrings
+// type so the CLI's in-memory model matches the wire format.
+type ComputeField []string
+
+// Primary returns the requested compute type, or "" when unset.
+func (c ComputeField) Primary() string {
+	if len(c) == 0 {
+		return ""
+	}
+	return c[0]
+}
+
+// Fallbacks returns the alternate compute types in priority order, or nil when
+// only a primary was configured.
+func (c ComputeField) Fallbacks() []string {
+	if len(c) <= 1 {
+		return nil
+	}
+	return c[1:]
+}
+
+// IsSet reports whether compute was configured in any form.
+func (c ComputeField) IsSet() bool {
+	return len(c) > 0
 }
 
 // ScalingConfig represents the [cerebrium.scaling] section
@@ -123,15 +150,14 @@ func (pc *ProjectConfig) ToPayload() map[string]any {
 	if pc.Hardware.Memory != nil {
 		payload["memory"] = *pc.Hardware.Memory
 	}
-	if pc.Hardware.Compute != nil {
-		if len(pc.Hardware.ComputeFallbacks) > 0 {
-			all := append([]string{*pc.Hardware.Compute}, pc.Hardware.ComputeFallbacks...)
-			payload["compute"] = all
+	if pc.Hardware.Compute.IsSet() {
+		if len(pc.Hardware.Compute) == 1 {
+			payload["compute"] = pc.Hardware.Compute.Primary()
 		} else {
-			payload["compute"] = *pc.Hardware.Compute
+			payload["compute"] = []string(pc.Hardware.Compute)
 		}
 	}
-	if pc.Hardware.GPUCount != nil && pc.Hardware.Compute != nil && *pc.Hardware.Compute != "CPU" {
+	if pc.Hardware.GPUCount != nil && pc.Hardware.Compute.IsSet() && pc.Hardware.Compute.Primary() != "CPU" {
 		payload["gpuCount"] = *pc.Hardware.GPUCount
 	}
 	if pc.Hardware.Provider != nil {

@@ -3,7 +3,9 @@ package projectconfig
 import (
 	"fmt"
 	"os"
+	"reflect"
 
+	"github.com/go-viper/mapstructure/v2"
 	"github.com/spf13/viper"
 )
 
@@ -46,9 +48,19 @@ func Load(configPath string) (*ProjectConfig, error) {
 		return nil, fmt.Errorf("failed to parse deployment config: %w", err)
 	}
 
-	// Parse hardware section
+	// Parse hardware section.
+	// The compute decode hook lets `compute` accept either a scalar or an array
+	// without leaking that polymorphism into the rest of the codebase. The
+	// default viper hooks are preserved so other slice/duration fields keep
+	// working.
 	if v.IsSet("cerebrium.hardware") {
-		if err := v.UnmarshalKey("cerebrium.hardware", &config.Hardware); err != nil {
+		if err := v.UnmarshalKey("cerebrium.hardware", &config.Hardware,
+			viper.DecodeHook(mapstructure.ComposeDecodeHookFunc(
+				mapstructure.StringToTimeDurationHookFunc(),
+				mapstructure.StringToSliceHookFunc(","),
+				computeFieldDecodeHook(),
+			)),
+		); err != nil {
 			return nil, fmt.Errorf("failed to parse hardware config: %w", err)
 		}
 	}
@@ -116,11 +128,6 @@ func Load(configPath string) (*ProjectConfig, error) {
 		}
 	}
 
-	// Normalize compute: accepts string or array
-	if err := normalizeCompute(&config.Hardware); err != nil {
-		return nil, err
-	}
-
 	// Validate compute_tier before applying defaults
 	if config.Scaling.ComputeTier != nil {
 		tier := *config.Scaling.ComputeTier
@@ -135,38 +142,39 @@ func Load(configPath string) (*ProjectConfig, error) {
 	return &config, nil
 }
 
-// normalizeCompute splits the polymorphic compute field (string or []string) into
-// a single primary value (Compute) plus optional fallbacks (ComputeFallbacks).
-// Viper decodes the TOML scalar/array into ComputeRaw as interface{}; this turns
-// it into typed fields the rest of the codebase can use without caring about the
-// input shape. Backend accepts either form under "compute" (see compute.StringOrStrings).
-func normalizeCompute(hw *HardwareConfig) error {
-	if hw.ComputeRaw == nil {
-		return nil
-	}
-	switch v := hw.ComputeRaw.(type) {
-	case string:
-		hw.Compute = &v
-	case []interface{}:
-		if len(v) == 0 {
-			return fmt.Errorf("compute array must not be empty")
+// computeFieldDecodeHook teaches mapstructure how to read the polymorphic
+// `compute` field. Without it viper would refuse to decode a TOML scalar into
+// the ComputeField slice type. Rejects empty strings so downstream code can
+// rely on `IsSet() => Primary() != ""`.
+func computeFieldDecodeHook() mapstructure.DecodeHookFunc {
+	computeFieldType := reflect.TypeOf(ComputeField{})
+	return func(_ reflect.Type, to reflect.Type, data interface{}) (interface{}, error) {
+		if to != computeFieldType {
+			return data, nil
 		}
-		first, ok := v[0].(string)
-		if !ok {
-			return fmt.Errorf("compute values must be strings")
-		}
-		hw.Compute = &first
-		for _, item := range v[1:] {
-			s, ok := item.(string)
-			if !ok {
-				return fmt.Errorf("compute values must be strings")
+		switch v := data.(type) {
+		case string:
+			if v == "" {
+				return nil, fmt.Errorf("compute must not be empty")
 			}
-			hw.ComputeFallbacks = append(hw.ComputeFallbacks, s)
+			return ComputeField{v}, nil
+		case []interface{}:
+			if len(v) == 0 {
+				return nil, fmt.Errorf("compute array must not be empty")
+			}
+			out := make(ComputeField, len(v))
+			for i, item := range v {
+				s, ok := item.(string)
+				if !ok || s == "" {
+					return nil, fmt.Errorf("compute values must be non-empty strings")
+				}
+				out[i] = s
+			}
+			return out, nil
+		default:
+			return nil, fmt.Errorf("compute must be a string or array of strings")
 		}
-	default:
-		return fmt.Errorf("compute must be a string or array of strings")
 	}
-	return nil
 }
 
 // applyDefaults sets default values for CLI-only fields that weren't specified in the config.

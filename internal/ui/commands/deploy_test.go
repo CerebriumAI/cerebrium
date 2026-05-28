@@ -128,7 +128,6 @@ func TestDeployView(t *testing.T) {
 		mockClient := apimock.NewMockClient(t)
 
 		// Create a comprehensive config to test the display
-		compute := "NVIDIA_A10"
 		cpu := 2.0
 		memory := 8.0
 		gpuCount := 1
@@ -147,7 +146,7 @@ func TestDeployView(t *testing.T) {
 				Exclude:       []string{"__pycache__", "*.pyc"},
 			},
 			Hardware: projectconfig.HardwareConfig{
-				Compute:  &compute,
+				Compute:  projectconfig.ComputeField{"NVIDIA_A10"},
 				CPU:      &cpu,
 				Memory:   &memory,
 				GPUCount: &gpuCount,
