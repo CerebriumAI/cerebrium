@@ -3,7 +3,9 @@ package projectconfig
 import (
 	"fmt"
 	"os"
+	"reflect"
 
+	"github.com/go-viper/mapstructure/v2"
 	"github.com/spf13/viper"
 )
 
@@ -46,9 +48,15 @@ func Load(configPath string) (*ProjectConfig, error) {
 		return nil, fmt.Errorf("failed to parse deployment config: %w", err)
 	}
 
-	// Parse hardware section
+	// Parse hardware section.
+	// The compute decode hook lets `compute` accept either a scalar or an array
+	// without leaking that polymorphism into the rest of the codebase. Hardware
+	// has no duration or comma-slice fields, so viper's default hooks aren't
+	// needed here.
 	if v.IsSet("cerebrium.hardware") {
-		if err := v.UnmarshalKey("cerebrium.hardware", &config.Hardware); err != nil {
+		if err := v.UnmarshalKey("cerebrium.hardware", &config.Hardware,
+			viper.DecodeHook(computeFieldDecodeHook()),
+		); err != nil {
 			return nil, fmt.Errorf("failed to parse hardware config: %w", err)
 		}
 	}
@@ -128,6 +136,41 @@ func Load(configPath string) (*ProjectConfig, error) {
 	applyDefaults(&config)
 
 	return &config, nil
+}
+
+// computeFieldDecodeHook teaches mapstructure how to read the polymorphic
+// `compute` field. Without it viper would refuse to decode a TOML scalar into
+// the ComputeField slice type. Rejects empty strings so downstream code can
+// rely on `IsSet() => Primary() != ""`.
+func computeFieldDecodeHook() mapstructure.DecodeHookFunc {
+	computeFieldType := reflect.TypeOf(ComputeField{})
+	return func(_ reflect.Type, to reflect.Type, data any) (any, error) {
+		if to != computeFieldType {
+			return data, nil
+		}
+		switch v := data.(type) {
+		case string:
+			if v == "" {
+				return nil, fmt.Errorf("compute must not be empty")
+			}
+			return ComputeField{v}, nil
+		case []any:
+			if len(v) == 0 {
+				return nil, fmt.Errorf("compute array must not be empty")
+			}
+			out := make(ComputeField, len(v))
+			for i, item := range v {
+				s, ok := item.(string)
+				if !ok || s == "" {
+					return nil, fmt.Errorf("compute values must be non-empty strings")
+				}
+				out[i] = s
+			}
+			return out, nil
+		default:
+			return nil, fmt.Errorf("compute must be a string or array of strings")
+		}
+	}
 }
 
 // applyDefaults sets default values for CLI-only fields that weren't specified in the config.

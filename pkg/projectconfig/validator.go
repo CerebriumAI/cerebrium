@@ -40,7 +40,7 @@ func Validate(config *ProjectConfig) error {
 	}
 
 	// Default gpu_count to 1 if compute is set but gpu_count is not
-	if config.Hardware.Compute != nil && *config.Hardware.Compute != "CPU" {
+	if config.Hardware.Compute.IsSet() && config.Hardware.Compute.Primary() != "CPU" {
 		if config.Hardware.GPUCount == nil {
 			defaultGPUCount := 1
 			config.Hardware.GPUCount = &defaultGPUCount

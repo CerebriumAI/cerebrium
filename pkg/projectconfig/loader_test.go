@@ -208,3 +208,95 @@ name = "test-app"
 		assert.Contains(t, err.Error(), "'cerebrium' key not found")
 	})
 }
+
+func TestLoad_Compute(t *testing.T) {
+	const header = `[cerebrium.deployment]
+name = "test-app"
+
+[cerebrium.hardware]
+`
+
+	write := func(t *testing.T, body string) string {
+		t.Helper()
+		path := filepath.Join(t.TempDir(), "cerebrium.toml")
+		require.NoError(t, os.WriteFile(path, []byte(header+body), 0644))
+		return path
+	}
+
+	t.Run("scalar form populates primary only", func(t *testing.T) {
+		cfg, err := Load(write(t, `compute = "HOPPER_H100"`))
+		require.NoError(t, err)
+		assert.Equal(t, ComputeField{"HOPPER_H100"}, cfg.Hardware.Compute)
+		assert.Equal(t, "HOPPER_H100", cfg.Hardware.Compute.Primary())
+		assert.True(t, cfg.Hardware.Compute.IsSet())
+	})
+
+	t.Run("array form preserves order", func(t *testing.T) {
+		cfg, err := Load(write(t, `compute = ["HOPPER_H100", "HOPPER_H200", "AMPERE_A100_80GB"]`))
+		require.NoError(t, err)
+		assert.Equal(t, ComputeField{"HOPPER_H100", "HOPPER_H200", "AMPERE_A100_80GB"}, cfg.Hardware.Compute)
+		assert.Equal(t, "HOPPER_H100", cfg.Hardware.Compute.Primary())
+	})
+
+	t.Run("single-element array behaves like scalar", func(t *testing.T) {
+		cfg, err := Load(write(t, `compute = ["HOPPER_H100"]`))
+		require.NoError(t, err)
+		assert.Equal(t, ComputeField{"HOPPER_H100"}, cfg.Hardware.Compute)
+		assert.Equal(t, "HOPPER_H100", cfg.Hardware.Compute.Primary())
+	})
+
+	t.Run("missing compute leaves field empty", func(t *testing.T) {
+		cfg, err := Load(write(t, ``))
+		require.NoError(t, err)
+		assert.False(t, cfg.Hardware.Compute.IsSet())
+		assert.Equal(t, "", cfg.Hardware.Compute.Primary())
+	})
+
+	t.Run("empty array is rejected", func(t *testing.T) {
+		_, err := Load(write(t, `compute = []`))
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "compute array must not be empty")
+	})
+
+	t.Run("empty string is rejected", func(t *testing.T) {
+		_, err := Load(write(t, `compute = ""`))
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "compute must not be empty")
+	})
+
+	t.Run("non-string element is rejected", func(t *testing.T) {
+		_, err := Load(write(t, `compute = ["HOPPER_H100", 42]`))
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "compute values must be non-empty strings")
+	})
+
+	t.Run("wrong type is rejected", func(t *testing.T) {
+		_, err := Load(write(t, `compute = 42`))
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "compute must be a string or array of strings")
+	})
+}
+
+func TestToPayload_Compute(t *testing.T) {
+	t.Run("scalar form sends single-element array", func(t *testing.T) {
+		pc := &ProjectConfig{
+			Deployment: DeploymentConfig{Name: "x"},
+			Hardware:   HardwareConfig{Compute: ComputeField{"HOPPER_H100"}},
+		}
+		assert.Equal(t, []string{"HOPPER_H100"}, pc.ToPayload()["compute"])
+	})
+
+	t.Run("multi-element form sends array", func(t *testing.T) {
+		pc := &ProjectConfig{
+			Deployment: DeploymentConfig{Name: "x"},
+			Hardware:   HardwareConfig{Compute: ComputeField{"HOPPER_H100", "HOPPER_H200"}},
+		}
+		assert.Equal(t, []string{"HOPPER_H100", "HOPPER_H200"}, pc.ToPayload()["compute"])
+	})
+
+	t.Run("unset compute is omitted", func(t *testing.T) {
+		pc := &ProjectConfig{Deployment: DeploymentConfig{Name: "x"}}
+		_, present := pc.ToPayload()["compute"]
+		assert.False(t, present)
+	})
+}

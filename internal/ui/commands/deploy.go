@@ -121,14 +121,14 @@ func NewDeployView(ctx context.Context, conf DeployConfig) *DeployView {
 	ctx, cancel := context.WithCancel(ctx)
 
 	return &DeployView{
-		ctx:             ctx,
-		ctxCancel:       cancel,
-		state:           initialState,
-		isPartnerDeploy: isPartnerDeploy,
-		spinner:         ui.NewSpinner(),
-		progressBar:     prog,
+		ctx:                 ctx,
+		ctxCancel:           cancel,
+		state:               initialState,
+		isPartnerDeploy:     isPartnerDeploy,
+		spinner:             ui.NewSpinner(),
+		progressBar:         prog,
 		atomicBytesUploaded: &atomic.Int64{},
-		conf:            conf,
+		conf:                conf,
 	}
 }
 
@@ -1401,8 +1401,8 @@ func (m *DeployView) renderDeploymentSummary() string {
 
 		// HARDWARE PARAMETERS
 		var hardwareItems []string
-		if m.conf.Config.Hardware.Compute != nil {
-			hardwareItems = append(hardwareItems, fmt.Sprintf("Compute: %s", *m.conf.Config.Hardware.Compute))
+		if m.conf.Config.Hardware.Compute.IsSet() {
+			hardwareItems = append(hardwareItems, fmt.Sprintf("Compute: %s", m.conf.Config.Hardware.Compute))
 		}
 		if m.conf.Config.Hardware.CPU != nil {
 			hardwareItems = append(hardwareItems, fmt.Sprintf("CPU: %.1f", *m.conf.Config.Hardware.CPU))
@@ -1410,7 +1410,7 @@ func (m *DeployView) renderDeploymentSummary() string {
 		if m.conf.Config.Hardware.Memory != nil {
 			hardwareItems = append(hardwareItems, fmt.Sprintf("Memory: %.0f GB", *m.conf.Config.Hardware.Memory))
 		}
-		if m.conf.Config.Hardware.GPUCount != nil && m.conf.Config.Hardware.Compute != nil && *m.conf.Config.Hardware.Compute != "CPU" {
+		if m.conf.Config.Hardware.GPUCount != nil {
 			hardwareItems = append(hardwareItems, fmt.Sprintf("GPU Count: %d", *m.conf.Config.Hardware.GPUCount))
 		}
 		if m.conf.Config.Hardware.Region != nil {
@@ -1469,7 +1469,7 @@ func (m *DeployView) renderDeploymentSummary() string {
 			concurrency := fmt.Sprintf("Replica Concurrency: %d", *m.conf.Config.Scaling.ReplicaConcurrency)
 
 			// Add GPU warning if applicable
-			if m.conf.Config.Hardware.Compute != nil && *m.conf.Config.Hardware.Compute != "CPU" && *m.conf.Config.Scaling.ReplicaConcurrency > 1 {
+			if m.conf.Config.Hardware.Compute.IsSet() && m.conf.Config.Hardware.Compute.Primary() != "CPU" && *m.conf.Config.Scaling.ReplicaConcurrency > 1 {
 				concurrency += " ⚠️  (Multiple concurrent requests on GPU)"
 			}
 			scalingItems = append(scalingItems, concurrency)
@@ -1549,8 +1549,8 @@ func (m *DeployView) renderDeploymentSummary() string {
 
 	// HARDWARE PARAMETERS
 	var hardwareRows []ui.TableRow
-	if m.conf.Config.Hardware.Compute != nil {
-		hardwareRows = append(hardwareRows, ui.TableRow{Label: "Compute:", Value: *m.conf.Config.Hardware.Compute})
+	if m.conf.Config.Hardware.Compute.IsSet() {
+		hardwareRows = append(hardwareRows, ui.TableRow{Label: "Compute:", Value: m.conf.Config.Hardware.Compute.String()})
 	}
 	if m.conf.Config.Hardware.CPU != nil {
 		hardwareRows = append(hardwareRows, ui.TableRow{Label: "CPU:", Value: fmt.Sprintf("%.1f", *m.conf.Config.Hardware.CPU)})
@@ -1558,7 +1558,7 @@ func (m *DeployView) renderDeploymentSummary() string {
 	if m.conf.Config.Hardware.Memory != nil {
 		hardwareRows = append(hardwareRows, ui.TableRow{Label: "Memory:", Value: fmt.Sprintf("%.0f GB", *m.conf.Config.Hardware.Memory)})
 	}
-	if m.conf.Config.Hardware.GPUCount != nil && m.conf.Config.Hardware.Compute != nil && *m.conf.Config.Hardware.Compute != "CPU" {
+	if m.conf.Config.Hardware.GPUCount != nil {
 		hardwareRows = append(hardwareRows, ui.TableRow{Label: "GPU Count:", Value: fmt.Sprintf("%d", *m.conf.Config.Hardware.GPUCount)})
 	}
 	if m.conf.Config.Hardware.Region != nil {
@@ -1636,7 +1636,7 @@ func (m *DeployView) renderDeploymentSummary() string {
 		concurrency := fmt.Sprintf("%d", *m.conf.Config.Scaling.ReplicaConcurrency)
 
 		// Add GPU warning if applicable
-		if m.conf.Config.Hardware.Compute != nil && *m.conf.Config.Hardware.Compute != "CPU" && *m.conf.Config.Scaling.ReplicaConcurrency > 1 {
+		if m.conf.Config.Hardware.Compute.IsSet() && m.conf.Config.Hardware.Compute.Primary() != "CPU" && *m.conf.Config.Scaling.ReplicaConcurrency > 1 {
 			concurrency += " ⚠️  (Multiple concurrent requests on GPU)"
 		}
 		scalingRows = append(scalingRows, ui.TableRow{Label: "Replica Concurrency:", Value: concurrency})
