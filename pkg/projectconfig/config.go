@@ -40,11 +40,9 @@ type HardwareConfig struct {
 	Region   *string      `mapstructure:"region" toml:"region,omitempty"`
 }
 
-// ComputeField accepts either a single value (`compute = "HOPPER_H100"`) or an
-// array (`compute = ["HOPPER_H100", "HOPPER_H200"]`). The first element is the
-// preferred compute type; the remainder are fallbacks the backend may schedule
-// onto when the primary is unavailable. Mirrors the backend's StringOrStrings
-// type so the CLI's in-memory model matches the wire format.
+// ComputeField holds the list of acceptable compute types. It accepts either a
+// single value (`compute = "HOPPER_H100"`) or an array
+// (`compute = ["HOPPER_H100", "HOPPER_H200"]`) in cerebrium.toml.
 type ComputeField []string
 
 // Primary returns the requested compute type, or "" when unset.
@@ -53,15 +51,6 @@ func (c ComputeField) Primary() string {
 		return ""
 	}
 	return c[0]
-}
-
-// Fallbacks returns the alternate compute types in priority order, or nil when
-// only a primary was configured.
-func (c ComputeField) Fallbacks() []string {
-	if len(c) <= 1 {
-		return nil
-	}
-	return c[1:]
 }
 
 // IsSet reports whether compute was configured in any form.
@@ -159,8 +148,7 @@ func (pc *ProjectConfig) ToPayload() map[string]any {
 		payload["memory"] = *pc.Hardware.Memory
 	}
 	if pc.Hardware.Compute.IsSet() {
-		// The backend accepts either a string or a string[], so always send the
-		// slice and let it decide how to interpret primary vs. fallbacks.
+		// Always send the full list of compute types.
 		payload["compute"] = []string(pc.Hardware.Compute)
 	}
 	if pc.Hardware.GPUCount != nil && pc.Hardware.Compute.IsSet() && pc.Hardware.Compute.Primary() != "CPU" {

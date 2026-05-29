@@ -228,23 +228,21 @@ name = "test-app"
 		require.NoError(t, err)
 		assert.Equal(t, ComputeField{"HOPPER_H100"}, cfg.Hardware.Compute)
 		assert.Equal(t, "HOPPER_H100", cfg.Hardware.Compute.Primary())
-		assert.Nil(t, cfg.Hardware.Compute.Fallbacks())
 		assert.True(t, cfg.Hardware.Compute.IsSet())
 	})
 
-	t.Run("array form preserves order with fallbacks", func(t *testing.T) {
+	t.Run("array form preserves order", func(t *testing.T) {
 		cfg, err := Load(write(t, `compute = ["HOPPER_H100", "HOPPER_H200", "AMPERE_A100_80GB"]`))
 		require.NoError(t, err)
 		assert.Equal(t, ComputeField{"HOPPER_H100", "HOPPER_H200", "AMPERE_A100_80GB"}, cfg.Hardware.Compute)
 		assert.Equal(t, "HOPPER_H100", cfg.Hardware.Compute.Primary())
-		assert.Equal(t, []string{"HOPPER_H200", "AMPERE_A100_80GB"}, cfg.Hardware.Compute.Fallbacks())
 	})
 
 	t.Run("single-element array behaves like scalar", func(t *testing.T) {
 		cfg, err := Load(write(t, `compute = ["HOPPER_H100"]`))
 		require.NoError(t, err)
+		assert.Equal(t, ComputeField{"HOPPER_H100"}, cfg.Hardware.Compute)
 		assert.Equal(t, "HOPPER_H100", cfg.Hardware.Compute.Primary())
-		assert.Nil(t, cfg.Hardware.Compute.Fallbacks())
 	})
 
 	t.Run("missing compute leaves field empty", func(t *testing.T) {

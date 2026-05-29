@@ -1410,7 +1410,7 @@ func (m *DeployView) renderDeploymentSummary() string {
 		if m.conf.Config.Hardware.Memory != nil {
 			hardwareItems = append(hardwareItems, fmt.Sprintf("Memory: %.0f GB", *m.conf.Config.Hardware.Memory))
 		}
-		if m.conf.Config.Hardware.GPUCount != nil && m.conf.Config.Hardware.Compute.IsSet() && m.conf.Config.Hardware.Compute.Primary() != "CPU" {
+		if m.conf.Config.Hardware.GPUCount != nil {
 			hardwareItems = append(hardwareItems, fmt.Sprintf("GPU Count: %d", *m.conf.Config.Hardware.GPUCount))
 		}
 		if m.conf.Config.Hardware.Region != nil {
@@ -1558,7 +1558,7 @@ func (m *DeployView) renderDeploymentSummary() string {
 	if m.conf.Config.Hardware.Memory != nil {
 		hardwareRows = append(hardwareRows, ui.TableRow{Label: "Memory:", Value: fmt.Sprintf("%.0f GB", *m.conf.Config.Hardware.Memory)})
 	}
-	if m.conf.Config.Hardware.GPUCount != nil && m.conf.Config.Hardware.Compute.IsSet() && m.conf.Config.Hardware.Compute.Primary() != "CPU" {
+	if m.conf.Config.Hardware.GPUCount != nil {
 		hardwareRows = append(hardwareRows, ui.TableRow{Label: "GPU Count:", Value: fmt.Sprintf("%d", *m.conf.Config.Hardware.GPUCount)})
 	}
 	if m.conf.Config.Hardware.Region != nil {
