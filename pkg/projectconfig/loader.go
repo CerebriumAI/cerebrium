@@ -144,7 +144,7 @@ func Load(configPath string) (*ProjectConfig, error) {
 // rely on `IsSet() => Primary() != ""`.
 func computeFieldDecodeHook() mapstructure.DecodeHookFunc {
 	computeFieldType := reflect.TypeOf(ComputeField{})
-	return func(_ reflect.Type, to reflect.Type, data interface{}) (interface{}, error) {
+	return func(_ reflect.Type, to reflect.Type, data any) (any, error) {
 		if to != computeFieldType {
 			return data, nil
 		}
@@ -154,7 +154,7 @@ func computeFieldDecodeHook() mapstructure.DecodeHookFunc {
 				return nil, fmt.Errorf("compute must not be empty")
 			}
 			return ComputeField{v}, nil
-		case []interface{}:
+		case []any:
 			if len(v) == 0 {
 				return nil, fmt.Errorf("compute array must not be empty")
 			}
