@@ -280,12 +280,12 @@ name = "test-app"
 }
 
 func TestToPayload_Compute(t *testing.T) {
-	t.Run("scalar form sends string", func(t *testing.T) {
+	t.Run("scalar form sends single-element array", func(t *testing.T) {
 		pc := &ProjectConfig{
 			Deployment: DeploymentConfig{Name: "x"},
 			Hardware:   HardwareConfig{Compute: ComputeField{"HOPPER_H100"}},
 		}
-		assert.Equal(t, "HOPPER_H100", pc.ToPayload()["compute"])
+		assert.Equal(t, []string{"HOPPER_H100"}, pc.ToPayload()["compute"])
 	})
 
 	t.Run("multi-element form sends array", func(t *testing.T) {

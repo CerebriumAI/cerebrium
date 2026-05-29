@@ -12,11 +12,6 @@ func Validate(config *ProjectConfig) error {
 		return fmt.Errorf("`deployment.name` is required in config file")
 	}
 
-	// Check for invalid provider
-	if config.Hardware.Provider != nil && *config.Hardware.Provider == "coreweave" {
-		return fmt.Errorf("cortex V4 does not support Coreweave. Please consider updating your app to AWS")
-	}
-
 	// Validate dockerfile path if specified
 	if config.CustomRuntime != nil && config.CustomRuntime.DockerfilePath != "" {
 		if _, err := os.Stat(config.CustomRuntime.DockerfilePath); os.IsNotExist(err) {

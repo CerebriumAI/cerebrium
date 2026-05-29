@@ -1,5 +1,7 @@
 package projectconfig
 
+import "strings"
+
 // ProjectConfig represents the complete cerebrium.toml configuration
 type ProjectConfig struct {
 	Deployment     DeploymentConfig      `mapstructure:"deployment" toml:"deployment"`
@@ -65,6 +67,12 @@ func (c ComputeField) Fallbacks() []string {
 // IsSet reports whether compute was configured in any form.
 func (c ComputeField) IsSet() bool {
 	return len(c) > 0
+}
+
+// String renders the configured compute types as a comma-separated list for
+// display, e.g. "HOPPER_H100, HOPPER_H200".
+func (c ComputeField) String() string {
+	return strings.Join(c, ", ")
 }
 
 // ScalingConfig represents the [cerebrium.scaling] section
@@ -151,11 +159,9 @@ func (pc *ProjectConfig) ToPayload() map[string]any {
 		payload["memory"] = *pc.Hardware.Memory
 	}
 	if pc.Hardware.Compute.IsSet() {
-		if len(pc.Hardware.Compute) == 1 {
-			payload["compute"] = pc.Hardware.Compute.Primary()
-		} else {
-			payload["compute"] = []string(pc.Hardware.Compute)
-		}
+		// The backend accepts either a string or a string[], so always send the
+		// slice and let it decide how to interpret primary vs. fallbacks.
+		payload["compute"] = []string(pc.Hardware.Compute)
 	}
 	if pc.Hardware.GPUCount != nil && pc.Hardware.Compute.IsSet() && pc.Hardware.Compute.Primary() != "CPU" {
 		payload["gpuCount"] = *pc.Hardware.GPUCount

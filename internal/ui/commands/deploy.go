@@ -1402,10 +1402,7 @@ func (m *DeployView) renderDeploymentSummary() string {
 		// HARDWARE PARAMETERS
 		var hardwareItems []string
 		if m.conf.Config.Hardware.Compute.IsSet() {
-			hardwareItems = append(hardwareItems, fmt.Sprintf("Compute: %s", m.conf.Config.Hardware.Compute.Primary()))
-			if fallbacks := m.conf.Config.Hardware.Compute.Fallbacks(); len(fallbacks) > 0 {
-				hardwareItems = append(hardwareItems, fmt.Sprintf("Compute Fallbacks: %s", strings.Join(fallbacks, ", ")))
-			}
+			hardwareItems = append(hardwareItems, fmt.Sprintf("Compute: %s", m.conf.Config.Hardware.Compute))
 		}
 		if m.conf.Config.Hardware.CPU != nil {
 			hardwareItems = append(hardwareItems, fmt.Sprintf("CPU: %.1f", *m.conf.Config.Hardware.CPU))
@@ -1553,10 +1550,7 @@ func (m *DeployView) renderDeploymentSummary() string {
 	// HARDWARE PARAMETERS
 	var hardwareRows []ui.TableRow
 	if m.conf.Config.Hardware.Compute.IsSet() {
-		hardwareRows = append(hardwareRows, ui.TableRow{Label: "Compute:", Value: m.conf.Config.Hardware.Compute.Primary()})
-		if fallbacks := m.conf.Config.Hardware.Compute.Fallbacks(); len(fallbacks) > 0 {
-			hardwareRows = append(hardwareRows, ui.TableRow{Label: "Compute Fallbacks:", Value: strings.Join(fallbacks, ", ")})
-		}
+		hardwareRows = append(hardwareRows, ui.TableRow{Label: "Compute:", Value: m.conf.Config.Hardware.Compute.String()})
 	}
 	if m.conf.Config.Hardware.CPU != nil {
 		hardwareRows = append(hardwareRows, ui.TableRow{Label: "CPU:", Value: fmt.Sprintf("%.1f", *m.conf.Config.Hardware.CPU)})
