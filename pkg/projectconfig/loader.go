@@ -50,16 +50,12 @@ func Load(configPath string) (*ProjectConfig, error) {
 
 	// Parse hardware section.
 	// The compute decode hook lets `compute` accept either a scalar or an array
-	// without leaking that polymorphism into the rest of the codebase. The
-	// default viper hooks are preserved so other slice/duration fields keep
-	// working.
+	// without leaking that polymorphism into the rest of the codebase. Hardware
+	// has no duration or comma-slice fields, so viper's default hooks aren't
+	// needed here.
 	if v.IsSet("cerebrium.hardware") {
 		if err := v.UnmarshalKey("cerebrium.hardware", &config.Hardware,
-			viper.DecodeHook(mapstructure.ComposeDecodeHookFunc(
-				mapstructure.StringToTimeDurationHookFunc(),
-				mapstructure.StringToSliceHookFunc(","),
-				computeFieldDecodeHook(),
-			)),
+			viper.DecodeHook(computeFieldDecodeHook()),
 		); err != nil {
 			return nil, fmt.Errorf("failed to parse hardware config: %w", err)
 		}
