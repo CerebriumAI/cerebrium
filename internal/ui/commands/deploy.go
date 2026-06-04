@@ -2,6 +2,7 @@ package commands
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -13,6 +14,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/avast/retry-go/v4"
 	"github.com/bugsnag/bugsnag-go/v2"
 	"github.com/charmbracelet/bubbles/progress"
 	"github.com/charmbracelet/bubbles/viewport"
@@ -1094,37 +1096,61 @@ func (m *DeployView) uploadZipWithProgress() error {
 		return fmt.Errorf("failed to stat zip file: %w", err)
 	}
 
-	// Create a reader that tracks progress
-	progressReader := &progressReader{
-		reader:  file,
-		counter: m.atomicBytesUploaded,
-	}
+	// Use a longer timeout for uploads (30 minutes for large files)
+	uploadClient := &http.Client{Timeout: 30 * time.Minute}
 
-	// Create PUT request with context
-	req, err := http.NewRequestWithContext(m.ctx, "PUT", m.appResponse.UploadURL, progressReader)
-	if err != nil {
-		return fmt.Errorf("failed to create upload request: %w", err)
-	}
+	const maxAttempts = 3
+	const retryDelay = 2 * time.Second
 
-	req.Header.Set("Content-Type", "application/zip")
-	req.ContentLength = fileInfo.Size()
+	return retry.Do(
+		func() error {
+			// Reset file position and progress counter for each attempt
+			if _, seekErr := file.Seek(0, io.SeekStart); seekErr != nil {
+				return retry.Unrecoverable(fmt.Errorf("failed to seek zip file: %w", seekErr))
+			}
+			m.atomicBytesUploaded.Store(0)
 
-	// Execute request using a simple HTTP client
-	client := &http.Client{
-		Timeout: 30 * time.Minute, // Allow up to 30 minutes for large uploads
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return fmt.Errorf("upload failed: %w", err)
-	}
-	defer resp.Body.Close() //nolint:errcheck // Deferred close, error not actionable
+			// Create a reader that tracks progress
+			progressReader := &progressReader{
+				reader:  file,
+				counter: m.atomicBytesUploaded,
+			}
 
-	if resp.StatusCode != 200 {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("upload failed with status %d: %s", resp.StatusCode, string(body))
-	}
+			// Create PUT request with context
+			req, err := http.NewRequestWithContext(m.ctx, "PUT", m.appResponse.UploadURL, progressReader)
+			if err != nil {
+				return retry.Unrecoverable(fmt.Errorf("failed to create upload request: %w", err))
+			}
+			req.Header.Set("Content-Type", "application/zip")
+			req.ContentLength = fileInfo.Size()
 
-	return nil
+			resp, err := uploadClient.Do(req)
+			if err != nil {
+				return fmt.Errorf("upload failed: %w", err)
+			}
+			defer resp.Body.Close() //nolint:errcheck // Deferred close, error not actionable
+
+			if resp.StatusCode != 200 {
+				body, _ := io.ReadAll(resp.Body)
+				if resp.StatusCode >= 400 && resp.StatusCode < 500 {
+					return retry.Unrecoverable(fmt.Errorf("upload failed with status %d: %s", resp.StatusCode, string(body)))
+				}
+				return fmt.Errorf("upload failed with status %d: %s", resp.StatusCode, string(body))
+			}
+
+			return nil
+		},
+		retry.Context(m.ctx),
+		retry.Attempts(maxAttempts),
+		retry.Delay(retryDelay),
+		retry.DelayType(retry.BackOffDelay),
+		retry.RetryIf(func(err error) bool {
+			return !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded)
+		}),
+		retry.OnRetry(func(n uint, err error) {
+			slog.Warn("Retrying zip upload", "attempt", n+1, "maxAttempts", maxAttempts, "error", err)
+		}),
+	)
 }
 
 // progressReader wraps an io.Reader and tracks bytes read

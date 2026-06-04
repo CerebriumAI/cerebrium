@@ -478,43 +478,60 @@ func (c *client) UploadZip(ctx context.Context, uploadURL string, zipPath string
 
 	slog.Info("Uploading zip file", "size", fileInfo.Size(), "path", zipPath)
 
-	// Create PUT request with context
-	req, err := http.NewRequestWithContext(ctx, "PUT", uploadURL, file)
-	if err != nil {
-		slog.Error("Failed to create upload request", "error", err)
-		return fmt.Errorf("failed to create upload request: %w", err)
-	}
+	const maxAttempts = 3
+	const retryDelay = 2 * time.Second
 
-	req.Header.Set("Content-Type", "application/zip")
-	req.ContentLength = fileInfo.Size()
+	err = retry.Do(
+		func() error {
+			// Seek to start so each attempt reads the full file
+			if _, seekErr := file.Seek(0, io.SeekStart); seekErr != nil {
+				return retry.Unrecoverable(fmt.Errorf("failed to seek zip file: %w", seekErr))
+			}
 
-	// Execute request
-	startTime := time.Now()
-	resp, err := c.httpClient.Do(req)
-	duration := time.Since(startTime)
+			// Create PUT request with context
+			req, err := http.NewRequestWithContext(ctx, "PUT", uploadURL, file)
+			if err != nil {
+				return retry.Unrecoverable(fmt.Errorf("failed to create upload request: %w", err))
+			}
+			req.Header.Set("Content-Type", "application/zip")
+			req.ContentLength = fileInfo.Size()
 
-	if err != nil {
-		slog.Error("Zip upload request failed", "error", err, "duration", duration)
-		return fmt.Errorf("upload failed: %w", err)
-	}
-	defer resp.Body.Close() //nolint:errcheck // Deferred close, error not actionable
+			// Execute request
+			startTime := time.Now()
+			resp, err := c.httpClient.Do(req)
+			duration := time.Since(startTime)
 
-	if resp.StatusCode != 200 {
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			slog.Error("Failed to read error response", "error", err, "statusCode", resp.StatusCode)
-			return fmt.Errorf("failed to read error response body: %w", err)
-		}
-		slog.Error("Zip upload failed",
-			"statusCode", resp.StatusCode,
-			"response", string(body),
-			"duration", duration,
-		)
-		return fmt.Errorf("upload failed with status %d: %s", resp.StatusCode, string(body))
-	}
+			if err != nil {
+				slog.Error("Zip upload request failed", "error", err, "duration", duration)
+				return fmt.Errorf("upload failed: %w", err)
+			}
+			defer resp.Body.Close() //nolint:errcheck // Deferred close, error not actionable
 
-	slog.Info("Zip upload successful", "size", fileInfo.Size(), "duration", duration)
-	return nil
+			if resp.StatusCode != 200 {
+				body, _ := io.ReadAll(resp.Body)
+				slog.Error("Zip upload failed", "statusCode", resp.StatusCode, "response", string(body), "duration", duration)
+				// Don't retry on client errors (4xx)
+				if resp.StatusCode >= 400 && resp.StatusCode < 500 {
+					return retry.Unrecoverable(fmt.Errorf("upload failed with status %d: %s", resp.StatusCode, string(body)))
+				}
+				return fmt.Errorf("upload failed with status %d: %s", resp.StatusCode, string(body))
+			}
+
+			slog.Info("Zip upload successful", "size", fileInfo.Size(), "duration", duration)
+			return nil
+		},
+		retry.Context(ctx),
+		retry.Attempts(maxAttempts),
+		retry.Delay(retryDelay),
+		retry.DelayType(retry.BackOffDelay),
+		retry.RetryIf(func(err error) bool {
+			return !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded)
+		}),
+		retry.OnRetry(func(n uint, err error) {
+			slog.Warn("Retrying zip upload", "attempt", n+1, "maxAttempts", maxAttempts, "error", err)
+		}),
+	)
+	return err
 }
 
 // FetchBuildLogs retrieves build logs for a specific build
