@@ -14,6 +14,10 @@ type ProjectConfig struct {
 	// ContainerRuntime selects the sandbox runtime ("v1" runc / "v2" gvisor).
 	// Read from [cerebrium.runtime] container_runtime in cerebrium.toml.
 	ContainerRuntime *string `toml:"-"`
+
+	// RawTOML is the verbatim cerebrium.toml content, captured at load time and
+	// uploaded so the backend can parse config server-side.
+	RawTOML string `toml:"-" mapstructure:"-"`
 }
 
 // DeploymentConfig represents the [cerebrium.deployment] section

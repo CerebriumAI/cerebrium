@@ -1,6 +1,7 @@
 package projectconfig
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"reflect"
@@ -25,13 +26,17 @@ func Load(configPath string) (*ProjectConfig, error) {
 		return nil, fmt.Errorf("config file not found: %s. Please run `cerebrium init` to create one", configPath)
 	}
 
-	// Create new viper instance for project config
-	v := viper.New()
-	v.SetConfigFile(configPath)
-	v.SetConfigType("toml")
+	// Read the raw file once so we can both parse it and retain the verbatim content
+	// (the backend parses the raw toml server-side; see config.RawTOML below).
+	content, err := os.ReadFile(configPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read config file: %w", err)
+	}
 
-	// Read the config file
-	if err := v.ReadInConfig(); err != nil {
+	// Create new viper instance for project config, parsing from the bytes we just read
+	v := viper.New()
+	v.SetConfigType("toml")
+	if err := v.ReadConfig(bytes.NewReader(content)); err != nil {
 		return nil, fmt.Errorf("failed to read config file: %w", err)
 	}
 
@@ -134,6 +139,9 @@ func Load(configPath string) (*ProjectConfig, error) {
 
 	// Apply defaults for missing fields
 	applyDefaults(&config)
+
+	// Retain the verbatim toml so the deploy payload can upload it for server-side parsing.
+	config.RawTOML = string(content)
 
 	return &config, nil
 }

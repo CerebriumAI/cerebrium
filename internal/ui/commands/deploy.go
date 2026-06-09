@@ -1018,6 +1018,11 @@ func (m *DeployView) createApp() tea.Msg {
 	payload["disableBuildLogs"] = m.conf.DisableBuildLogs
 	payload["cliVersion"] = version.Version
 
+	// Upload the raw cerebrium.toml so the backend can parse config server-side.
+	if m.conf.Config.RawTOML != "" {
+		payload["cerebrium_toml"] = m.conf.Config.RawTOML
+	}
+
 	// Include Docker auth if available for private registry support
 	baseImage := m.conf.Config.Deployment.DockerBaseImageURL
 	dockerAuth, err := auth.GetDockerAuth()
