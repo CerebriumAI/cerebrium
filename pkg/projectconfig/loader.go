@@ -28,7 +28,7 @@ func Load(configPath string) (*ProjectConfig, error) {
 
 	// Read the raw file once so we can both parse it and retain the verbatim content
 	// (the backend parses the raw toml server-side; see config.RawTOML below).
-	content, err := os.ReadFile(configPath)
+	content, err := os.ReadFile(configPath) //nolint:gosec // File path from user's project configuration
 	if err != nil {
 		return nil, fmt.Errorf("failed to read config file: %w", err)
 	}
