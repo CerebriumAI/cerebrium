@@ -4,6 +4,14 @@ on:
   pull_request:
     branches: [main, development]
   workflow_dispatch:
+  # Callable from the Release orchestrator so the exact release commit is
+  # exercised by the same matrix that gates PRs.
+  workflow_call:
+    inputs:
+      ref:
+        description: "Git ref (commit/tag) to test. Defaults to the triggering ref."
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -20,6 +28,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.ref || github.ref }}
 
       - name: Configure Git line endings
         # Ensure .gitattributes rules are respected on all platforms

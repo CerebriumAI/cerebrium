@@ -19,7 +19,7 @@ from urllib.error import HTTPError, URLError
 from urllib.request import urlopen
 
 # DO NOT EDIT: This version is automatically updated by the GitHub Action
-# (.github/workflows/pypi-publish.yml) during release. It uses GitHub/semver
+# (.github/workflows/release-pypi.yml) during release. It uses GitHub/semver
 # format (e.g., "2.1.0-beta.1" for beta, "2.1.0" for stable).
 VERSION = "2.1.0-beta.1"
 

@@ -16,32 +16,40 @@ For the Go CLI migration:
 
 ## How to Create a Release
 
-### Step 1: Tag the Release
+Releases are cut from a **single workflow** — `Release` (`.github/workflows/release.yml`).
+Do **not** push a tag by hand: a manually pushed tag triggers nothing, and a tag
+pushed by CI's `GITHUB_TOKEN` cannot trigger downstream workflows. The orchestrator
+creates the tag itself as one ordered step in the pipeline.
+
+### Run the Release workflow
+
+From the GitHub UI: **Actions → Release → Run workflow**, then enter the version
+(e.g. `v2.1.0` or `2.1.0` — the `v` is added if missing). Or via the CLI:
 
 ```bash
-# Create and push a tag
-git tag -a v2.1.0 -m "Release v2.1.0"
-git push origin v2.1.0
+gh workflow run release.yml -f version=v2.1.0
+# optionally pin a commit (defaults to main HEAD) or skip tests on a re-run:
+#   -f commit=<sha>   -f skip-tests=true
 ```
 
-**Tag format:** Always use `v` prefix followed by semantic version (e.g., `v2.0.0`)
+### What the workflow does (one run, ordered by `needs:`)
 
-### Step 2: Automated Workflows
+```
+validate → test → tag → goreleaser → verify-assets → wrapper-smoke → pypi
+                                                                       └ cleanup (on failure)
+```
 
-Once you push the tag, the following happens automatically:
+1. **validate** — normalize the version, reject it if the tag already exists, resolve the commit.
+2. **test** — run the full test matrix against that commit (skippable with `skip-tests=true`).
+3. **tag** — create and push the annotated tag (no event-chaining; the build is the next job).
+4. **goreleaser** — build binaries for all platforms, checksums, Homebrew tap, deb/rpm, and the GitHub release.
+5. **verify-assets** — assert every archive + `checksums.txt` is actually on the release.
+6. **wrapper-smoke** — build the Python wrapper and run it against the freshly published release (exercises the real binary download) *before* touching PyPI.
+7. **pypi** — publish the wrapper to PyPI (`pip install cerebrium`).
+8. **cleanup** — on any failure, delete the tag and release so the run can be retried cleanly. (PyPI cannot be un-published — only yanked — which is why PyPI is the very last step, after every other check has passed.)
 
-1. **release.yml**: GoReleaser builds and publishes:
-   - Binaries for all platforms (macOS, Linux, Windows)
-   - Archives (tar.gz, zip)
-   - Checksums
-   - Updates Homebrew tap
-   - Creates Debian/RPM packages
-   - Creates GitHub release with changelog
-
-2. **pypi-publish.yml**: Python wrapper publishing:
-   - Builds the Python package
-   - Publishes to PyPI (for `pip install cerebrium`)
-   - Handles beta/RC versions appropriately
+Because everything runs in one workflow, the Actions run page shows exactly where a
+release stopped — there is no silent hand-off between workflows.
 
 ## What Gets Released
 
@@ -85,22 +93,17 @@ cerebrium version
 
 ## Pre-release Versions
 
-For beta or release candidate versions:
+For beta or release candidate versions, run the same workflow with a prerelease version:
 
 ```bash
-# Beta release
-git tag -a v2.1.0-beta.1 -m "Release v2.1.0-beta.1"
-git push origin v2.1.0-beta.1
-
-# Release candidate
-git tag -a v2.1.0-rc.1 -m "Release v2.1.0-rc.1"
-git push origin v2.1.0-rc.1
+gh workflow run release.yml -f version=v2.1.0-beta.1
+gh workflow run release.yml -f version=v2.1.0-rc.1
 ```
 
-These will:
-- Create a GitHub pre-release
-- Not update the Homebrew formula (stable releases only)
-- Be available on PyPI with appropriate version specifier
+GoReleaser detects the prerelease from the tag (`prerelease: auto`) and:
+- Creates a GitHub pre-release
+- Does **not** update the Homebrew formula (stable releases only)
+- Publishes to PyPI with the appropriate version specifier (e.g. `2.1.0b1`)
 
 ## Local Testing
 
@@ -115,12 +118,17 @@ make build VERSION=2.1.0
 ./bin/cerebrium version
 ```
 
+To exercise the **full pipeline** end-to-end without affecting stable users, run the
+workflow against a throwaway prerelease tag (e.g. `gh workflow run release.yml -f version=v0.0.1-rc.1`)
+and let `cleanup` (or a manual `gh release delete v0.0.1-rc.1 --cleanup-tag`) tear it down.
+
 ## Required Secrets
 
 The following secrets must be configured in GitHub repository settings:
 
-- **GH_PAT**: GitHub Personal Access Token with repo scope (for releases and Homebrew tap updates)
-- **PYPI_API_TOKEN**: PyPI API token for publishing Python packages
+- **GH_PAT**: GitHub Personal Access Token with `repo` + `workflow` scope (used by GoReleaser for the release and Homebrew tap updates).
+- PyPI publishing uses **OIDC trusted publishing** (`id-token: write`), so no PyPI API token is required — the project must be configured as a trusted publisher on PyPI for this repo's `release-pypi.yml` workflow.
+- macOS signing/notarization secrets (`MACOS_CERTIFICATE_P12`, `MACOS_CERTIFICATE_PASSWORD`, `MACOS_NOTARIZATION_ISSUER_ID`, `MACOS_NOTARIZATION_KEY_ID`, `MACOS_NOTARIZATION_KEY`) and `BUGSNAG_API_KEY`.
 
 ## 🔔 Update Notifications
 
@@ -147,21 +155,20 @@ Update with:
 # Check current version
 cerebrium version
 
-# Create a patch release (bug fixes)
-git tag -a v2.0.1 -m "Release v2.0.1: Fix authentication bug"
-git push origin v2.0.1
+# Patch release (bug fixes)
+gh workflow run release.yml -f version=v2.0.1
 
-# Create a minor release (new features)
-git tag -a v2.1.0 -m "Release v2.1.0: Add support for custom regions"
-git push origin v2.1.0
+# Minor release (new features)
+gh workflow run release.yml -f version=v2.1.0
 
-# Create a major release (breaking changes)
-git tag -a v3.0.0 -m "Release v3.0.0: New configuration format"
-git push origin v3.0.0
+# Major release (breaking changes)
+gh workflow run release.yml -f version=v3.0.0
 
-# Delete a tag if needed
-git tag -d v2.0.1
-git push origin --delete v2.0.1
+# Watch the run
+gh run watch "$(gh run list --workflow=release.yml --limit 1 --json databaseId -q '.[0].databaseId')"
+
+# Roll back a botched release (tag + GitHub release; PyPI can only be yanked)
+gh release delete v2.0.1 --cleanup-tag
 ```
 
 ## Troubleshooting
@@ -172,9 +179,9 @@ git push origin --delete v2.0.1
 - Verify `.goreleaser.yaml` configuration is valid
 
 ### PyPI publish fails
-- Ensure version doesn't already exist on PyPI
-- Check PyPI API token is valid
-- Verify `python-wrapper/setup.py` is correctly formatted
+- Ensure the version doesn't already exist on PyPI (publishes use `skip-existing`, but a partial prior upload can still conflict)
+- Confirm the repo is registered as a PyPI trusted publisher for `release-pypi.yml` (OIDC)
+- Verify `python-wrapper/pyproject.toml` is correctly formatted
 
 ### Homebrew formula not updating
 - Only stable releases update Homebrew (not pre-releases)

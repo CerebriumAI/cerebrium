@@ -1,0 +1,57 @@
+name: Build & Publish Binaries (reusable)
+
+# Reusable workflow: builds the cross-platform binaries with GoReleaser and
+# uploads them (+ checksums.txt) to the GitHub release for the given tag.
+# Called by the Release orchestrator after the tag has been created. Not meant
+# to be run on its own.
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: "Tag ref to build (e.g. refs/tags/v2.5.2). Must already exist and point at HEAD."
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  packages: write
+  id-token: write
+
+jobs:
+  goreleaser:
+    name: GoReleaser
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+        with:
+          # Pin to the tag so GoReleaser's git-state check ("the current tag
+          # must point at HEAD") always holds. fetch-depth: 0 is required for
+          # the changelog and tag discovery.
+          ref: ${{ inputs.ref }}
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: "1.25"
+          cache: true
+
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          version: "~> v2"
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_PAT }}
+          GH_PAT: ${{ secrets.GH_PAT }}
+          # macOS code signing and notarization using anchore/quill
+          # All credentials are passed as base64-encoded strings
+          MACOS_CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          MACOS_NOTARIZATION_ISSUER_ID: ${{ secrets.MACOS_NOTARIZATION_ISSUER_ID }}
+          MACOS_NOTARIZATION_KEY_ID: ${{ secrets.MACOS_NOTARIZATION_KEY_ID }}
+          MACOS_NOTARIZATION_KEY: ${{ secrets.MACOS_NOTARIZATION_KEY }}
+          # Bugsnag error tracking configuration
+          BUGSNAG_API_KEY: ${{ secrets.BUGSNAG_API_KEY }}
