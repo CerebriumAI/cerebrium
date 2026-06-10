@@ -3,7 +3,7 @@
 ## How It Works
 
 1. Run the `Release` workflow (`.github/workflows/release.yml`) with a version (e.g. `v2.1.0` or `v2.1.0-beta.1`). See [RELEASING.md](../RELEASING.md).
-2. After the binaries are built and verified on the GitHub release, the orchestrator calls `.github/workflows/release-pypi.yml`, which:
+2. After the binaries are built and verified on the GitHub release, the orchestrator calls `.github/workflows/pypi-publish.yml`, which:
    - Updates `VERSION` in `cerebrium_cli.py` (GitHub format: `2.1.0-beta.1`)
    - Updates `version` in `pyproject.toml` (PEP 440 format: `2.1.0b1`)
    - Builds and publishes to PyPI

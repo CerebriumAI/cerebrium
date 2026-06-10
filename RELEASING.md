@@ -127,7 +127,7 @@ and let `cleanup` (or a manual `gh release delete v0.0.1-rc.1 --cleanup-tag`) te
 The following secrets must be configured in GitHub repository settings:
 
 - **GH_PAT**: GitHub Personal Access Token with `repo` + `workflow` scope (used by GoReleaser for the release and Homebrew tap updates).
-- PyPI publishing uses **OIDC trusted publishing** (`id-token: write`), so no PyPI API token is required — the project must be configured as a trusted publisher on PyPI for this repo's `release-pypi.yml` workflow.
+- PyPI publishing uses **OIDC trusted publishing** (`id-token: write`), so no PyPI API token is required — the project must be configured as a trusted publisher on PyPI for this repo's `pypi-publish.yml` workflow.
 - macOS signing/notarization secrets (`MACOS_CERTIFICATE_P12`, `MACOS_CERTIFICATE_PASSWORD`, `MACOS_NOTARIZATION_ISSUER_ID`, `MACOS_NOTARIZATION_KEY_ID`, `MACOS_NOTARIZATION_KEY`) and `BUGSNAG_API_KEY`.
 
 ## 🔔 Update Notifications
@@ -180,7 +180,7 @@ gh release delete v2.0.1 --cleanup-tag
 
 ### PyPI publish fails
 - Ensure the version doesn't already exist on PyPI (publishes use `skip-existing`, but a partial prior upload can still conflict)
-- Confirm the repo is registered as a PyPI trusted publisher for `release-pypi.yml` (OIDC)
+- Confirm the repo is registered as a PyPI trusted publisher for `pypi-publish.yml` (OIDC)
 - Verify `python-wrapper/pyproject.toml` is correctly formatted
 
 ### Homebrew formula not updating

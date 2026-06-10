@@ -185,7 +185,7 @@ jobs:
   pypi:
     name: Publish to PyPI
     needs: [validate, wrapper-smoke]
-    uses: ./.github/workflows/release-pypi.yml
+    uses: ./.github/workflows/pypi-publish.yml
     with:
       tag: ${{ needs.validate.outputs.tag }}
     secrets: inherit
