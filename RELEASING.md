@@ -44,21 +44,34 @@ default only ever increments the patch.
 ### What the workflow does (one run, ordered by `needs:`)
 
 ```
-validate → test → tag → goreleaser → verify-assets → wrapper-smoke → pypi
-                                                                       └ cleanup (on failure)
+validate → test → tag → goreleaser → verify-assets → wrapper-smoke → pypi → promote
+                                                                              └ cleanup (on failure)
 ```
 
 1. **validate** — normalize the version, reject it if the tag already exists, resolve the commit.
 2. **test** — run the full test matrix against that commit (skippable with `skip-tests=true`).
 3. **tag** — create and push the annotated tag (no event-chaining; the build is the next job).
-4. **goreleaser** — build binaries for all platforms, checksums, Homebrew tap, deb/rpm, and the GitHub release.
+4. **goreleaser** — build binaries for all platforms, checksums, Homebrew tap, deb/rpm, and the GitHub release. **The release is created as a *prerelease*.**
 5. **verify-assets** — assert every archive + `checksums.txt` is actually on the release.
 6. **wrapper-smoke** — build the Python wrapper and run it against the freshly published release (exercises the real binary download) *before* touching PyPI.
 7. **pypi** — publish the wrapper to PyPI (`pip install cerebrium`).
-8. **cleanup** — on any failure, delete the tag and release so the run can be retried cleanly. (PyPI cannot be un-published — only yanked — which is why PyPI is the very last step, after every other check has passed.)
+8. **promote** — flip a stable release from prerelease to **"Latest"**. Runs only after everything above passes; actual prerelease tags (`-rc`/`-beta`) are left as prereleases.
+9. **cleanup** — if the *build* fails (half-created tag/release), delete the tag + release so the run can be retried. Once goreleaser succeeds the prerelease is valid, so a later failure leaves it in place as an un-promoted prerelease. (PyPI cannot be un-published — only yanked — which is why PyPI runs late and `promote` is last.)
 
 Because everything runs in one workflow, the Actions run page shows exactly where a
 release stopped — there is no silent hand-off between workflows.
+
+### Testing the pipeline (dry run)
+
+```bash
+gh workflow run release.yml -f version=v0.0.1-rc.1 -f dry-run=true
+```
+
+A dry run exercises the whole pipeline for real — it **pushes the tag** and creates a
+real GitHub **prerelease** with binaries, and runs `verify-assets` + `wrapper-smoke` —
+but it never **promotes** the release to "Latest", never **publishes to PyPI**, and skips
+the **Homebrew** tap push and macOS notarization. The prerelease is left in place for you
+to inspect; tear it down with `gh release delete <tag> --cleanup-tag`.
 
 ## What Gets Released
 

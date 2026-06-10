@@ -123,8 +123,10 @@ homebrew_casks:
     homepage: https://www.cerebrium.ai
     description: CLI for deploying and managing Cerebrium apps
     license: MIT
-    # Skip upload for prereleases
-    skip_upload: auto
+    # Skip the tap update for prerelease tags (-rc/-beta). Keyed off the tag's
+    # semver prerelease component, NOT release.prerelease (which we force to
+    # true), so stable releases still update Homebrew.
+    skip_upload: '{{ if .Prerelease }}true{{ else }}false{{ end }}'
 
 # Linux packages
 nfpms:
@@ -152,7 +154,10 @@ release:
     owner: CerebriumAI
     name: cerebrium
   draft: false
-  prerelease: auto
+  # Always create the release as a prerelease. The Release workflow's `promote`
+  # job flips a stable release to "Latest" only after PyPI + the wrapper smoke
+  # test pass. Actual prerelease tags (-rc/-beta) are never promoted.
+  prerelease: true
   name_template: "v{{.Version}}"
 # Docker images (optional)
 # dockers:

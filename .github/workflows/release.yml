@@ -3,8 +3,13 @@ name: Release
 # Single entry point for cutting a release. One dispatch runs the whole
 # pipeline in order, in one place you can watch:
 #
-#   validate → test → tag → goreleaser → verify-assets → wrapper-smoke → pypi
-#                                                                          └ cleanup (on failure)
+#   validate → test → tag → goreleaser → verify-assets → wrapper-smoke → pypi → promote
+#                                                                                 └ cleanup (on failure)
+#
+# The GitHub release is always created as a PRERELEASE; `promote` flips a stable
+# release to "Latest" only after every check passes. `dry-run` exercises the
+# whole pipeline for real (tag + prerelease release + binaries) but never
+# promotes and never publishes to PyPI/Homebrew.
 
 on:
   workflow_dispatch:
@@ -19,6 +24,11 @@ on:
         type: string
       skip-tests:
         description: "Skip the test matrix (use only for re-runs of already-tested commits)"
+        required: false
+        default: false
+        type: boolean
+      dry-run:
+        description: "Dry run: build everything but publish nothing (no tag push, no GitHub release, no PyPI, no Homebrew). For testing the pipeline."
         required: false
         default: false
         type: boolean
@@ -37,6 +47,7 @@ jobs:
       version: ${{ steps.v.outputs.version }}
       ref: ${{ steps.v.outputs.ref }}
       sha: ${{ steps.v.outputs.sha }}
+      is_prerelease: ${{ steps.v.outputs.is_prerelease }}
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -74,13 +85,18 @@ jobs:
             exit 1
           fi
           SHA="$(git rev-parse HEAD)"
+          case "$TAG" in
+            *-*) PRERELEASE=true ;;   # has a semver prerelease suffix (-rc/-beta/...)
+            *)   PRERELEASE=false ;;
+          esac
           {
             echo "tag=$TAG"
             echo "version=${TAG#v}"
             echo "ref=refs/tags/$TAG"
             echo "sha=$SHA"
+            echo "is_prerelease=$PRERELEASE"
           } >> "$GITHUB_OUTPUT"
-          echo "Will release $TAG at $SHA"
+          echo "Will release $TAG at $SHA (prerelease=$PRERELEASE)"
 
   test:
     name: Test
@@ -122,6 +138,7 @@ jobs:
     uses: ./.github/workflows/deploy-release.yml
     with:
       ref: ${{ needs.validate.outputs.ref }}
+      dry-run: ${{ inputs.dry-run }}
     secrets: inherit
 
   verify-assets:
@@ -197,24 +214,46 @@ jobs:
     uses: ./.github/workflows/pypi-publish.yml
     with:
       tag: ${{ needs.validate.outputs.tag }}
+      dry-run: ${{ inputs.dry-run }}
     secrets: inherit
+
+  promote:
+    name: Promote to latest
+    needs: [validate, pypi]
+    # Flip the prerelease to "Latest" only for a real, stable release. Actual
+    # prerelease tags (-rc/-beta) stay prereleases; dry runs are never promoted,
+    # so the release is left as a prerelease for inspection.
+    if: ${{ !inputs.dry-run && needs.validate.outputs.is_prerelease == 'false' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Mark the GitHub release as latest
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.validate.outputs.tag }}
+        run: |
+          set -euo pipefail
+          gh release edit "$TAG" --prerelease=false --latest
+          echo "Promoted $TAG to the latest stable release."
 
   cleanup:
     name: Cleanup failed release
-    needs: [validate, tag, goreleaser, verify-assets, wrapper-smoke, pypi]
-    # Only on failure, and only if we got far enough to create a tag.
-    if: ${{ failure() && needs.validate.result == 'success' }}
+    needs: [validate, tag, goreleaser]
+    # Only tear down when the BUILD itself failed — i.e. there's a half-created
+    # tag/release. Once goreleaser succeeds the prerelease (and any binaries the
+    # Homebrew cask points at) is valid, so a later failure (verify/smoke/pypi)
+    # leaves it in place as an un-promoted prerelease to inspect or retry.
+    if: ${{ failure() && needs.validate.result == 'success' && needs.goreleaser.result != 'success' }}
     runs-on: ubuntu-latest
     steps:
-      - name: Delete the tag and (draft/partial) release
+      - name: Delete the tag and partial release
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           TAG: ${{ needs.validate.outputs.tag }}
         run: |
           set -uo pipefail
-          echo "Release failed — cleaning up $TAG so it can be re-run."
-          # PyPI cannot be un-published; this only tears down the GitHub side.
+          echo "Build failed — cleaning up $TAG so it can be re-run."
           gh release delete "$TAG" --yes --cleanup-tag 2>/dev/null || true
           gh api -X DELETE "repos/${GH_REPO}/git/refs/tags/${TAG}" 2>/dev/null || true
           echo "Cleanup done."

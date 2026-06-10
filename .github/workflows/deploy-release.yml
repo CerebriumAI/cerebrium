@@ -7,6 +7,11 @@ on:
         description: "Tag ref to build (e.g. refs/tags/v2.5.2). Must already exist and point at HEAD."
         required: true
         type: string
+      dry-run:
+        description: "Dry run: create the (pre)release + binaries, but skip the Homebrew tap push and macOS notarization."
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: write
@@ -34,7 +39,9 @@ jobs:
         uses: goreleaser/goreleaser-action@v6
         with:
           version: "~> v2"
-          args: release --clean
+          # Dry run still creates the (pre)release + binaries, but skips the
+          # public Homebrew tap push and the slow macOS notarization.
+          args: ${{ inputs.dry-run && 'release --clean --skip=homebrew,notarize' || 'release --clean' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GH_PAT }}
           GH_PAT: ${{ secrets.GH_PAT }}
