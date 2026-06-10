@@ -15,8 +15,8 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Version to release (e.g. v2.5.2 or 2.5.2 — leading v added if missing)"
-        required: true
+        description: "Version to release (e.g. v2.5.2 or 2.5.2). Leave blank to auto-bump the patch of the latest stable release."
+        required: false
         type: string
       commit:
         description: "Commit SHA to release (defaults to main HEAD)"
@@ -55,7 +55,21 @@ jobs:
         run: |
           set -euo pipefail
           RAW="${{ github.event.inputs.version }}"
-          TAG="v${RAW#v}"
+          if [ -z "$RAW" ]; then
+            # No version given: bump the patch of the latest stable (vX.Y.Z) tag.
+            LATEST="$(git tag -l 'v[0-9]*' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n1 || true)"
+            if [ -z "$LATEST" ]; then
+              echo "ERROR: no version provided and no existing vX.Y.Z release tag to bump from" >&2
+              exit 1
+            fi
+            base="${LATEST#v}"
+            major="${base%%.*}"; rest="${base#*.}"
+            minor="${rest%%.*}"; patch="${rest#*.}"
+            TAG="v${major}.${minor}.$((patch + 1))"
+            echo "No version provided; bumping $LATEST -> $TAG"
+          else
+            TAG="v${RAW#v}"
+          fi
           if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
             echo "ERROR: '$TAG' is not a valid semver tag (expected vMAJOR.MINOR.PATCH[-prerelease])" >&2
             exit 1

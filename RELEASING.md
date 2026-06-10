@@ -23,14 +23,23 @@ creates the tag itself as one ordered step in the pipeline.
 
 ### Run the Release workflow
 
-From the GitHub UI: **Actions → Release → Run workflow**, then enter the version
-(e.g. `v2.1.0` or `2.1.0` — the `v` is added if missing). Or via the CLI:
+From the GitHub UI: **Actions → Release → Run workflow**. Enter a version
+(e.g. `v2.1.0` or `2.1.0` — the `v` is added if missing), or **leave it blank to
+auto-bump the patch** of the latest stable release (e.g. `v2.5.2` → `v2.5.3`). Or via the CLI:
 
 ```bash
+# Patch bump of the latest stable release (no version needed):
+gh workflow run release.yml
+
+# Or pin an explicit version:
 gh workflow run release.yml -f version=v2.1.0
+
 # optionally pin a commit (defaults to main HEAD) or skip tests on a re-run:
 #   -f commit=<sha>   -f skip-tests=true
 ```
+
+A minor or major bump must be given explicitly (`-f version=v2.6.0`); the blank-version
+default only ever increments the patch.
 
 ### What the workflow does (one run, ordered by `needs:`)
 
