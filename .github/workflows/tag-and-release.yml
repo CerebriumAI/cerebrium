@@ -1,4 +1,4 @@
-name: Tag
+name: Release
 
 on:
   workflow_dispatch:
