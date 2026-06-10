@@ -1,0 +1,56 @@
+name: Tag
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to tag (e.g. v2.4.1 or 2.4.1 — leading v added if missing)"
+        required: true
+        type: string
+      commit:
+        description: "Commit SHA to tag (defaults to main HEAD)"
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.commit || 'main' }}
+
+      - name: Normalize and validate version
+        id: ver
+        run: |
+          RAW="${{ inputs.version }}"
+          TAG="${RAW#v}"
+          TAG="v${TAG}"
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "ERROR: '$TAG' is not a valid semver tag (expected vMAJOR.MINOR.PATCH[-prerelease])" >&2
+            exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Reject if tag already exists
+        run: |
+          TAG="${{ steps.ver.outputs.tag }}"
+          if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+            echo "ERROR: tag $TAG already exists" >&2
+            exit 1
+          fi
+
+      - name: Create and push annotated tag
+        run: |
+          TAG="${{ steps.ver.outputs.tag }}"
+          SHA="$(git rev-parse HEAD)"
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "$TAG" "$SHA"
+          git push origin "$TAG"
+          echo "Tagged $SHA as $TAG. Release workflow will run on the tag push." >> "$GITHUB_STEP_SUMMARY"
