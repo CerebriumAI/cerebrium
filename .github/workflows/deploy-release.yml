@@ -1,10 +1,5 @@
 name: Build & Publish Binaries (reusable)
 
-# Reusable workflow: builds the cross-platform binaries with GoReleaser and
-# uploads them (+ checksums.txt) to the GitHub release for the given tag.
-# Called by the Release orchestrator after the tag has been created. Not meant
-# to be run on its own.
-
 on:
   workflow_call:
     inputs:
@@ -26,9 +21,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v5
         with:
-          # Pin to the tag so GoReleaser's git-state check ("the current tag
-          # must point at HEAD") always holds. fetch-depth: 0 is required for
-          # the changelog and tag discovery.
           ref: ${{ inputs.ref }}
           fetch-depth: 0
 

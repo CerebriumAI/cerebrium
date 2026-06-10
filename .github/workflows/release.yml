@@ -5,11 +5,6 @@ name: Release
 #
 #   validate → test → tag → goreleaser → verify-assets → wrapper-smoke → pypi
 #                                                                          └ cleanup (on failure)
-#
-# Steps are ordered with `needs:` within ONE run — they do NOT trigger each
-# other via tag-push / release-published events. Event chaining is what made
-# the old flow fail silently (a GITHUB_TOKEN-pushed tag never triggered the
-# build, so the wrapper shipped to PyPI with no binaries behind it).
 
 on:
   workflow_dispatch:

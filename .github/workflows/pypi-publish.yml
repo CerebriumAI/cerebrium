@@ -1,10 +1,5 @@
 name: Publish to PyPI (reusable)
 
-# Reusable workflow: builds the thin Python wrapper and publishes it to PyPI.
-# Called by the Release orchestrator AFTER the binaries are on the GitHub
-# release (the wrapper downloads those binaries at runtime). Not meant to be
-# run on its own.
-
 on:
   workflow_call:
     inputs:
