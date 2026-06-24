@@ -25,7 +25,8 @@ Examples:
   cerebrium cp local_file.txt              # Upload to /local_file.txt
   cerebrium cp local_file.txt remote.txt   # Upload to /remote.txt
   cerebrium cp local_dir/ remote_dir/      # Upload directory
-  cerebrium cp file.txt --region us-west-2 # Upload to specific region`,
+  cerebrium cp file.txt --region us-west-2 # Upload to specific region
+  cerebrium cp file.txt --region global    # Upload to global storage`,
 		Args: cobra.RangeArgs(1, 2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runCp(cmd, args, region)
