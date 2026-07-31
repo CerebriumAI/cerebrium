@@ -124,6 +124,12 @@ func Load(configPath string) (*ProjectConfig, error) {
 				partnerConfig.Language = &language
 			}
 
+			// Check for image_version to pin the partner image tag (e.g., "260728")
+			if v.IsSet(key + ".image_version") {
+				imageVersion := v.GetString(key + ".image_version")
+				partnerConfig.ImageVersion = &imageVersion
+			}
+
 			config.PartnerService = partnerConfig
 			break // Only one partner service at a time
 		}

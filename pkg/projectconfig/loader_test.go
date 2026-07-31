@@ -300,3 +300,63 @@ func TestToPayload_Compute(t *testing.T) {
 		assert.False(t, present)
 	})
 }
+
+func TestPartnerImageVersion(t *testing.T) {
+	loadPartner := func(t *testing.T, partnerBody string) *ProjectConfig {
+		t.Helper()
+		configPath := filepath.Join(t.TempDir(), "cerebrium.toml")
+		content := `[cerebrium.deployment]
+name = "test-deepgram"
+
+[cerebrium.runtime.deepgram]
+` + partnerBody
+		require.NoError(t, os.WriteFile(configPath, []byte(content), 0644))
+
+		config, err := Load(configPath)
+		require.NoError(t, err)
+		require.NotNil(t, config.PartnerService)
+		return config
+	}
+
+	t.Run("image_version is nil when not specified", func(t *testing.T) {
+		config := loadPartner(t, "")
+		assert.Nil(t, config.PartnerService.ImageVersion)
+	})
+
+	t.Run("parses image_version", func(t *testing.T) {
+		config := loadPartner(t, "image_version = \"260416\"\n")
+		require.NotNil(t, config.PartnerService.ImageVersion)
+		assert.Equal(t, "260416", *config.PartnerService.ImageVersion)
+	})
+
+	t.Run("image_version coexists with other partner keys", func(t *testing.T) {
+		config := loadPartner(t, "port = 8080\nimage_version = \"260416\"\n")
+		require.NotNil(t, config.PartnerService.ImageVersion)
+		assert.Equal(t, "260416", *config.PartnerService.ImageVersion)
+		require.NotNil(t, config.PartnerService.Port)
+		assert.Equal(t, 8080, *config.PartnerService.Port)
+	})
+
+	t.Run("payload carries imageVersion when set", func(t *testing.T) {
+		config := loadPartner(t, "image_version = \"260416\"\n")
+		payload := config.ToPayload()
+		assert.Equal(t, "deepgram", payload["partnerService"])
+		assert.Equal(t, "260416", payload["imageVersion"])
+	})
+
+	t.Run("payload omits imageVersion when unset", func(t *testing.T) {
+		payload := loadPartner(t, "").ToPayload()
+		_, present := payload["imageVersion"]
+		assert.False(t, present)
+	})
+
+	t.Run("payload carries imageVersion alongside custom runtime", func(t *testing.T) {
+		version := "260416"
+		pc := &ProjectConfig{
+			Deployment:     DeploymentConfig{Name: "test-deepgram"},
+			CustomRuntime:  &CustomRuntimeConfig{Port: 8080},
+			PartnerService: &PartnerServiceConfig{Name: "deepgram", ImageVersion: &version},
+		}
+		assert.Equal(t, "260416", pc.ToPayload()["imageVersion"])
+	})
+}

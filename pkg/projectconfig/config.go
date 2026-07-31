@@ -110,10 +110,11 @@ type CustomRuntimeConfig struct {
 
 // PartnerServiceConfig represents partner service configurations
 type PartnerServiceConfig struct {
-	Name      string  `mapstructure:"name" toml:"name,omitempty"`
-	Port      *int    `mapstructure:"port" toml:"port,omitempty"`
-	ModelName *string `mapstructure:"model_name" toml:"model_name,omitempty"`
-	Language  *string `mapstructure:"language" toml:"language,omitempty"`
+	Name         string  `mapstructure:"name" toml:"name,omitempty"`
+	Port         *int    `mapstructure:"port" toml:"port,omitempty"`
+	ModelName    *string `mapstructure:"model_name" toml:"model_name,omitempty"`
+	Language     *string `mapstructure:"language" toml:"language,omitempty"`
+	ImageVersion *string `mapstructure:"image_version" toml:"image_version,omitempty"`
 }
 
 // ToPayload converts the project config to an API payload
@@ -219,6 +220,9 @@ func (pc *ProjectConfig) ToPayload() map[string]any {
 		if pc.PartnerService.Language != nil {
 			payload["language"] = *pc.PartnerService.Language
 		}
+		if pc.PartnerService.ImageVersion != nil {
+			payload["imageVersion"] = *pc.PartnerService.ImageVersion
+		}
 	} else if pc.CustomRuntime != nil {
 		// Custom runtime only
 		addCustomRuntimePayload(payload, pc.CustomRuntime)
@@ -235,6 +239,9 @@ func (pc *ProjectConfig) ToPayload() map[string]any {
 		}
 		if pc.PartnerService.Language != nil {
 			payload["language"] = *pc.PartnerService.Language
+		}
+		if pc.PartnerService.ImageVersion != nil {
+			payload["imageVersion"] = *pc.PartnerService.ImageVersion
 		}
 	} else {
 		// Default cortex runtime
