@@ -2,7 +2,6 @@ package commands
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -24,6 +23,7 @@ import (
 	"github.com/cerebriumai/cerebrium/internal/api"
 	"github.com/cerebriumai/cerebrium/internal/auth"
 	"github.com/cerebriumai/cerebrium/internal/files"
+	"github.com/cerebriumai/cerebrium/internal/neterr"
 	"github.com/cerebriumai/cerebrium/internal/ui"
 	"github.com/cerebriumai/cerebrium/internal/ui/logging"
 	"github.com/cerebriumai/cerebrium/internal/version"
@@ -1104,8 +1104,11 @@ func (m *DeployView) uploadZipWithProgress() error {
 	// Use a longer timeout for uploads (30 minutes for large files)
 	uploadClient := &http.Client{Timeout: 30 * time.Minute}
 
+	const op = "upload build artifact"
 	const maxAttempts = 3
 	const retryDelay = 2 * time.Second
+
+	uploadURL := m.appResponse.UploadURL
 
 	return retry.Do(
 		func() error {
@@ -1122,25 +1125,24 @@ func (m *DeployView) uploadZipWithProgress() error {
 			}
 
 			// Create PUT request with context
-			req, err := http.NewRequestWithContext(m.ctx, "PUT", m.appResponse.UploadURL, progressReader)
+			req, err := http.NewRequestWithContext(m.ctx, "PUT", uploadURL, progressReader)
 			if err != nil {
-				return retry.Unrecoverable(fmt.Errorf("failed to create upload request: %w", err))
+				return retry.Unrecoverable(neterr.Wrap(op, uploadURL, err))
 			}
 			req.Header.Set("Content-Type", "application/zip")
 			req.ContentLength = fileInfo.Size()
 
 			resp, err := uploadClient.Do(req)
 			if err != nil {
-				return fmt.Errorf("upload failed: %w", err)
+				// Without this the error would render as the whole presigned
+				// URL — signature included — followed by the real cause.
+				return neterr.Wrap(op, uploadURL, err)
 			}
 			defer resp.Body.Close() //nolint:errcheck // Deferred close, error not actionable
 
 			if resp.StatusCode != 200 {
 				body, _ := io.ReadAll(resp.Body)
-				if resp.StatusCode >= 400 && resp.StatusCode < 500 {
-					return retry.Unrecoverable(fmt.Errorf("upload failed with status %d: %s", resp.StatusCode, string(body)))
-				}
-				return fmt.Errorf("upload failed with status %d: %s", resp.StatusCode, string(body))
+				return neterr.NewStatusError(op, uploadURL, resp.StatusCode, body)
 			}
 
 			return nil
@@ -1149,9 +1151,10 @@ func (m *DeployView) uploadZipWithProgress() error {
 		retry.Attempts(maxAttempts),
 		retry.Delay(retryDelay),
 		retry.DelayType(retry.BackOffDelay),
-		retry.RetryIf(func(err error) bool {
-			return !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded)
-		}),
+		retry.LastErrorOnly(true),
+		// Retry only what a retry can fix: not cancellation, and not a 4xx such
+		// as an expired upload link, which would fail identically every time.
+		retry.RetryIf(neterr.Retryable),
 		retry.OnRetry(func(n uint, err error) {
 			slog.Warn("Retrying zip upload", "attempt", n+1, "maxAttempts", maxAttempts, "error", err)
 		}),

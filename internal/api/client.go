@@ -23,6 +23,7 @@ import (
 	"github.com/avast/retry-go/v4"
 	"github.com/bugsnag/bugsnag-go/v2"
 	"github.com/cerebriumai/cerebrium/internal/auth"
+	"github.com/cerebriumai/cerebrium/internal/neterr"
 	"github.com/cerebriumai/cerebrium/internal/version"
 	cerebrium_bugsnag "github.com/cerebriumai/cerebrium/pkg/bugsnag"
 	"github.com/cerebriumai/cerebrium/pkg/config"
@@ -44,6 +45,27 @@ func NewClient(cfg *config.Config) (Client, error) {
 			Timeout: 30 * time.Second,
 		},
 	}, nil
+}
+
+// dumpForLog renders a request for debug logging with credentials removed.
+//
+// Two things must never reach the debug log, which is a plain file in the
+// system temp directory: the bearer token in the Authorization header, and the
+// request body — `secrets` payloads pass user secrets through here. So the
+// header is replaced and the body is omitted entirely.
+func dumpForLog(req *http.Request) string {
+	clone := req.Clone(req.Context())
+	if clone.Header.Get("Authorization") != "" {
+		clone.Header.Set("Authorization", "Bearer <redacted>")
+	}
+
+	// body=false: dumping the body would also consume the reader shared with
+	// the request we are about to send.
+	dump, err := httputil.DumpRequestOut(clone, false)
+	if err != nil {
+		return ""
+	}
+	return neterr.Scrub(string(dump))
 }
 
 // getAuthToken retrieves the authentication token (service account or user token)
@@ -156,8 +178,7 @@ func (c *client) request(ctx context.Context, method, path string, body any, req
 				req.Header.Set("Authorization", "Bearer "+token)
 			}
 
-			reqStr, _ := httputil.DumpRequestOut(req, true)
-			slog.Debug("API request", "req", string(reqStr))
+			slog.Debug("API request", "req", dumpForLog(req))
 
 			// Make request
 			startTime := time.Now()
@@ -165,14 +186,15 @@ func (c *client) request(ctx context.Context, method, path string, body any, req
 			duration := time.Since(startTime)
 
 			if err != nil {
+				wrapped := neterr.Wrap(method+" "+path, reqURL, err)
 				slog.Warn("HTTP request failed",
-					"error", err,
+					"error", wrapped,
 					"method", method,
 					"path", path,
 					"duration", duration,
 					"attempt", attempt,
 				)
-				return fmt.Errorf("request failed: %w", err)
+				return wrapped
 			}
 			defer resp.Body.Close() //nolint:errcheck // Deferred close, error not actionable
 
@@ -457,83 +479,6 @@ func (c *client) CreatePartnerApp(ctx context.Context, projectID string, payload
 	return &response, nil
 }
 
-// UploadZip uploads a zip file to the given URL
-func (c *client) UploadZip(ctx context.Context, uploadURL string, zipPath string) error {
-	slog.Debug("Starting zip upload", "zipPath", zipPath, "uploadURL", uploadURL)
-
-	// Open the zip file
-	file, err := os.Open(zipPath) //nolint:gosec // File path from user input (deployment artifact)
-	if err != nil {
-		slog.Error("Failed to open zip file", "error", err, "path", zipPath)
-		return fmt.Errorf("failed to open zip file: %w", err)
-	}
-	defer file.Close() //nolint:errcheck // Deferred close, error not actionable
-
-	// Get file info for size
-	fileInfo, err := file.Stat()
-	if err != nil {
-		slog.Error("Failed to stat zip file", "error", err, "path", zipPath)
-		return fmt.Errorf("failed to stat zip file: %w", err)
-	}
-
-	slog.Info("Uploading zip file", "size", fileInfo.Size(), "path", zipPath)
-
-	const maxAttempts = 3
-	const retryDelay = 2 * time.Second
-
-	err = retry.Do(
-		func() error {
-			// Seek to start so each attempt reads the full file
-			if _, seekErr := file.Seek(0, io.SeekStart); seekErr != nil {
-				return retry.Unrecoverable(fmt.Errorf("failed to seek zip file: %w", seekErr))
-			}
-
-			// Create PUT request with context
-			req, err := http.NewRequestWithContext(ctx, "PUT", uploadURL, file)
-			if err != nil {
-				return retry.Unrecoverable(fmt.Errorf("failed to create upload request: %w", err))
-			}
-			req.Header.Set("Content-Type", "application/zip")
-			req.ContentLength = fileInfo.Size()
-
-			// Execute request
-			startTime := time.Now()
-			resp, err := c.httpClient.Do(req)
-			duration := time.Since(startTime)
-
-			if err != nil {
-				slog.Error("Zip upload request failed", "error", err, "duration", duration)
-				return fmt.Errorf("upload failed: %w", err)
-			}
-			defer resp.Body.Close() //nolint:errcheck // Deferred close, error not actionable
-
-			if resp.StatusCode != 200 {
-				body, _ := io.ReadAll(resp.Body)
-				slog.Error("Zip upload failed", "statusCode", resp.StatusCode, "response", string(body), "duration", duration)
-				// Don't retry on client errors (4xx)
-				if resp.StatusCode >= 400 && resp.StatusCode < 500 {
-					return retry.Unrecoverable(fmt.Errorf("upload failed with status %d: %s", resp.StatusCode, string(body)))
-				}
-				return fmt.Errorf("upload failed with status %d: %s", resp.StatusCode, string(body))
-			}
-
-			slog.Info("Zip upload successful", "size", fileInfo.Size(), "duration", duration)
-			return nil
-		},
-		retry.Context(ctx),
-		retry.Attempts(maxAttempts),
-		retry.Delay(retryDelay),
-		retry.DelayType(retry.BackOffDelay),
-		retry.RetryIf(func(err error) bool {
-			return !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded)
-		}),
-		retry.OnRetry(func(n uint, err error) {
-			slog.Warn("Retrying zip upload", "attempt", n+1, "maxAttempts", maxAttempts, "error", err)
-		}),
-	)
-	return err
-}
-
 // FetchBuildLogs retrieves build logs for a specific build
 func (c *client) FetchBuildLogs(ctx context.Context, projectID, appName, buildID string) (*BuildLogsResponse, error) {
 	path := fmt.Sprintf("v2/projects/%s/apps/%s-%s/builds/%s/logs", projectID, projectID, appName, buildID)
@@ -694,14 +639,21 @@ func (c *client) InitiateUpload(ctx context.Context, projectID, filePath, region
 	return &response, nil
 }
 
-// UploadPart uploads a single part and returns the ETag
+// UploadPart uploads a single part to its presigned URL and returns the ETag.
+//
+// Errors are returned as *neterr.Error or *neterr.StatusError so callers can
+// tell a retryable fault from a terminal one, and so no presigned URL — which
+// carries live credentials in its query string — reaches a log or a terminal.
 func (c *client) UploadPart(ctx context.Context, url string, data []byte) (string, error) {
-	slog.Debug("Uploading part", "size", len(data), "url", url)
+	const op = "upload part"
+
+	// Only ever log the redacted form.
+	redacted := neterr.RedactURL(url)
+	slog.Debug("Uploading part", "size", len(data), "url", redacted)
 
 	req, err := http.NewRequestWithContext(ctx, "PUT", url, bytes.NewReader(data))
 	if err != nil {
-		slog.Error("Failed to create part upload request", "error", err)
-		return "", fmt.Errorf("failed to create upload request: %w", err)
+		return "", neterr.Wrap(op, url, err)
 	}
 
 	req.Header.Set("Content-Type", "application/octet-stream")
@@ -717,20 +669,23 @@ func (c *client) UploadPart(ctx context.Context, url string, data []byte) (strin
 	duration := time.Since(startTime)
 
 	if err != nil {
-		slog.Error("Part upload failed", "error", err, "size", len(data), "duration", duration)
-		return "", fmt.Errorf("upload failed: %w", err)
+		wrapped := neterr.Wrap(op, url, err)
+		slog.Error("Part upload failed", "error", wrapped, "size", len(data), "duration", duration, "url", redacted)
+		return "", wrapped
 	}
 	defer resp.Body.Close() //nolint:errcheck // Deferred close, error not actionable
 
 	if resp.StatusCode != 200 {
 		body, _ := io.ReadAll(resp.Body)
+		statusErr := neterr.NewStatusError(op, url, resp.StatusCode, body)
 		slog.Error("Part upload failed",
 			"statusCode", resp.StatusCode,
-			"response", string(body),
+			"response", statusErr.Body,
 			"size", len(data),
 			"duration", duration,
+			"url", redacted,
 		)
-		return "", fmt.Errorf("upload failed with status %d: %s", resp.StatusCode, string(body))
+		return "", statusErr
 	}
 
 	etag := resp.Header.Get("ETag")
