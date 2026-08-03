@@ -30,7 +30,7 @@ func (s volumeSession) Complete(ctx context.Context, uploadID string, parts []ap
 
 // uploadSingleFile uploads one file to persistent storage as a multipart upload.
 func (m *FileUploadView) uploadSingleFile(file fileToUpload, atomicCounter *atomic.Int64) (int64, error) {
-	f, err := os.Open(file.localPath) //nolint:gosec // Path comes from the user's own upload argument
+	f, err := os.Open(file.localPath)
 	if err != nil {
 		return 0, fmt.Errorf("failed to open file: %w", err)
 	}

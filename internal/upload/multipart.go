@@ -54,7 +54,8 @@ type Options struct {
 	// it can be replayed on retry.
 	Concurrency int
 	// MaxAttempts is the total number of tries per part, including the first.
-	MaxAttempts int
+	// Unsigned so it can be handed straight to retry.Attempts.
+	MaxAttempts uint
 	// RetryDelay is the base delay for exponential backoff between attempts.
 	RetryDelay time.Duration
 	// Progress, when non-nil, accumulates bytes as parts complete.
@@ -70,7 +71,7 @@ func (o Options) withDefaults() Options {
 	if o.Concurrency <= 0 {
 		o.Concurrency = DefaultConcurrency
 	}
-	if o.MaxAttempts <= 0 {
+	if o.MaxAttempts == 0 {
 		o.MaxAttempts = DefaultMaxAttempts
 	}
 	if o.RetryDelay <= 0 {
@@ -187,7 +188,7 @@ func uploadOnePart(
 			return err
 		},
 		retry.Context(ctx),
-		retry.Attempts(uint(opts.MaxAttempts)),
+		retry.Attempts(opts.MaxAttempts),
 		retry.Delay(opts.RetryDelay),
 		retry.DelayType(retry.BackOffDelay),
 		retry.LastErrorOnly(true),
