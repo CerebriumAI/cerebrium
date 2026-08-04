@@ -48,7 +48,7 @@ func runLogin(cmd *cobra.Command, args []string) error {
 	// For login, we need TTY for OAuth flow
 	// In non-TTY environments, users should use service account tokens
 	if !isatty.IsTerminal(os.Stdout.Fd()) {
-		return fmt.Errorf("login requires an interactive terminal. For non-interactive authentication, use service account tokens via the CEREBRIUM_SERVICE_ACCOUNT environment variable")
+		return fmt.Errorf("login requires an interactive terminal. For non-interactive authentication, use a service account token via the CEREBRIUM_SERVICE_ACCOUNT_TOKEN environment variable or the --service-account-token flag")
 	}
 
 	// Create API client for the login flow

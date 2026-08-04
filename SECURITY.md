@@ -134,7 +134,7 @@ cerebrium version
 
 ### Service Account Tokens
 
-- Supported via `CEREBRIUM_SERVICE_ACCOUNT` environment variable
+- Supported via `CEREBRIUM_SERVICE_ACCOUNT_TOKEN` environment variable
 - Checked before OAuth tokens (auth/service_account.go)
 - Not persisted to disk
 
