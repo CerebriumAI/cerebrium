@@ -3,7 +3,10 @@ package commands
 import (
 	"context"
 	"errors"
+	"io"
+	"strings"
 	"testing"
+	"testing/iotest"
 
 	"github.com/cerebriumai/cerebrium/internal/api"
 	apimock "github.com/cerebriumai/cerebrium/internal/api/mock"
@@ -1052,4 +1055,70 @@ func TestDeployView_View(t *testing.T) {
 		// When cancelled without error, view shows "Deployment cancelled"
 		assert.Contains(t, view, "cancelled")
 	})
+}
+
+func TestReadConfirmationResponse(t *testing.T) {
+	tcs := []struct {
+		name      string
+		input     io.Reader
+		confirmed bool
+	}{
+		{
+			name:      "explicit yes",
+			input:     strings.NewReader("y\n"),
+			confirmed: true,
+		},
+		{
+			name:      "explicit yes uppercase",
+			input:     strings.NewReader("Y\n"),
+			confirmed: true,
+		},
+		{
+			name:      "explicit yes word",
+			input:     strings.NewReader("yes\n"),
+			confirmed: true,
+		},
+		{
+			name:      "yes without trailing newline",
+			input:     strings.NewReader("y"),
+			confirmed: true,
+		},
+		{
+			name:      "empty line defaults to yes",
+			input:     strings.NewReader("\n"),
+			confirmed: true,
+		},
+		{
+			name:      "whitespace-only line defaults to yes",
+			input:     strings.NewReader("   \n"),
+			confirmed: true,
+		},
+		{
+			name:      "explicit no",
+			input:     strings.NewReader("n\n"),
+			confirmed: false,
+		},
+		{
+			name:      "any other input declines",
+			input:     strings.NewReader("maybe\n"),
+			confirmed: false,
+		},
+		{
+			name:      "EOF with no input declines",
+			input:     strings.NewReader(""),
+			confirmed: false,
+		},
+		{
+			name:      "read error declines",
+			input:     iotest.ErrReader(errors.New("stdin read failure")),
+			confirmed: false,
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			msg := readConfirmationResponse(tc.input)
+			assert.Equal(t, tc.confirmed, msg.confirmed)
+		})
+	}
 }
