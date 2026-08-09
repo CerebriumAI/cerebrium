@@ -22,7 +22,8 @@ func NewLsCmd() *cobra.Command {
 Examples:
   cerebrium ls                    # List all files in the root directory
   cerebrium ls sub_folder/        # List all files in a specific directory
-  cerebrium ls --region us-west-2 # List files in a specific region`,
+  cerebrium ls --region us-west-2 # List files in a specific region
+  cerebrium ls --region global    # List files in global storage`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runLs(cmd, args, region)

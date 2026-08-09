@@ -24,7 +24,8 @@ func NewDownloadCmd() *cobra.Command {
 Examples:
   cerebrium download remote_file.txt                  # Download to ./remote_file.txt
   cerebrium download remote.txt local.txt             # Download to ./local.txt
-  cerebrium download file.txt --region us-west-2      # Download from specific region`,
+  cerebrium download file.txt --region us-west-2      # Download from specific region
+  cerebrium download file.txt --region global         # Download from global storage`,
 		Args: cobra.RangeArgs(1, 2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runDownload(cmd, args, region)
