@@ -22,6 +22,52 @@ const exampleMain = `def run(prompt: str):
 # cerebrium deploy
 `
 
+// agentsTemplate is written to AGENTS.md. Coding agents read this file at the
+// start of a session without being asked, which is the only reliable way they
+// learn the CLI has commands worth running after a deploy — they do not go
+// looking through --help for capabilities they have no reason to expect.
+const agentsTemplate = `# %[1]s
+
+A Cerebrium app. ` + "`main.py`" + ` holds the functions that get served; ` + "`cerebrium.toml`" + ` declares
+hardware, scaling and dependencies.
+
+## Deploying
+
+    cerebrium deploy
+
+A deploy builds a new image and rolls it out. It takes minutes, not seconds, and
+the app is not serving the new code until it finishes.
+
+## Checking a deploy worked
+
+Do not assume a deploy is live because the command exited 0. Verify it:
+
+    cerebrium containers list %[1]s     # what is running right now
+    cerebrium logs %[1]s                # runtime logs
+    cerebrium runs list %[1]s           # recent invocations and their status
+    cerebrium apps get %[1]s            # configured hardware, scaling, build status
+
+Every command above accepts ` + "`--output json`" + ` for machine-readable output. Prefer it
+over parsing the table format.
+
+## Right-sizing the hardware
+
+    cerebrium metrics resources %[1]s --since 24h
+
+Reports peak CPU (cores), memory (GB) and GPU memory (GB) over the window, so you
+can compare against ` + "`[cerebrium.hardware]`" + ` in cerebrium.toml and adjust. A metric
+that reports ` + "`-`" + ` had no samples in the window, which is not the same as zero.
+
+## Things that surprise people
+
+- ` + "`min_replicas = 0`" + ` scales the app to zero when idle, so the first request after a
+  quiet period pays a cold start. ` + "`cerebrium containers list`" + ` returning nothing is
+  normal for an idle app, not a failed deploy.
+- Secrets belong in ` + "`cerebrium secrets`" + `, never in cerebrium.toml — that file is
+  committed and uploaded with the build.
+- Changing ` + "`[cerebrium.hardware]`" + ` or dependencies requires a redeploy to take effect.
+`
+
 // NewInitCmd creates a new init command
 func NewInitCmd() *cobra.Command {
 	var dir string
@@ -101,6 +147,7 @@ func runInit(cmd *cobra.Command, name string, dir string) error {
 	projectPath := filepath.Join(dir, name)
 	tomlPath := filepath.Join(projectPath, "cerebrium.toml")
 	mainPath := filepath.Join(projectPath, "main.py")
+	agentsPath := filepath.Join(projectPath, "AGENTS.md")
 
 	// Verify the resulting path is safe (no path traversal)
 	absDir, err := filepath.Abs(dir)
@@ -143,6 +190,13 @@ func runInit(cmd *cobra.Command, name string, dir string) error {
 	// Create cerebrium.toml with sensible defaults
 	if err := createDefaultConfig(tomlPath, name); err != nil {
 		return ui.NewFileSystemError(fmt.Errorf("failed to create cerebrium.toml: %w", err))
+	}
+
+	// Create AGENTS.md so coding agents working in this project know how to
+	// verify a deploy and size the hardware
+	agentsContent := fmt.Sprintf(agentsTemplate, name)
+	if err := os.WriteFile(agentsPath, []byte(agentsContent), 0644); err != nil { //nolint:gosec // Project files need to be readable
+		return ui.NewFileSystemError(fmt.Errorf("failed to create AGENTS.md: %w", err))
 	}
 
 	fmt.Println("Cerebrium Cortex project initialized successfully!")

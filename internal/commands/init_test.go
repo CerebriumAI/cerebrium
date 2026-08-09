@@ -43,6 +43,17 @@ func TestRunInit(t *testing.T) {
 				assert.Contains(t, string(mainContent), "Running on Cerebrium")
 				assert.Contains(t, string(mainContent), "cerebrium deploy")
 
+				// Check AGENTS.md exists and names the commands an agent needs after a deploy
+				agentsPath := filepath.Join(projectPath, "AGENTS.md")
+				agentsContent, err := os.ReadFile(agentsPath)
+				require.NoError(t, err)
+				assert.Contains(t, string(agentsContent), "# "+projectName)
+				assert.Contains(t, string(agentsContent), "cerebrium containers list "+projectName)
+				assert.Contains(t, string(agentsContent), "cerebrium metrics resources "+projectName)
+				assert.Contains(t, string(agentsContent), "--output json")
+				// A stray format verb would ship a broken file to every new project
+				assert.NotContains(t, string(agentsContent), "%!")
+
 				// Check requirements.txt does NOT exist (dependencies are in cerebrium.toml)
 				requirementsPath := filepath.Join(projectPath, "requirements.txt")
 				_, err = os.Stat(requirementsPath)

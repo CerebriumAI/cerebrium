@@ -103,6 +103,40 @@ type DeployView struct {
 }
 
 // NewDeployView creates a new deploy view
+// nextStepLines renders the commands worth running once an app is live. A deploy
+// exiting 0 only means the build succeeded, so the useful next move is to check
+// what is actually running and how much hardware it is using.
+func nextStepLines(appName string, colorize bool) []string {
+	steps := []struct {
+		command     string
+		description string
+	}{
+		{fmt.Sprintf("cerebrium logs %s", appName), "stream runtime logs"},
+		{fmt.Sprintf("cerebrium containers list %s", appName), "see what is running"},
+		{fmt.Sprintf("cerebrium metrics resources %s", appName), "check CPU, memory and GPU usage"},
+	}
+
+	width := 0
+	for _, step := range steps {
+		if len(step.command) > width {
+			width = len(step.command)
+		}
+	}
+
+	lines := make([]string, 0, len(steps))
+	for _, step := range steps {
+		// Pad against the uncoloured length; escape codes would skew a %-*s width
+		padding := strings.Repeat(" ", width-len(step.command))
+		command := step.command
+		if colorize {
+			command = ui.CyanStyle.Render(command)
+		}
+		lines = append(lines, "  "+command+padding+"  "+step.description)
+	}
+
+	return lines
+}
+
 func NewDeployView(ctx context.Context, conf DeployConfig) *DeployView {
 	initialState := StateConfirmation
 	isPartnerDeploy := conf.Config.PartnerService != nil
@@ -518,30 +552,43 @@ func (m *DeployView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.status == "success" || msg.status == "ready" {
 			m.state = StateDeploySuccess
 
+			appName := m.conf.Config.Deployment.Name
+
 			if m.conf.SimpleOutput() {
 				fmt.Println("✓ Build complete!")
 				fmt.Println()
-				fmt.Printf("✓ %s is now live!\n", m.conf.Config.Deployment.Name)
+				fmt.Printf("✓ %s is now live!\n", appName)
 				fmt.Println()
 				fmt.Printf("App Dashboard: %s\n", m.appResponse.DashboardURL)
 				fmt.Println("\nEndpoint:")
 				fmt.Printf("POST %s/{function_name}\n", m.appResponse.InternalEndpoint)
+				fmt.Println("\nNext steps:")
+				for _, line := range nextStepLines(appName, false) {
+					fmt.Println(line)
+				}
 				return m, tea.Quit
 			}
 
 			// Print success message to scrollback in interactive mode
-			return m, tea.Sequence(
+			lines := []tea.Cmd{
 				tea.Println(""),
 				tea.Println(ui.SuccessStyle.Render("✓  Built app")),
 				tea.Println(""),
-				tea.Println(ui.GreenStyle.Render(fmt.Sprintf("✓ %s is now live!", m.conf.Config.Deployment.Name))),
+				tea.Println(ui.GreenStyle.Render(fmt.Sprintf("✓ %s is now live!", appName))),
 				tea.Println(""),
 				tea.Println(fmt.Sprintf("App Dashboard: %s", m.appResponse.DashboardURL)),
 				tea.Println(""),
 				tea.Println("Endpoint:"),
-				tea.Println(ui.CyanStyle.Render("POST")+" "+m.appResponse.InternalEndpoint+"/{function_name}"),
-				tea.Quit,
-			)
+				tea.Println(ui.CyanStyle.Render("POST") + " " + m.appResponse.InternalEndpoint + "/{function_name}"),
+				tea.Println(""),
+				tea.Println("Next steps:"),
+			}
+			for _, line := range nextStepLines(appName, true) {
+				lines = append(lines, tea.Println(line))
+			}
+			lines = append(lines, tea.Quit)
+
+			return m, tea.Sequence(lines...)
 		} else {
 			m.state = StateDeployError
 			err := ui.NewAPIError(fmt.Errorf("build failed with status: %s", msg.status))
