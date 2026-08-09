@@ -26,7 +26,8 @@ Examples:
   cerebrium secrets list                       # List project secrets (names only)
   cerebrium secrets list --show-values         # List project secrets with values
   cerebrium secrets list --app my-app          # List app-specific secrets
-  cerebrium secrets list --app my-app --show-values`,
+  cerebrium secrets list --app my-app --show-values
+  cerebrium secrets list --output json`,
 		Aliases: []string{"ls"},
 		Args:    cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -36,12 +37,25 @@ Examples:
 
 	cmd.Flags().BoolVar(&showValues, "show-values", false, "Show secret values (hidden by default)")
 	cmd.Flags().StringVar(&appID, "app", "", "App ID to list secrets for (if not specified, lists project secrets)")
+	ui.AddOutputFlag(cmd)
 
 	return cmd
 }
 
+// jsonSecret omits Value unless --show-values was passed, so JSON output leaks no
+// more than the table does.
+type jsonSecret struct {
+	Name  string  `json:"name"`
+	Value *string `json:"value,omitempty"`
+}
+
 func runList(cmd *cobra.Command, showValues bool, appID string) error {
 	cmd.SilenceUsage = true
+
+	outputFormat, err := ui.ParseOutputFormat(cmd)
+	if err != nil {
+		return err
+	}
 
 	// Load config
 	cfg, err := config.GetConfigFromContext(cmd)
@@ -66,7 +80,7 @@ func runList(cmd *cobra.Command, showValues bool, appID string) error {
 	if appID != "" {
 		spinnerMsg = fmt.Sprintf("Loading secrets for app %s...", appID)
 	}
-	spinner := ui.NewSimpleSpinner(spinnerMsg)
+	spinner := ui.NewSimpleSpinnerFor(outputFormat, spinnerMsg)
 	spinner.Start()
 
 	// Fetch secrets (project or app level)
@@ -82,18 +96,31 @@ func runList(cmd *cobra.Command, showValues bool, appID string) error {
 		return ui.NewAPIError(err)
 	}
 
-	// Handle empty secrets
-	if len(secrets) == 0 {
-		fmt.Println("No secrets found")
-		return nil
-	}
-
 	// Sort keys for consistent output
 	keys := make([]string, 0, len(secrets))
 	for k := range secrets {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
+
+	if outputFormat == ui.OutputJSON {
+		out := make([]jsonSecret, 0, len(keys))
+		for _, key := range keys {
+			entry := jsonSecret{Name: key}
+			if showValues {
+				value := secrets[key]
+				entry.Value = &value
+			}
+			out = append(out, entry)
+		}
+		return ui.PrintJSON(out)
+	}
+
+	// Handle empty secrets
+	if len(secrets) == 0 {
+		fmt.Println("No secrets found")
+		return nil
+	}
 
 	// Calculate max key width for alignment
 	maxKeyWidth := len("NAME")

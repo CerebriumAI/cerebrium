@@ -21,7 +21,8 @@ func newListCmd() *cobra.Command {
 
 Examples:
   cerebrium runs list myapp
-  cerebrium runs list myapp --async  # Only show async runs`,
+  cerebrium runs list myapp --async  # Only show async runs
+  cerebrium runs list myapp --output json`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runList(cmd, args[0], asyncOnly)
@@ -29,12 +30,18 @@ Examples:
 	}
 
 	cmd.Flags().BoolVar(&asyncOnly, "async", false, "Only list runs that were executed asynchronously")
+	ui.AddOutputFlag(cmd)
 
 	return cmd
 }
 
 func runList(cmd *cobra.Command, appName string, asyncOnly bool) error {
 	cmd.SilenceUsage = true
+
+	outputFormat, err := ui.ParseOutputFormat(cmd)
+	if err != nil {
+		return err
+	}
 
 	// Get config from context
 	cfg, err := config.GetConfigFromContext(cmd)
@@ -58,7 +65,7 @@ func runList(cmd *cobra.Command, appName string, asyncOnly bool) error {
 	appID := normalizeAppID(projectID, appName)
 
 	// Show spinner while fetching
-	spinner := ui.NewSimpleSpinner("Loading runs...")
+	spinner := ui.NewSimpleSpinnerFor(outputFormat, "Loading runs...")
 	spinner.Start()
 
 	// Fetch runs
@@ -72,6 +79,10 @@ func runList(cmd *cobra.Command, appName string, asyncOnly bool) error {
 	sort.Slice(runs, func(i, j int) bool {
 		return runs[i].CreatedAt.After(runs[j].CreatedAt)
 	})
+
+	if outputFormat == ui.OutputJSON {
+		return ui.PrintJSON(runs)
+	}
 
 	// Print results
 	if len(runs) == 0 {

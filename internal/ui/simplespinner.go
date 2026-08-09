@@ -28,8 +28,21 @@ func NewSimpleSpinner(message string) *SimpleSpinner {
 	}
 }
 
+// NewSimpleSpinnerFor creates a spinner for human-facing output. It returns nil for
+// JSON output so no animation frames land in the stream carrying the payload.
+func NewSimpleSpinnerFor(outputFormat, message string) *SimpleSpinner {
+	if outputFormat == OutputJSON {
+		return nil
+	}
+	return NewSimpleSpinner(message)
+}
+
 // Start begins the spinner animation
 func (s *SimpleSpinner) Start() {
+	if s == nil {
+		return
+	}
+
 	// Only show spinner if stdout is a TTY
 	if !isatty.IsTerminal(os.Stdout.Fd()) {
 		close(s.done)
@@ -60,6 +73,10 @@ func (s *SimpleSpinner) Start() {
 
 // Stop stops the spinner animation
 func (s *SimpleSpinner) Stop() {
+	if s == nil {
+		return
+	}
+
 	close(s.stop)
 	<-s.done
 }
