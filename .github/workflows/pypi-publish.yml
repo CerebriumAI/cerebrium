@@ -1,8 +1,17 @@
-name: Publish to PyPI
+name: Publish to PyPI (reusable)
 
 on:
-  release:
-    types: [published]
+  workflow_call:
+    inputs:
+      tag:
+        description: "Release tag (e.g. v2.5.2 or 2.5.2)."
+        required: true
+        type: string
+      dry-run:
+        description: "Dry run: build the wheel and run twine check, but do not publish to PyPI."
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   id-token: write # Required for OIDC trusted publishing
@@ -15,6 +24,47 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v5
 
+      # Defence in depth: refuse to publish the wrapper unless the binaries it
+      # downloads at runtime exist on the release. The orchestrator already
+      # orders this after the build, so this should pass immediately — but it
+      # keeps this workflow safe to call in any order.
+      - name: Verify release binaries exist
+        if: ${{ !inputs.dry-run }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          TAG="v${TAG#v}"
+          REQUIRED=(
+            checksums.txt
+            cerebrium_cli_darwin_amd64.tar.gz
+            cerebrium_cli_darwin_arm64.tar.gz
+            cerebrium_cli_linux_amd64.tar.gz
+            cerebrium_cli_linux_arm64.tar.gz
+            cerebrium_cli_windows_amd64.zip
+            cerebrium_cli_windows_arm64.zip
+          )
+          DEADLINE=$(( SECONDS + 300 ))
+          while :; do
+            ASSETS="$(gh release view "$TAG" --json assets --jq '.assets[].name' 2>/dev/null || true)"
+            MISSING=()
+            for a in "${REQUIRED[@]}"; do
+              grep -qx "$a" <<<"$ASSETS" || MISSING+=("$a")
+            done
+            if [ ${#MISSING[@]} -eq 0 ]; then
+              echo "All release binaries present for $TAG."
+              break
+            fi
+            if [ "$SECONDS" -ge "$DEADLINE" ]; then
+              echo "ERROR: release $TAG is missing binaries: ${MISSING[*]}" >&2
+              echo "Refusing to publish the PyPI wrapper for a release without binaries." >&2
+              exit 1
+            fi
+            echo "Waiting for binaries (missing: ${MISSING[*]})..."
+            sleep 15
+          done
+
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
@@ -26,10 +76,12 @@ jobs:
           pip install build twine
 
       - name: Update version in Python package
+        env:
+          TAG: ${{ inputs.tag }}
         run: |
+          set -euo pipefail
           # Get version from tag (e.g., "v2.1.0" or "v2.1.0-beta.1")
-          GITHUB_VERSION="${{ github.event.release.tag_name }}"
-          GITHUB_VERSION="${GITHUB_VERSION#v}"  # Remove 'v' prefix
+          GITHUB_VERSION="${TAG#v}"  # Remove 'v' prefix
 
           # Update VERSION in cerebrium_cli.py (stores GitHub/semver format)
           sed -i "s/^VERSION = \".*\"/VERSION = \"$GITHUB_VERSION\"/" python-wrapper/cerebrium_cli.py
@@ -58,13 +110,22 @@ jobs:
           twine check dist/*
 
       - name: Publish to PyPI
+        if: ${{ !inputs.dry-run }}
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: python-wrapper/dist/
           skip-existing: true
 
-      - name: Test installation from PyPI
+      - name: Dry run — skipping PyPI publish
+        if: ${{ inputs.dry-run }}
         run: |
+          echo "dry-run: built wheel and ran twine check; not publishing to PyPI."
+
+      - name: Test installation from PyPI
+        if: ${{ !inputs.dry-run }}
+        run: |
+          set -euo pipefail
+
           # Get the PEP 440 version for pip install
           cd python-wrapper
           PYPI_VERSION=$(python -c "from cerebrium_cli import __version__; print(__version__)")
@@ -74,31 +135,32 @@ jobs:
           python -m venv test_env
           source test_env/bin/activate
 
-          # Retry installation with exponential backoff
+          # Retry installation with exponential backoff (PyPI propagation lag)
           MAX_ATTEMPTS=5
-          ATTEMPT=1
           DELAY=30
-
-          while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
+          installed=false
+          for ATTEMPT in $(seq 1 "$MAX_ATTEMPTS"); do
             echo "Attempt $ATTEMPT of $MAX_ATTEMPTS..."
-
-            if pip install cerebrium==$PYPI_VERSION; then
-              echo "Successfully installed cerebrium $PYPI_VERSION from PyPI"
-
-              # Test that the wrapper runs (will download binary on first run)
-              echo "Testing cerebrium command..."
-              cerebrium version && echo "Binary download and execution successful!"
-              exit 0
-            else
-              if [ $ATTEMPT -lt $MAX_ATTEMPTS ]; then
-                echo "Package not yet available on PyPI. Waiting ${DELAY}s before retry..."
-                sleep $DELAY
-                DELAY=$((DELAY * 2))  # Exponential backoff
-              fi
+            if pip install "cerebrium==$PYPI_VERSION"; then
+              installed=true
+              break
             fi
-
-            ATTEMPT=$((ATTEMPT + 1))
+            if [ "$ATTEMPT" -lt "$MAX_ATTEMPTS" ]; then
+              echo "Package not yet available on PyPI. Waiting ${DELAY}s before retry..."
+              sleep "$DELAY"
+              DELAY=$((DELAY * 2))  # Exponential backoff
+            fi
           done
 
-          echo "ERROR: Failed to install cerebrium $PYPI_VERSION from PyPI after $MAX_ATTEMPTS attempts"
-          exit 1
+          if [ "$installed" != true ]; then
+            echo "ERROR: Failed to install cerebrium $PYPI_VERSION from PyPI after $MAX_ATTEMPTS attempts" >&2
+            exit 1
+          fi
+          echo "Successfully installed cerebrium $PYPI_VERSION from PyPI"
+
+          # Run the wrapper end-to-end: downloads the real binary + checksums
+          # from the GitHub release. A 404 / checksum failure MUST fail the job
+          # (set -e ensures it does — no swallowed exit code).
+          echo "Testing cerebrium command (downloads binary from release)..."
+          cerebrium version
+          echo "Binary download and execution successful!"

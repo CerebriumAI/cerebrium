@@ -2,14 +2,16 @@
 
 ## How It Works
 
-1. Create a GitHub release (e.g., `v2.1.0` or `v2.1.0-beta.1`)
-2. `.github/workflows/pypi-publish.yml` automatically:
+1. Run the `Release` workflow (`.github/workflows/release.yml`) with a version (e.g. `v2.1.0` or `v2.1.0-beta.1`). See [RELEASING.md](../RELEASING.md).
+2. After the binaries are built and verified on the GitHub release, the orchestrator calls `.github/workflows/pypi-publish.yml`, which:
    - Updates `VERSION` in `cerebrium_cli.py` (GitHub format: `2.1.0-beta.1`)
    - Updates `version` in `pyproject.toml` (PEP 440 format: `2.1.0b1`)
    - Builds and publishes to PyPI
    - Tests installation
 
-The pip package is a thin wrapper that downloads the Go binary on first run.
+The PyPI publish runs **only after** the binaries exist on the release, so the wrapper
+never ships pointing at missing binaries. The pip package is a thin wrapper that
+downloads the Go binary on first run.
 
 ## Version Formats
 

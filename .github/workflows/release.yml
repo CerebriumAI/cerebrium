@@ -1,0 +1,259 @@
+name: Release
+
+# Single entry point for cutting a release. One dispatch runs the whole
+# pipeline in order, in one place you can watch:
+#
+#   validate → test → tag → goreleaser → verify-assets → wrapper-smoke → pypi → promote
+#                                                                                 └ cleanup (on failure)
+#
+# The GitHub release is always created as a PRERELEASE; `promote` flips a stable
+# release to "Latest" only after every check passes. `dry-run` exercises the
+# whole pipeline for real (tag + prerelease release + binaries) but never
+# promotes and never publishes to PyPI/Homebrew.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release (e.g. v2.5.2 or 2.5.2). Leave blank to auto-bump the patch of the latest stable release."
+        required: false
+        type: string
+      commit:
+        description: "Commit SHA to release (defaults to main HEAD)"
+        required: false
+        type: string
+      skip-tests:
+        description: "Skip the test matrix (use only for re-runs of already-tested commits)"
+        required: false
+        default: false
+        type: boolean
+      dry-run:
+        description: "Dry run: build everything but publish nothing (no tag push, no GitHub release, no PyPI, no Homebrew). For testing the pipeline."
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+  packages: write
+  id-token: write
+
+jobs:
+  validate:
+    name: Validate
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.v.outputs.tag }}
+      version: ${{ steps.v.outputs.version }}
+      ref: ${{ steps.v.outputs.ref }}
+      sha: ${{ steps.v.outputs.sha }}
+      is_prerelease: ${{ steps.v.outputs.is_prerelease }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.inputs.commit || 'main' }}
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Normalize version, resolve commit, reject existing tag
+        id: v
+        run: |
+          set -euo pipefail
+          RAW="${{ github.event.inputs.version }}"
+          if [ -z "$RAW" ]; then
+            # No version given: bump the patch of the latest stable (vX.Y.Z) tag.
+            LATEST="$(git tag -l 'v[0-9]*' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n1 || true)"
+            if [ -z "$LATEST" ]; then
+              echo "ERROR: no version provided and no existing vX.Y.Z release tag to bump from" >&2
+              exit 1
+            fi
+            base="${LATEST#v}"
+            major="${base%%.*}"; rest="${base#*.}"
+            minor="${rest%%.*}"; patch="${rest#*.}"
+            TAG="v${major}.${minor}.$((patch + 1))"
+            echo "No version provided; bumping $LATEST -> $TAG"
+          else
+            TAG="v${RAW#v}"
+          fi
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "ERROR: '$TAG' is not a valid semver tag (expected vMAJOR.MINOR.PATCH[-prerelease])" >&2
+            exit 1
+          fi
+          if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+            echo "ERROR: tag $TAG already exists" >&2
+            exit 1
+          fi
+          SHA="$(git rev-parse HEAD)"
+          case "$TAG" in
+            *-*) PRERELEASE=true ;;   # has a semver prerelease suffix (-rc/-beta/...)
+            *)   PRERELEASE=false ;;
+          esac
+          {
+            echo "tag=$TAG"
+            echo "version=${TAG#v}"
+            echo "ref=refs/tags/$TAG"
+            echo "sha=$SHA"
+            echo "is_prerelease=$PRERELEASE"
+          } >> "$GITHUB_OUTPUT"
+          echo "Will release $TAG at $SHA (prerelease=$PRERELEASE)"
+
+  test:
+    name: Test
+    needs: [validate]
+    if: ${{ github.event.inputs.skip-tests != 'true' }}
+    uses: ./.github/workflows/test.yml
+    with:
+      ref: ${{ needs.validate.outputs.sha }}
+
+  tag:
+    name: Create tag
+    needs: [validate, test]
+    # Run once tests pass (or were skipped). The tag must exist before
+    # GoReleaser, which derives the version from it.
+    if: ${{ always() && needs.validate.result == 'success' && (needs.test.result == 'success' || needs.test.result == 'skipped') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.validate.outputs.sha }}
+          fetch-depth: 0
+
+      - name: Create and push annotated tag
+        env:
+          TAG: ${{ needs.validate.outputs.tag }}
+          SHA: ${{ needs.validate.outputs.sha }}
+        run: |
+          set -euo pipefail
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "$TAG" "$SHA"
+          git push origin "$TAG"
+          echo "Tagged $SHA as $TAG"
+
+  goreleaser:
+    name: Build & publish binaries
+    needs: [validate, tag]
+    uses: ./.github/workflows/deploy-release.yml
+    with:
+      ref: ${{ needs.validate.outputs.ref }}
+      dry-run: ${{ inputs.dry-run }}
+    secrets: inherit
+
+  verify-assets:
+    name: Verify release assets
+    needs: [validate, goreleaser]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Assert all binaries + checksums are present
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.validate.outputs.tag }}
+        run: |
+          set -euo pipefail
+          REQUIRED=(
+            checksums.txt
+            cerebrium_cli_darwin_amd64.tar.gz
+            cerebrium_cli_darwin_arm64.tar.gz
+            cerebrium_cli_linux_amd64.tar.gz
+            cerebrium_cli_linux_arm64.tar.gz
+            cerebrium_cli_windows_amd64.zip
+            cerebrium_cli_windows_arm64.zip
+          )
+          ASSETS="$(gh release view "$TAG" --json assets --jq '.assets[].name')"
+          MISSING=()
+          for a in "${REQUIRED[@]}"; do
+            grep -qx "$a" <<<"$ASSETS" || MISSING+=("$a")
+          done
+          if [ ${#MISSING[@]} -ne 0 ]; then
+            echo "ERROR: release $TAG is missing assets: ${MISSING[*]}" >&2
+            exit 1
+          fi
+          echo "All release assets present for $TAG."
+
+  wrapper-smoke:
+    name: Wrapper smoke test
+    needs: [validate, verify-assets]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.validate.outputs.ref }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      # Build and run the wrapper BEFORE publishing to PyPI. This exercises the
+      # real "download binary + checksums from the GitHub release" path against
+      # the freshly published release. If it fails, we never publish to PyPI
+      # (which can't be un-published), and cleanup tears down the release.
+      - name: Build, install and run the wrapper against the release
+        env:
+          VERSION: ${{ needs.validate.outputs.version }}
+        run: |
+          set -euo pipefail
+          # Point the wrapper at the version we just released.
+          sed -i "s/^VERSION = \".*\"/VERSION = \"$VERSION\"/" python-wrapper/cerebrium_cli.py
+          python -m pip install --upgrade pip build
+          ( cd python-wrapper && python -m build )
+          python -m venv smoke_env
+          source smoke_env/bin/activate
+          pip install python-wrapper/dist/cerebrium-*.whl
+          echo "Running cerebrium version (downloads binary from release $VERSION)..."
+          cerebrium version
+          echo "Wrapper works against release $VERSION."
+
+  pypi:
+    name: Publish to PyPI
+    needs: [validate, wrapper-smoke]
+    uses: ./.github/workflows/pypi-publish.yml
+    with:
+      tag: ${{ needs.validate.outputs.tag }}
+      dry-run: ${{ inputs.dry-run }}
+    secrets: inherit
+
+  promote:
+    name: Promote to latest
+    needs: [validate, pypi]
+    # Flip the prerelease to "Latest" only for a real, stable release. Actual
+    # prerelease tags (-rc/-beta) stay prereleases; dry runs are never promoted,
+    # so the release is left as a prerelease for inspection.
+    if: ${{ !inputs.dry-run && needs.validate.outputs.is_prerelease == 'false' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Mark the GitHub release as latest
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.validate.outputs.tag }}
+        run: |
+          set -euo pipefail
+          gh release edit "$TAG" --prerelease=false --latest
+          echo "Promoted $TAG to the latest stable release."
+
+  cleanup:
+    name: Cleanup failed release
+    needs: [validate, tag, goreleaser]
+    # Only tear down when the BUILD itself failed — i.e. there's a half-created
+    # tag/release. Once goreleaser succeeds the prerelease (and any binaries the
+    # Homebrew cask points at) is valid, so a later failure (verify/smoke/pypi)
+    # leaves it in place as an un-promoted prerelease to inspect or retry.
+    if: ${{ failure() && needs.validate.result == 'success' && needs.goreleaser.result != 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete the tag and partial release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.validate.outputs.tag }}
+        run: |
+          set -uo pipefail
+          echo "Build failed — cleaning up $TAG so it can be re-run."
+          gh release delete "$TAG" --yes --cleanup-tag 2>/dev/null || true
+          gh api -X DELETE "repos/${GH_REPO}/git/refs/tags/${TAG}" 2>/dev/null || true
+          echo "Cleanup done."
