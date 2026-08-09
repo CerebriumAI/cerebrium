@@ -2,7 +2,6 @@ package containers
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/cerebriumai/cerebrium/internal/api"
 	"github.com/cerebriumai/cerebrium/internal/ui"
@@ -50,7 +49,7 @@ func runList(cmd *cobra.Command, appName string) error {
 		return ui.NewValidationError(fmt.Errorf("no project selected: %w", err))
 	}
 
-	appID := normalizeAppID(projectID, appName)
+	appID := api.NormalizeAppID(projectID, appName)
 
 	client, err := api.NewClient(cfg)
 	if err != nil {
@@ -91,13 +90,4 @@ func runList(cmd *cobra.Command, appName string) error {
 	}
 
 	return nil
-}
-
-// normalizeAppID ensures the app ID has the project ID prefix.
-func normalizeAppID(projectID, appName string) string {
-	expectedPrefix := projectID + "-"
-	if strings.HasPrefix(appName, expectedPrefix) {
-		return appName
-	}
-	return fmt.Sprintf("%s-%s", projectID, appName)
 }

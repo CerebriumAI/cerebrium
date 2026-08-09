@@ -1067,6 +1067,34 @@ func (c *client) GetRuns(ctx context.Context, projectID, appID string, asyncOnly
 	return response.Items, nil
 }
 
+// GetResourceMetrics retrieves CPU, memory and GPU memory utilisation for an app
+// over a time range.
+func (c *client) GetResourceMetrics(ctx context.Context, projectID, appID string, opts ResourceMetricsOptions) (*ResourceMetrics, error) {
+	params := url.Values{}
+	params.Set("start", opts.Start.UTC().Format(time.RFC3339))
+	params.Set("end", opts.End.UTC().Format(time.RFC3339))
+	if opts.ContainerID != "" {
+		params.Set("container_id", opts.ContainerID)
+	}
+	if opts.Resolution != "" {
+		params.Set("resolution", opts.Resolution)
+	}
+
+	path := fmt.Sprintf("v2/projects/%s/apps/%s/resource-metrics?%s", projectID, appID, params.Encode())
+
+	body, err := c.request(ctx, "GET", path, nil, true)
+	if err != nil {
+		return nil, err
+	}
+
+	var metrics ResourceMetrics
+	if err := json.Unmarshal(body, &metrics); err != nil {
+		return nil, fmt.Errorf("failed to parse resource metrics response: %w", err)
+	}
+
+	return &metrics, nil
+}
+
 // ListSecrets retrieves the secrets for a project
 func (c *client) ListSecrets(ctx context.Context, projectID string) (map[string]string, error) {
 	path := fmt.Sprintf("v2/projects/%s/secrets", projectID)

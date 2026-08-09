@@ -10,6 +10,7 @@ import (
 	configCmd "github.com/cerebriumai/cerebrium/internal/commands/config"
 	containersCmd "github.com/cerebriumai/cerebrium/internal/commands/containers"
 	filesCmd "github.com/cerebriumai/cerebrium/internal/commands/files"
+	metricsCmd "github.com/cerebriumai/cerebrium/internal/commands/metrics"
 	projectCmd "github.com/cerebriumai/cerebrium/internal/commands/projects"
 	regionCmd "github.com/cerebriumai/cerebrium/internal/commands/region"
 	runsCmd "github.com/cerebriumai/cerebrium/internal/commands/runs"
@@ -111,6 +112,7 @@ func NewRootCmd() *cobra.Command {
 	rootCmd.AddCommand(NewStatusCmd())
 	rootCmd.AddCommand(NewLogsCmd())
 	rootCmd.AddCommand(containersCmd.NewContainersCmd())
+	rootCmd.AddCommand(metricsCmd.NewMetricsCmd())
 	rootCmd.AddCommand(NewVersionCmd())
 	rootCmd.AddCommand(configCmd.NewConfigCmd())
 	rootCmd.AddCommand(appCmd.NewAppsCmd())

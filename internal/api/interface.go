@@ -10,6 +10,7 @@ type Client interface {
 	GetProjects(ctx context.Context) ([]Project, error)
 	GetRuns(ctx context.Context, projectID, appID string, asyncOnly bool) ([]Run, error)
 	ListContainers(ctx context.Context, projectID, appID string) ([]Container, error)
+	GetResourceMetrics(ctx context.Context, projectID, appID string, opts ResourceMetricsOptions) (*ResourceMetrics, error)
 	FetchAppLogs(ctx context.Context, projectID, appID string, opts AppLogOptions) (*AppLogsResponse, error)
 
 	// Deploy methods
