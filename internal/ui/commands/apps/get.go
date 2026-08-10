@@ -218,15 +218,6 @@ func (m *GetView) formatAppDetailsTable() string {
 	}
 	sections = append(sections, ui.TableSection{Header: "STATUS", Rows: statusRows})
 
-	// LIVE PODS Section
-	if len(app.Pods) > 0 {
-		podRows := []ui.TableRow{}
-		for i, pod := range app.Pods {
-			podRows = append(podRows, ui.TableRow{Label: fmt.Sprintf("Pod %d", i+1), Value: pod})
-		}
-		sections = append(sections, ui.TableSection{Header: "LIVE PODS", Rows: podRows})
-	}
-
 	// Render table with panel
 	tableContent := ui.RenderDetailTable(sections)
 	panel := ui.RenderPanel(fmt.Sprintf("App Details for %s", app.ID), tableContent)
@@ -329,14 +320,6 @@ func (m *GetView) formatAppDetailsSimple() string {
 		output.WriteString(fmt.Sprintf("  Last Build ID: %s\n", app.LatestBuildID))
 	}
 	output.WriteString("\n")
-
-	if len(app.Pods) > 0 {
-		output.WriteString("LIVE PODS\n")
-		for i, pod := range app.Pods {
-			output.WriteString(fmt.Sprintf("  Pod %d: %s\n", i+1, pod))
-		}
-		output.WriteString("\n")
-	}
 
 	// If there were parse errors, add a helpful message
 	if len(m.parseErrors) > 0 {
