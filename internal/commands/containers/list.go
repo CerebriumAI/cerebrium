@@ -19,18 +19,26 @@ that are currently being torn down (shown as TERMINATING).
 
 Example:
   cerebrium containers list my-app
-  cerebrium containers list p-abc12345-my-app`,
+  cerebrium containers list p-abc12345-my-app
+  cerebrium containers list my-app --output json`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runList(cmd, args[0])
 		},
 	}
 
+	ui.AddOutputFlag(cmd)
+
 	return cmd
 }
 
 func runList(cmd *cobra.Command, appName string) error {
 	cmd.SilenceUsage = true
+
+	outputFormat, err := ui.ParseOutputFormat(cmd)
+	if err != nil {
+		return err
+	}
 
 	cfg, err := config.GetConfigFromContext(cmd)
 	if err != nil {
@@ -49,13 +57,17 @@ func runList(cmd *cobra.Command, appName string) error {
 		return ui.NewValidationError(fmt.Errorf("failed to create API client: %w", err))
 	}
 
-	spinner := ui.NewSimpleSpinner("Loading containers...")
+	spinner := ui.NewSimpleSpinnerFor(outputFormat, "Loading containers...")
 	spinner.Start()
 
 	containers, err := client.ListContainers(cmd.Context(), projectID, appID)
 	spinner.Stop()
 	if err != nil {
 		return ui.NewAPIError(err)
+	}
+
+	if outputFormat == ui.OutputJSON {
+		return ui.PrintJSON(containers)
 	}
 
 	if len(containers) == 0 {
