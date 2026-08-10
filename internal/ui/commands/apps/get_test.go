@@ -35,7 +35,6 @@ func TestAppGetView(t *testing.T) {
 			Status:                     "ACTIVE",
 			LastBuildStatus:            "SUCCESS",
 			LatestBuildID:              "build-123",
-			Pods:                       []string{"pod-1", "pod-2"},
 		}
 
 		mockClient := apimock.NewMockClient(t)
@@ -77,7 +76,6 @@ func TestAppGetView(t *testing.T) {
 					assert.Equal(t, "test-app-gpu", m.appDetails.ID)
 					assert.Equal(t, "GPU", m.appDetails.Hardware)
 					assert.Equal(t, "1", m.appDetails.GPUCount)
-					assert.Len(t, m.appDetails.Pods, 2)
 				},
 			}).
 			Run(t)
@@ -101,7 +99,6 @@ func TestAppGetView(t *testing.T) {
 			Status:                     "PENDING",
 			LastBuildStatus:            "BUILDING",
 			LatestBuildID:              "",
-			Pods:                       nil,
 		}
 
 		mockClient := apimock.NewMockClient(t)
@@ -131,7 +128,6 @@ func TestAppGetView(t *testing.T) {
 					assert.Equal(t, "test-app-cpu", m.appDetails.ID)
 					assert.Equal(t, "CPU", m.appDetails.Hardware)
 					assert.Equal(t, "0", m.appDetails.GPUCount)
-					assert.Empty(t, m.appDetails.Pods)
 				},
 			}).
 			Run(t)
@@ -155,7 +151,6 @@ func TestAppGetView(t *testing.T) {
 			Status:                     "ACTIVE",
 			LastBuildStatus:            "SUCCESS",
 			LatestBuildID:              "build-456",
-			Pods:                       []string{"pod-a"},
 		}
 
 		mockClient := apimock.NewMockClient(t)
@@ -312,7 +307,6 @@ func TestAppGetView(t *testing.T) {
 			Status:                     "ACTIVE",
 			LastBuildStatus:            "SUCCESS",
 			LatestBuildID:              "build-123",
-			Pods:                       nil,
 		}
 
 		mockClient := apimock.NewMockClient(t)
@@ -369,7 +363,6 @@ func TestAppGetView(t *testing.T) {
 			Status:                     "PENDING",
 			LastBuildStatus:            "PENDING",
 			LatestBuildID:              "",
-			Pods:                       nil,
 		}
 
 		mockClient := apimock.NewMockClient(t)
@@ -425,7 +418,6 @@ func Test_formatAppDetailsSimple(t *testing.T) {
 			Status:                     "ACTIVE",
 			LastBuildStatus:            "SUCCESS",
 			LatestBuildID:              "build-789",
-			Pods:                       []string{"pod-1", "pod-2", "pod-3"},
 		},
 	}
 
@@ -437,7 +429,6 @@ func Test_formatAppDetailsSimple(t *testing.T) {
 	assert.Contains(t, output, "HARDWARE")
 	assert.Contains(t, output, "SCALING PARAMETERS")
 	assert.Contains(t, output, "STATUS")
-	assert.Contains(t, output, "LIVE PODS")
 
 	// Verify specific values
 	assert.Contains(t, output, "Compute: GPU")
@@ -451,7 +442,4 @@ func Test_formatAppDetailsSimple(t *testing.T) {
 	assert.Contains(t, output, "Status: ACTIVE")
 	assert.Contains(t, output, "Last Build Status: SUCCESS")
 	assert.Contains(t, output, "Last Build ID: build-789")
-	assert.Contains(t, output, "Pod 1: pod-1")
-	assert.Contains(t, output, "Pod 2: pod-2")
-	assert.Contains(t, output, "Pod 3: pod-3")
 }
