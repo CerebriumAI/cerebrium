@@ -1,7 +1,6 @@
 package commands
 
 import (
-	"encoding/json"
 	"fmt"
 	"sort"
 	"time"
@@ -15,8 +14,6 @@ import (
 
 // NewStatusCmd creates a status command
 func NewStatusCmd() *cobra.Command {
-	var outputFormat string
-
 	cmd := &cobra.Command{
 		Use:   "status",
 		Short: "Check Cerebrium service status",
@@ -29,26 +26,24 @@ Example:
   cerebrium status
   cerebrium status --output json    # Output as JSON for automation
   cerebrium status --no-color       # Disable animations and colors`,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return runStatus(cmd, outputFormat)
-		},
+		RunE: runStatus,
 	}
 
-	cmd.Flags().StringVarP(&outputFormat, "output", "o", "table", "Output format: table, json")
+	ui.AddOutputFlag(cmd)
 
 	return cmd
 }
 
-func runStatus(cmd *cobra.Command, outputFormat string) error {
+func runStatus(cmd *cobra.Command, _ []string) error {
 	cmd.SilenceUsage = true
 
-	// Validate output format
-	if outputFormat != "table" && outputFormat != "json" {
-		return ui.NewValidationError(fmt.Errorf("invalid output format: %s (supported: table, json)", outputFormat))
+	outputFormat, err := ui.ParseOutputFormat(cmd)
+	if err != nil {
+		return err
 	}
 
 	// For JSON output, bypass the UI and fetch data directly
-	if outputFormat == "json" {
+	if outputFormat == ui.OutputJSON {
 		return runStatusJSON(cmd)
 	}
 
@@ -191,12 +186,5 @@ func runStatusJSON(cmd *cobra.Command) error {
 		}
 	}
 
-	// Output JSON
-	jsonBytes, err := json.MarshalIndent(output, "", "  ")
-	if err != nil {
-		return ui.NewInternalError(fmt.Errorf("failed to marshal JSON: %w", err))
-	}
-
-	fmt.Println(string(jsonBytes))
-	return nil
+	return ui.PrintJSON(output)
 }

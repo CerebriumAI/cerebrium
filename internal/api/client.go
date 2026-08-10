@@ -383,9 +383,9 @@ func (c *client) GetApp(ctx context.Context, projectID, appID string) (*AppDetai
 	return &appDetails, nil
 }
 
-// ListContainers retrieves recent containers for an app from the v2 endpoint,
-// which is the same one the dashboard uses. The response includes pods that are
-// being torn down — distinguished by the IsTerminating field on each record.
+// ListContainers retrieves recent containers for an app. The response includes
+// containers that are being torn down — distinguished by the IsTerminating field
+// on each record.
 func (c *client) ListContainers(ctx context.Context, projectID, appID string) ([]Container, error) {
 	path := fmt.Sprintf("v2/projects/%s/apps/%s/containers", projectID, appID)
 	body, err := c.request(ctx, "GET", path, nil, true)
