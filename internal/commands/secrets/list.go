@@ -49,6 +49,22 @@ type jsonSecret struct {
 	Value *string `json:"value,omitempty"`
 }
 
+// newJSONSecrets builds the JSON payload in the given key order. Values are
+// attached only when the caller asked to see them; without that, a name is all
+// that leaves this function.
+func newJSONSecrets(keys []string, secrets map[string]string, showValues bool) []jsonSecret {
+	out := make([]jsonSecret, 0, len(keys))
+	for _, key := range keys {
+		entry := jsonSecret{Name: key}
+		if showValues {
+			value := secrets[key]
+			entry.Value = &value
+		}
+		out = append(out, entry)
+	}
+	return out
+}
+
 func runList(cmd *cobra.Command, showValues bool, appID string) error {
 	cmd.SilenceUsage = true
 
@@ -104,16 +120,7 @@ func runList(cmd *cobra.Command, showValues bool, appID string) error {
 	sort.Strings(keys)
 
 	if outputFormat == ui.OutputJSON {
-		out := make([]jsonSecret, 0, len(keys))
-		for _, key := range keys {
-			entry := jsonSecret{Name: key}
-			if showValues {
-				value := secrets[key]
-				entry.Value = &value
-			}
-			out = append(out, entry)
-		}
-		return ui.PrintJSON(out)
+		return ui.PrintJSON(newJSONSecrets(keys, secrets, showValues))
 	}
 
 	// Handle empty secrets
