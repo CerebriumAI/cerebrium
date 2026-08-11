@@ -382,6 +382,7 @@ type AppBuild struct {
 	Status    string `json:"status"`
 	CreatedAt string `json:"createdAt"`
 	UpdatedAt string `json:"updatedAt"`
+	InitError string `json:"initError,omitempty"`
 }
 
 // BaseImagePayload represents the payload for creating a base image

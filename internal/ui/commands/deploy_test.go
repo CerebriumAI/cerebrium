@@ -3,6 +3,7 @@ package commands
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/cerebriumai/cerebrium/internal/api"
@@ -1177,5 +1178,85 @@ func TestDeployView_View(t *testing.T) {
 		view := model.View()
 		// When cancelled without error, view shows "Deployment cancelled"
 		assert.Contains(t, view, "cancelled")
+	})
+}
+
+// TestDeployView_initErrorReachesOutput covers the initError plumbing from the
+// build status response through to the failure output. The message is only
+// carried by the poll → complete → drain messages, so a dropped field is
+// otherwise invisible.
+func TestDeployView_initErrorReachesOutput(t *testing.T) {
+	newFailingDeploy := func(t *testing.T, initError string) *DeployView {
+		t.Helper()
+
+		mockClient := apimock.NewMockClient(t)
+		mockClient.EXPECT().GetBuild(mock.Anything, "test-project", "test-project-fail-app", "build-fail").
+			Return(&api.AppBuild{
+				Id:        "build-fail",
+				Status:    "init_failure",
+				InitError: initError,
+			}, nil)
+
+		model := NewDeployView(t.Context(), DeployConfig{
+			DisplayConfig: ui.DisplayConfig{
+				IsInteractive:    false,
+				DisableAnimation: true,
+			},
+			Config: &projectconfig.ProjectConfig{
+				Deployment: projectconfig.DeploymentConfig{Name: "fail-app"},
+			},
+			ProjectID: "test-project",
+			Client:    mockClient,
+		})
+		model.state = StateBuildingApp
+		model.buildID = "build-fail"
+
+		return model
+	}
+
+	t.Run("initError is printed after the failure line", func(t *testing.T) {
+		const initError = "No capacity available for the requested compute. Try a different region."
+
+		model := newFailingDeploy(t, initError)
+
+		statusMsg, ok := model.pollBuildStatus().(buildStatusUpdateMsg)
+		require.True(t, ok, "pollBuildStatus should report a status update")
+		require.Equal(t, initError, statusMsg.initError, "initError dropped between GetBuild and the status message")
+
+		output := captureStdout(t, func() {
+			uitesting.NewTestHarness(t, model).
+				Step(uitesting.TestStep[*DeployView]{
+					Name: "build_failed_with_init_error",
+					Msg:  statusMsg,
+					ModelAssert: func(t *testing.T, m *DeployView) {
+						assert.Equal(t, StateDeployError, m.state)
+					},
+				}).
+				Run(t)
+		})
+
+		failureLine := strings.Index(output, "Build failed with status: init_failure")
+		detail := strings.Index(output, initError)
+		require.NotEqual(t, -1, failureLine, "failure line missing from output:\n%s", output)
+		require.NotEqual(t, -1, detail, "initError missing from output:\n%s", output)
+		assert.Less(t, failureLine, detail, "initError should follow the failure line")
+	})
+
+	t.Run("no initError prints only the failure line", func(t *testing.T) {
+		model := newFailingDeploy(t, "")
+
+		statusMsg, ok := model.pollBuildStatus().(buildStatusUpdateMsg)
+		require.True(t, ok, "pollBuildStatus should report a status update")
+
+		output := captureStdout(t, func() {
+			uitesting.NewTestHarness(t, model).
+				Step(uitesting.TestStep[*DeployView]{
+					Name: "build_failed_without_init_error",
+					Msg:  statusMsg,
+				}).
+				Run(t)
+		})
+
+		assert.Equal(t, "✗ Build failed with status: init_failure\n", output)
 	})
 }
