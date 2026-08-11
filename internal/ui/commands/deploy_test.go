@@ -14,9 +14,30 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 )
 
 //go:generate go test -v -run TestDeployView -update
+
+func partnerConfig(name string) *projectconfig.ProjectConfig {
+	return &projectconfig.ProjectConfig{
+		Deployment: projectconfig.DeploymentConfig{
+			Name: name,
+		},
+		PartnerService: &projectconfig.PartnerServiceConfig{
+			Name: "somepartner",
+		},
+	}
+}
+
+func partnerAppResponse(buildID string) *api.CreateAppResponse {
+	return &api.CreateAppResponse{
+		BuildID:          buildID,
+		Status:           "pending",
+		InternalEndpoint: "https://partner-app.internal",
+		DashboardURL:     "https://dashboard.cerebrium.ai/app/partner-app",
+	}
+}
 
 func TestDeployView(t *testing.T) {
 	t.Run("confirmation state when not disabled", func(t *testing.T) {
@@ -364,19 +385,124 @@ func TestDeployView(t *testing.T) {
 
 		harness := uitesting.NewTestHarness(t, model)
 		harness.
-			// appCreatedMsg triggers uploadZip command, so use Finally to stop before it executes
-			Finally(uitesting.TestStep[*DeployView]{
-				Name:       "app_created",
-				Msg:        appCreatedMsg{response: response},
-				ViewGolden: "deploy_app_created",
+			Step(uitesting.TestStep[*DeployView]{
+				Name: "app_created",
+				Msg:  appCreatedMsg{response: response},
+				ViewAssert: func(t *testing.T, view string) {
+					uitesting.AssertContains(t, view, "Uploading to Cerebrium")
+				},
 				ModelAssert: func(t *testing.T, m *DeployView) {
 					assert.Equal(t, StateUploadingZip, m.state)
 					assert.Equal(t, "build-abc123", m.buildID)
 					assert.Equal(t, "building", m.buildStatus)
 					assert.NotNil(t, m.appResponse)
+					assert.Nil(t, m.logViewer, "standard deploys build the log viewer on upload, not on create")
 				},
 			}).
 			Run(t)
+	})
+
+	t.Run("partner app created - no log viewer", func(t *testing.T) {
+		mockClient := apimock.NewMockClient(t)
+		// A strict websocket mock: any attempt to stream build logs fails the test.
+		mockWsClient := wsmock.NewMockClient(t)
+
+		model := NewDeployView(context.Background(), DeployConfig{
+			DisplayConfig: ui.DisplayConfig{
+				IsInteractive:    true,
+				DisableAnimation: false,
+			},
+			Config:    partnerConfig("partner-app"),
+			ProjectID: "test-project",
+			Client:    mockClient,
+			WSClient:  mockWsClient,
+		})
+
+		model.state = StateCreatingApp
+
+		harness := uitesting.NewTestHarness(t, model)
+		harness.
+			Step(uitesting.TestStep[*DeployView]{
+				Name: "partner_app_created",
+				Msg:  appCreatedMsg{response: partnerAppResponse("build-partner")},
+				ViewAssert: func(t *testing.T, view string) {
+					uitesting.AssertContains(t, view, "Building app")
+					uitesting.AssertNotContains(t, view, "Waiting for logs")
+				},
+				ModelAssert: func(t *testing.T, m *DeployView) {
+					assert.Equal(t, StateBuildingApp, m.state)
+					assert.Equal(t, "build-partner", m.buildID)
+					assert.Nil(t, m.logViewer, "partner services emit no build logs, so no viewer should be created")
+				},
+			}).
+			Run(t)
+	})
+
+	t.Run("partner app created - simple mode starts polling", func(t *testing.T) {
+		mockClient := apimock.NewMockClient(t)
+		mockClient.EXPECT().
+			GetBuild(mock.Anything, "test-project", "test-project-partner-app", "build-partner").
+			Return(&api.AppBuild{Id: "build-partner", Status: "building"}, nil).
+			Once()
+
+		model := NewDeployView(context.Background(), DeployConfig{
+			DisplayConfig: ui.DisplayConfig{
+				IsInteractive:    false,
+				DisableAnimation: true,
+			},
+			Config:    partnerConfig("partner-app"),
+			ProjectID: "test-project",
+			Client:    mockClient,
+			WSClient:  wsmock.NewMockClient(t),
+		})
+
+		model.state = StateCreatingApp
+
+		var cmd tea.Cmd
+		stdout := captureStdout(t, func() {
+			_, cmd = model.Update(appCreatedMsg{response: partnerAppResponse("build-partner")})
+		})
+
+		assert.Contains(t, stdout, "✓ Build pending (ID: build-partner)")
+		assert.Contains(t, stdout, "Building app...")
+		assert.Equal(t, StateBuildingApp, model.state)
+		assert.Nil(t, model.logViewer)
+
+		// Without a log viewer, polling is the only thing driving the build to a
+		// terminal state - a nil command here would hang the deploy forever.
+		require.NotNil(t, cmd, "simple mode must return the build status poll")
+		assert.IsType(t, buildStatusUpdateMsg{}, cmd())
+	})
+
+	t.Run("partner app created - detach does not poll", func(t *testing.T) {
+		mockClient := apimock.NewMockClient(t)
+
+		model := NewDeployView(context.Background(), DeployConfig{
+			DisplayConfig: ui.DisplayConfig{
+				IsInteractive:    false,
+				DisableAnimation: true,
+			},
+			Config:    partnerConfig("partner-app"),
+			ProjectID: "test-project",
+			Client:    mockClient,
+			WSClient:  wsmock.NewMockClient(t),
+			Detach:    true,
+		})
+
+		model.state = StateCreatingApp
+
+		var cmd tea.Cmd
+		stdout := captureStdout(t, func() {
+			_, cmd = model.Update(appCreatedMsg{response: partnerAppResponse("build-partner")})
+		})
+
+		assert.Contains(t, stdout, "✓ Build pending (ID: build-partner)")
+		assert.Contains(t, stdout, "✓ Build started in detached mode")
+		assert.Equal(t, StateDeploySuccess, model.state)
+		assert.Nil(t, model.logViewer)
+
+		require.NotNil(t, cmd)
+		assert.IsType(t, tea.QuitMsg{}, cmd(), "detach should exit instead of waiting on the build")
 	})
 
 	t.Run("zip uploaded transition", func(t *testing.T) {
