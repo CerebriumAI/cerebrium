@@ -9,14 +9,54 @@ permissions:
   contents: read
 
 jobs:
+  # This runs concurrently with the Deploy Release build, so the binaries the pip
+  # wrapper downloads on first run may not exist on the release yet.
+  wait-for-binaries:
+    name: Wait for release binaries
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Wait for the release to carry a complete set of assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          release_is_complete() {
+            gh release view "$TAG" --repo "$GITHUB_REPOSITORY" \
+              --json assets --jq '.assets[].name' >assets.txt 2>/dev/null || return 1
+            grep -qx 'checksums.txt' assets.txt || return 1
+
+            gh release download "$TAG" --repo "$GITHUB_REPOSITORY" \
+              --pattern checksums.txt --output checksums.txt --clobber 2>/dev/null || return 1
+
+            # checksums.txt lists every artifact the build produced; all must have landed
+            while read -r _ name; do
+              grep -qx "$name" assets.txt || return 1
+            done <checksums.txt
+          }
+
+          DEADLINE=$((SECONDS + 1500))
+          until release_is_complete; do
+            if [ "$SECONDS" -ge "$DEADLINE" ]; then
+              echo "ERROR: $TAG did not get a complete set of release assets in time." >&2
+              echo "The build likely failed - refusing to publish to PyPI without binaries." >&2
+              exit 1
+            fi
+            echo "Waiting for $TAG release assets..."
+            sleep 15
+          done
+
+          echo "All $(wc -l <checksums.txt) artifacts present on $TAG."
+
   build-and-publish:
+    needs: wait-for-binaries
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
@@ -82,12 +122,17 @@ jobs:
           while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
             echo "Attempt $ATTEMPT of $MAX_ATTEMPTS..."
 
-            if pip install cerebrium==$PYPI_VERSION; then
+            if pip install "cerebrium==$PYPI_VERSION"; then
               echo "Successfully installed cerebrium $PYPI_VERSION from PyPI"
 
               # Test that the wrapper runs (will download binary on first run)
               echo "Testing cerebrium command..."
-              cerebrium version && echo "Binary download and execution successful!"
+              if ! cerebrium version; then
+                echo "ERROR: cerebrium $PYPI_VERSION installed but failed to run." >&2
+                echo "The wrapper downloads its binary from the GitHub release on first run." >&2
+                exit 1
+              fi
+              echo "Binary download and execution successful!"
               exit 0
             else
               if [ $ATTEMPT -lt $MAX_ATTEMPTS ]; then

@@ -2,6 +2,7 @@ package commands
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -13,6 +14,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/avast/retry-go/v4"
 	"github.com/bugsnag/bugsnag-go/v2"
 	"github.com/charmbracelet/bubbles/progress"
 	"github.com/charmbracelet/bubbles/viewport"
@@ -121,14 +123,14 @@ func NewDeployView(ctx context.Context, conf DeployConfig) *DeployView {
 	ctx, cancel := context.WithCancel(ctx)
 
 	return &DeployView{
-		ctx:             ctx,
-		ctxCancel:       cancel,
-		state:           initialState,
-		isPartnerDeploy: isPartnerDeploy,
-		spinner:         ui.NewSpinner(),
-		progressBar:     prog,
+		ctx:                 ctx,
+		ctxCancel:           cancel,
+		state:               initialState,
+		isPartnerDeploy:     isPartnerDeploy,
+		spinner:             ui.NewSpinner(),
+		progressBar:         prog,
 		atomicBytesUploaded: &atomic.Int64{},
-		conf:            conf,
+		conf:                conf,
 	}
 }
 
@@ -992,6 +994,11 @@ func (m *DeployView) createApp() tea.Msg {
 	payload["disableBuildLogs"] = m.conf.DisableBuildLogs
 	payload["cliVersion"] = version.Version
 
+	// Upload the raw cerebrium.toml so the backend can parse config server-side.
+	if m.conf.Config.RawTOML != "" {
+		payload["cerebrium_toml"] = m.conf.Config.RawTOML
+	}
+
 	// Include Docker auth if available for private registry support
 	baseImage := m.conf.Config.Deployment.DockerBaseImageURL
 	dockerAuth, err := auth.GetDockerAuth()
@@ -1070,37 +1077,61 @@ func (m *DeployView) uploadZipWithProgress() error {
 		return fmt.Errorf("failed to stat zip file: %w", err)
 	}
 
-	// Create a reader that tracks progress
-	progressReader := &progressReader{
-		reader:  file,
-		counter: m.atomicBytesUploaded,
-	}
+	// Use a longer timeout for uploads (30 minutes for large files)
+	uploadClient := &http.Client{Timeout: 30 * time.Minute}
 
-	// Create PUT request with context
-	req, err := http.NewRequestWithContext(m.ctx, "PUT", m.appResponse.UploadURL, progressReader)
-	if err != nil {
-		return fmt.Errorf("failed to create upload request: %w", err)
-	}
+	const maxAttempts = 3
+	const retryDelay = 2 * time.Second
 
-	req.Header.Set("Content-Type", "application/zip")
-	req.ContentLength = fileInfo.Size()
+	return retry.Do(
+		func() error {
+			// Reset file position and progress counter for each attempt
+			if _, seekErr := file.Seek(0, io.SeekStart); seekErr != nil {
+				return retry.Unrecoverable(fmt.Errorf("failed to seek zip file: %w", seekErr))
+			}
+			m.atomicBytesUploaded.Store(0)
 
-	// Execute request using a simple HTTP client
-	client := &http.Client{
-		Timeout: 30 * time.Minute, // Allow up to 30 minutes for large uploads
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return fmt.Errorf("upload failed: %w", err)
-	}
-	defer resp.Body.Close() //nolint:errcheck // Deferred close, error not actionable
+			// Create a reader that tracks progress
+			progressReader := &progressReader{
+				reader:  file,
+				counter: m.atomicBytesUploaded,
+			}
 
-	if resp.StatusCode != 200 {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("upload failed with status %d: %s", resp.StatusCode, string(body))
-	}
+			// Create PUT request with context
+			req, err := http.NewRequestWithContext(m.ctx, "PUT", m.appResponse.UploadURL, progressReader)
+			if err != nil {
+				return retry.Unrecoverable(fmt.Errorf("failed to create upload request: %w", err))
+			}
+			req.Header.Set("Content-Type", "application/zip")
+			req.ContentLength = fileInfo.Size()
 
-	return nil
+			resp, err := uploadClient.Do(req)
+			if err != nil {
+				return fmt.Errorf("upload failed: %w", err)
+			}
+			defer resp.Body.Close() //nolint:errcheck // Deferred close, error not actionable
+
+			if resp.StatusCode != 200 {
+				body, _ := io.ReadAll(resp.Body)
+				if resp.StatusCode >= 400 && resp.StatusCode < 500 {
+					return retry.Unrecoverable(fmt.Errorf("upload failed with status %d: %s", resp.StatusCode, string(body)))
+				}
+				return fmt.Errorf("upload failed with status %d: %s", resp.StatusCode, string(body))
+			}
+
+			return nil
+		},
+		retry.Context(m.ctx),
+		retry.Attempts(maxAttempts),
+		retry.Delay(retryDelay),
+		retry.DelayType(retry.BackOffDelay),
+		retry.RetryIf(func(err error) bool {
+			return !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded)
+		}),
+		retry.OnRetry(func(n uint, err error) {
+			slog.Warn("Retrying zip upload", "attempt", n+1, "maxAttempts", maxAttempts, "error", err)
+		}),
+	)
 }
 
 // progressReader wraps an io.Reader and tracks bytes read
@@ -1377,8 +1408,8 @@ func (m *DeployView) renderDeploymentSummary() string {
 
 		// HARDWARE PARAMETERS
 		var hardwareItems []string
-		if m.conf.Config.Hardware.Compute != nil {
-			hardwareItems = append(hardwareItems, fmt.Sprintf("Compute: %s", *m.conf.Config.Hardware.Compute))
+		if m.conf.Config.Hardware.Compute.IsSet() {
+			hardwareItems = append(hardwareItems, fmt.Sprintf("Compute: %s", m.conf.Config.Hardware.Compute))
 		}
 		if m.conf.Config.Hardware.CPU != nil {
 			hardwareItems = append(hardwareItems, fmt.Sprintf("CPU: %.1f", *m.conf.Config.Hardware.CPU))
@@ -1386,7 +1417,7 @@ func (m *DeployView) renderDeploymentSummary() string {
 		if m.conf.Config.Hardware.Memory != nil {
 			hardwareItems = append(hardwareItems, fmt.Sprintf("Memory: %.0f GB", *m.conf.Config.Hardware.Memory))
 		}
-		if m.conf.Config.Hardware.GPUCount != nil && m.conf.Config.Hardware.Compute != nil && *m.conf.Config.Hardware.Compute != "CPU" {
+		if m.conf.Config.Hardware.GPUCount != nil {
 			hardwareItems = append(hardwareItems, fmt.Sprintf("GPU Count: %d", *m.conf.Config.Hardware.GPUCount))
 		}
 		if m.conf.Config.Hardware.Region != nil {
@@ -1445,7 +1476,7 @@ func (m *DeployView) renderDeploymentSummary() string {
 			concurrency := fmt.Sprintf("Replica Concurrency: %d", *m.conf.Config.Scaling.ReplicaConcurrency)
 
 			// Add GPU warning if applicable
-			if m.conf.Config.Hardware.Compute != nil && *m.conf.Config.Hardware.Compute != "CPU" && *m.conf.Config.Scaling.ReplicaConcurrency > 1 {
+			if m.conf.Config.Hardware.Compute.IsSet() && m.conf.Config.Hardware.Compute.Primary() != "CPU" && *m.conf.Config.Scaling.ReplicaConcurrency > 1 {
 				concurrency += " ⚠️  (Multiple concurrent requests on GPU)"
 			}
 			scalingItems = append(scalingItems, concurrency)
@@ -1525,8 +1556,8 @@ func (m *DeployView) renderDeploymentSummary() string {
 
 	// HARDWARE PARAMETERS
 	var hardwareRows []ui.TableRow
-	if m.conf.Config.Hardware.Compute != nil {
-		hardwareRows = append(hardwareRows, ui.TableRow{Label: "Compute:", Value: *m.conf.Config.Hardware.Compute})
+	if m.conf.Config.Hardware.Compute.IsSet() {
+		hardwareRows = append(hardwareRows, ui.TableRow{Label: "Compute:", Value: m.conf.Config.Hardware.Compute.String()})
 	}
 	if m.conf.Config.Hardware.CPU != nil {
 		hardwareRows = append(hardwareRows, ui.TableRow{Label: "CPU:", Value: fmt.Sprintf("%.1f", *m.conf.Config.Hardware.CPU)})
@@ -1534,7 +1565,7 @@ func (m *DeployView) renderDeploymentSummary() string {
 	if m.conf.Config.Hardware.Memory != nil {
 		hardwareRows = append(hardwareRows, ui.TableRow{Label: "Memory:", Value: fmt.Sprintf("%.0f GB", *m.conf.Config.Hardware.Memory)})
 	}
-	if m.conf.Config.Hardware.GPUCount != nil && m.conf.Config.Hardware.Compute != nil && *m.conf.Config.Hardware.Compute != "CPU" {
+	if m.conf.Config.Hardware.GPUCount != nil {
 		hardwareRows = append(hardwareRows, ui.TableRow{Label: "GPU Count:", Value: fmt.Sprintf("%d", *m.conf.Config.Hardware.GPUCount)})
 	}
 	if m.conf.Config.Hardware.Region != nil {
@@ -1612,7 +1643,7 @@ func (m *DeployView) renderDeploymentSummary() string {
 		concurrency := fmt.Sprintf("%d", *m.conf.Config.Scaling.ReplicaConcurrency)
 
 		// Add GPU warning if applicable
-		if m.conf.Config.Hardware.Compute != nil && *m.conf.Config.Hardware.Compute != "CPU" && *m.conf.Config.Scaling.ReplicaConcurrency > 1 {
+		if m.conf.Config.Hardware.Compute.IsSet() && m.conf.Config.Hardware.Compute.Primary() != "CPU" && *m.conf.Config.Scaling.ReplicaConcurrency > 1 {
 			concurrency += " ⚠️  (Multiple concurrent requests on GPU)"
 		}
 		scalingRows = append(scalingRows, ui.TableRow{Label: "Replica Concurrency:", Value: concurrency})

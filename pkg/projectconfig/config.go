@@ -1,5 +1,7 @@
 package projectconfig
 
+import "strings"
+
 // ProjectConfig represents the complete cerebrium.toml configuration
 type ProjectConfig struct {
 	Deployment     DeploymentConfig      `mapstructure:"deployment" toml:"deployment"`
@@ -8,6 +10,14 @@ type ProjectConfig struct {
 	Dependencies   DependenciesConfig    `mapstructure:"dependencies" toml:"dependencies"`
 	CustomRuntime  *CustomRuntimeConfig  `mapstructure:"custom" toml:"runtime,omitempty"`
 	PartnerService *PartnerServiceConfig `mapstructure:"partner" toml:"partner,omitempty"`
+
+	// ContainerRuntime selects the sandbox runtime ("v1" runc / "v2" gvisor).
+	// Read from [cerebrium.runtime] container_runtime in cerebrium.toml.
+	ContainerRuntime *string `toml:"-"`
+
+	// RawTOML is the verbatim cerebrium.toml content, captured at load time and
+	// uploaded so the backend can parse config server-side.
+	RawTOML string `toml:"-" mapstructure:"-"`
 }
 
 // DeploymentConfig represents the [cerebrium.deployment] section
@@ -26,12 +36,36 @@ type DeploymentConfig struct {
 
 // HardwareConfig represents the [cerebrium.hardware] section
 type HardwareConfig struct {
-	CPU      *float64 `mapstructure:"cpu" toml:"cpu,omitempty"`
-	Memory   *float64 `mapstructure:"memory" toml:"memory,omitempty"`
-	Compute  *string  `mapstructure:"compute" toml:"compute,omitempty"`
-	GPUCount *int     `mapstructure:"gpu_count" toml:"gpu_count,omitempty"`
-	Provider *string  `mapstructure:"provider" toml:"provider,omitempty"`
-	Region   *string  `mapstructure:"region" toml:"region,omitempty"`
+	CPU      *float64     `mapstructure:"cpu" toml:"cpu,omitempty"`
+	Memory   *float64     `mapstructure:"memory" toml:"memory,omitempty"`
+	Compute  ComputeField `mapstructure:"compute" toml:"compute,omitempty"`
+	GPUCount *int         `mapstructure:"gpu_count" toml:"gpu_count,omitempty"`
+	Provider *string      `mapstructure:"provider" toml:"provider,omitempty"`
+	Region   *string      `mapstructure:"region" toml:"region,omitempty"`
+}
+
+// ComputeField holds the list of acceptable compute types. It accepts either a
+// single value (`compute = "HOPPER_H100"`) or an array
+// (`compute = ["HOPPER_H100", "HOPPER_H200"]`) in cerebrium.toml.
+type ComputeField []string
+
+// Primary returns the requested compute type, or "" when unset.
+func (c ComputeField) Primary() string {
+	if len(c) == 0 {
+		return ""
+	}
+	return c[0]
+}
+
+// IsSet reports whether compute was configured in any form.
+func (c ComputeField) IsSet() bool {
+	return len(c) > 0
+}
+
+// String renders the configured compute types as a comma-separated list for
+// display, e.g. "HOPPER_H100, HOPPER_H200".
+func (c ComputeField) String() string {
+	return strings.Join(c, ", ")
 }
 
 // ScalingConfig represents the [cerebrium.scaling] section
@@ -117,10 +151,11 @@ func (pc *ProjectConfig) ToPayload() map[string]any {
 	if pc.Hardware.Memory != nil {
 		payload["memory"] = *pc.Hardware.Memory
 	}
-	if pc.Hardware.Compute != nil {
-		payload["compute"] = *pc.Hardware.Compute
+	if pc.Hardware.Compute.IsSet() {
+		// Always send the full list of compute types.
+		payload["compute"] = []string(pc.Hardware.Compute)
 	}
-	if pc.Hardware.GPUCount != nil && pc.Hardware.Compute != nil && *pc.Hardware.Compute != "CPU" {
+	if pc.Hardware.GPUCount != nil && pc.Hardware.Compute.IsSet() && pc.Hardware.Compute.Primary() != "CPU" {
 		payload["gpuCount"] = *pc.Hardware.GPUCount
 	}
 	if pc.Hardware.Provider != nil {
@@ -166,6 +201,10 @@ func (pc *ProjectConfig) ToPayload() map[string]any {
 	}
 	if pc.Scaling.ComputeTier != nil {
 		payload["computeTier"] = *pc.Scaling.ComputeTier
+	}
+
+	if pc.ContainerRuntime != nil {
+		payload["containerRuntime"] = *pc.ContainerRuntime
 	}
 
 	// Runtime configuration
