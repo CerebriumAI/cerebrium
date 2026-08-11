@@ -286,3 +286,4 @@ func (m *MyView) Error() error {
 5. Use cmd.Context() and GetConfigFromContext()
 6. Never update golden files (humans only)
 7. Print SimpleOutput user output with fmt.Printf, debug with slog
+8. Repo is public — no internal infra, backend names, or runtime tech in code/comments/strings. Keep it generic ("the backend", "upstream").

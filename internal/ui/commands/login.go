@@ -370,13 +370,6 @@ func (m *LoginView) setProjectContext() tea.Msg {
 		}
 	}
 
-	// Set default region if not set
-	if m.conf.Config.DefaultRegion == "" {
-		m.conf.Config.DefaultRegion = "us-east-1"
-		//nolint:errcheck,gosec // Best effort save of default region, error not actionable
-		config.Save(m.conf.Config)
-	}
-
 	return projectSetMsg{message: message}
 }
 

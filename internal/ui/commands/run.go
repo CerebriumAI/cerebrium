@@ -597,10 +597,10 @@ func (m *RunView) prepareRun() tea.Msg {
 		cfg, err := config.Load()
 		if err == nil && cfg.DefaultRegion != "" {
 			region = cfg.DefaultRegion
-		} else {
-			region = "us-east-1"
 		}
 	}
+	// If still empty, send through as-is — the backend resolves the run region
+	// (e.g. from the app's deployed region) when one isn't provided.
 
 	appName := ""
 	if m.conf.Config != nil && m.conf.Config.Deployment.Name != "" {
@@ -617,8 +617,8 @@ func (m *RunView) prepareRun() tea.Msg {
 	hardwareInfo := ""
 	if m.conf.Config != nil {
 		var info []string
-		if m.conf.Config.Hardware.Compute != nil && *m.conf.Config.Hardware.Compute != "" {
-			info = append(info, fmt.Sprintf("Compute: %s", *m.conf.Config.Hardware.Compute))
+		if m.conf.Config.Hardware.Compute.IsSet() {
+			info = append(info, fmt.Sprintf("Compute: %s", m.conf.Config.Hardware.Compute.Primary()))
 		}
 		if m.conf.Config.Hardware.GPUCount != nil && *m.conf.Config.Hardware.GPUCount > 0 {
 			info = append(info, fmt.Sprintf("GPU: %d", *m.conf.Config.Hardware.GPUCount))
@@ -848,8 +848,8 @@ func (m *RunView) uploadRun() tea.Msg {
 	// Build hardware config
 	hardwareConfig := make(map[string]any)
 	if m.conf.Config != nil {
-		if m.conf.Config.Hardware.Compute != nil && *m.conf.Config.Hardware.Compute != "" {
-			hardwareConfig["computeType"] = *m.conf.Config.Hardware.Compute
+		if m.conf.Config.Hardware.Compute.IsSet() {
+			hardwareConfig["computeType"] = m.conf.Config.Hardware.Compute.Primary()
 		}
 		if m.conf.Config.Hardware.GPUCount != nil && *m.conf.Config.Hardware.GPUCount > 0 {
 			hardwareConfig["gpuCount"] = *m.conf.Config.Hardware.GPUCount
