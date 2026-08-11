@@ -295,7 +295,7 @@ func (m *DeployView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.state = StateBuildingApp
 
 			if m.conf.SimpleOutput() {
-				fmt.Printf("✓ Created app (Build ID: %s)\n", msg.response.BuildID)
+				fmt.Printf("✓ Build pending (ID: %s)\n", msg.response.BuildID)
 			}
 
 			// Handle detach mode
@@ -306,7 +306,7 @@ func (m *DeployView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					fmt.Println("  Check the dashboard for build status.")
 				} else {
 					return m, tea.Sequence(
-						tea.Println(ui.SuccessStyle.Render(fmt.Sprintf("✓  Created app (Build ID: %s)", msg.response.BuildID))),
+						tea.Println(ui.SuccessStyle.Render(fmt.Sprintf("✓  Build pending (ID: %s)", msg.response.BuildID))),
 						tea.Println(ui.SuccessStyle.Render("✓  Build started in detached mode")),
 						tea.Println(fmt.Sprintf("   Build ID: %s", m.buildID)),
 						tea.Println("   Check the dashboard for build status."),
@@ -319,38 +319,14 @@ func (m *DeployView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			if m.conf.SimpleOutput() {
 				fmt.Println("Building app...")
+				return m, m.pollBuildStatus
 			}
 
-			// Initialize log viewer with streaming provider
-			provider := logging.NewStreamingBuildLogProvider(logging.StreamingBuildLogProviderConfig{
-				Client:    m.conf.WSClient,
-				ProjectID: m.conf.ProjectID,
-				BuildID:   m.buildID,
-			})
-			tickInterval := 50 * time.Millisecond
-
-			m.logViewer = logging.NewLogViewer(m.ctx, logging.LogViewerConfig{
-				DisplayConfig: m.conf.DisplayConfig,
-				Provider:      provider,
-				TickInterval:  tickInterval,
-				ShowHelp:      true,
-				AutoExpand:    true,
-			})
-
-			if !m.conf.SimpleOutput() {
-				printCmds := tea.Sequence(
-					tea.Println(ui.SuccessStyle.Render(fmt.Sprintf("✓  Created app (Build ID: %s)", msg.response.BuildID))),
-					tea.Println(""),
-				)
-				return m, tea.Batch(
-					printCmds,
-					m.logViewer.Init(),
-					m.pollBuildStatus,
-				)
-			}
-
+			// Partner services don't emit build logs - skip the log viewer
+			// and just poll status until the build completes.
 			return m, tea.Batch(
-				m.logViewer.Init(),
+				tea.Println(ui.SuccessStyle.Render(fmt.Sprintf("✓  Build pending (ID: %s)", msg.response.BuildID))),
+				tea.Println(""),
 				m.pollBuildStatus,
 			)
 		}
