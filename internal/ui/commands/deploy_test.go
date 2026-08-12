@@ -1067,6 +1067,26 @@ func TestDeployView_View(t *testing.T) {
 
 		view := model.View()
 		assert.Contains(t, view, "Creating app")
+		assert.Contains(t, view, "Upload to Cerebrium")
+	})
+
+	t.Run("view during app creation omits upload step for partner services", func(t *testing.T) {
+		model := NewDeployView(t.Context(), DeployConfig{
+			DisplayConfig: ui.DisplayConfig{
+				IsInteractive:    true,
+				DisableAnimation: false,
+			},
+			Config:    partnerConfig("partner-app"),
+			ProjectID: "test-project",
+			Client:    apimock.NewMockClient(t),
+		})
+
+		model.state = StateCreatingApp
+
+		view := model.View()
+		assert.Contains(t, view, "Creating app")
+		assert.Contains(t, view, "Build app")
+		assert.NotContains(t, view, "Upload to Cerebrium")
 	})
 
 	t.Run("view during upload", func(t *testing.T) {
