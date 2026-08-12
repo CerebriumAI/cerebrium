@@ -128,15 +128,15 @@ cerebrium version
 ### OAuth Token Storage
 
 - Tokens stored in `~/.cerebrium/config.yaml`
-- File permissions: `0644` (user read/write only)
+- File permissions: `0644` (owner read/write, world-readable)
 - Tokens not logged or printed to stdout/stderr
 - In `config list`, tokens are truncated: `eyJraWQi...` (first 20 chars only)
 
 ### Service Account Tokens
 
-- Supported via `CEREBRIUM_SERVICE_ACCOUNT` environment variable
-- Checked before OAuth tokens (auth/service_account.go)
-- Not persisted to disk
+- Supported via the `CEREBRIUM_SERVICE_ACCOUNT_TOKEN` environment variable or the `--service-account-token` flag
+- Checked before OAuth tokens (internal/api/client.go)
+- Env var and flag are not persisted; a token stored via `cerebrium save-auth-config` is written to `~/.cerebrium/config.yaml` in plaintext
 
 ## Future Security Enhancements
 
