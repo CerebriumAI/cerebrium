@@ -23,6 +23,7 @@ import (
 	"github.com/avast/retry-go/v4"
 	"github.com/bugsnag/bugsnag-go/v2"
 	"github.com/cerebriumai/cerebrium/internal/auth"
+	"github.com/cerebriumai/cerebrium/internal/clientenv"
 	"github.com/cerebriumai/cerebrium/internal/version"
 	cerebrium_bugsnag "github.com/cerebriumai/cerebrium/pkg/bugsnag"
 	"github.com/cerebriumai/cerebrium/pkg/config"
@@ -141,6 +142,7 @@ func (c *client) request(ctx context.Context, method, path string, body any, req
 			req.Header.Set("Content-Type", "application/json")
 			req.Header.Set("X-Source", "cli")
 			req.Header.Set("X-CLI-Version", version.Version)
+			req.Header.Set(clientenv.HeaderName, clientenv.HeaderValue())
 
 			// Add system attribute headers for debugging
 			req.Header.Set("X-Client-OS", runtime.GOOS)
@@ -909,6 +911,7 @@ func (c *client) RunApp(ctx context.Context, projectID, appID, region, filename 
 	req.Header.Set("Content-Type", w.FormDataContentType())
 	req.Header.Set("X-Source", "cli")
 	req.Header.Set("X-CLI-Version", version.Version)
+	req.Header.Set(clientenv.HeaderName, clientenv.HeaderValue())
 
 	// Add system attribute headers for debugging
 	req.Header.Set("X-Client-OS", runtime.GOOS)
