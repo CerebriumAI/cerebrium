@@ -707,8 +707,10 @@ func (m *DeployView) View() string {
 	case StateCreatingApp:
 		output.WriteString(formatStateLine(m.spinner.View(), "Creating app...", ui.ActiveStyle.Render))
 		output.WriteString("\n")
-		output.WriteString(formatStateLine("-", "Upload to Cerebrium", ui.PendingStyle.Render))
-		output.WriteString("\n")
+		if !m.isPartnerService() {
+			output.WriteString(formatStateLine("-", "Upload to Cerebrium", ui.PendingStyle.Render))
+			output.WriteString("\n")
+		}
 		output.WriteString(formatStateLine("-", "Build app", ui.PendingStyle.Render))
 		output.WriteString("\n")
 
