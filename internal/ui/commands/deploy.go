@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"fmt"
@@ -1303,14 +1304,21 @@ func (m *DeployView) showDeploymentSummary() {
 	fmt.Print("Do you want to deploy? (Y/n): ")
 }
 
-// waitForConfirmation waits for user input in non-TTY mode
+// waitForConfirmation waits for user input in simple output mode
 func (m *DeployView) waitForConfirmation() tea.Msg {
-	// Read a single line from stdin
-	var response string
-	fmt.Scanln(&response) //nolint:errcheck,gosec // User input handling, errors handled by empty response default
+	return readConfirmationResponse(os.Stdin)
+}
 
-	// Default to "yes" if empty (just Enter pressed)
-	if response == "" || strings.ToLower(response) == "y" || strings.ToLower(response) == "yes" {
+// readConfirmationResponse reads a single line from r and interprets it as a
+// confirmation response. An empty line defaults to yes (the prompt is Y/n);
+// EOF or any read error is a decline so a closed stdin can never consent
+func readConfirmationResponse(r io.Reader) confirmationResponseMsg {
+	line, err := bufio.NewReader(r).ReadString('\n')
+	response := strings.ToLower(strings.TrimSpace(line))
+	if err != nil && response == "" {
+		return confirmationResponseMsg{confirmed: false}
+	}
+	if response == "" || response == "y" || response == "yes" {
 		return confirmationResponseMsg{confirmed: true}
 	}
 	return confirmationResponseMsg{confirmed: false}

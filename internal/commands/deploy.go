@@ -13,18 +13,18 @@ import (
 	"github.com/cerebriumai/cerebrium/pkg/projectconfig"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 // NewDeployCmd creates a deploy command
 func NewDeployCmd() *cobra.Command {
 	var (
-		name                string
-		disableSyntaxCheck  bool
-		logLevel            string
-		configFile          string
-		disableConfirmation bool
-		disableBuildLogs    bool
-		detach              bool
+		name               string
+		disableSyntaxCheck bool
+		logLevel           string
+		configFile         string
+		disableBuildLogs   bool
+		detach             bool
 	)
 
 	cmd := &cobra.Command{
@@ -50,7 +50,7 @@ Example:
 				configFile:         configFile,
 				disableBuildLogs:   disableBuildLogs,
 				detach:             detach,
-			}, disableConfirmation)
+			}, confirmationDisabled(cmd.Flags()))
 		},
 	}
 
@@ -59,7 +59,8 @@ Example:
 	cmd.Flags().BoolVar(&disableSyntaxCheck, "disable-syntax-check", false, "Flag to disable syntax check")
 	cmd.Flags().StringVar(&logLevel, "log-level", "INFO", "Log level for deployment (DEBUG or INFO)")
 	cmd.Flags().StringVar(&configFile, "config-file", "./cerebrium.toml", "Path to the cerebrium config TOML file")
-	cmd.Flags().BoolVarP(&disableConfirmation, "disable-confirmation", "y", false, "Disable confirmation prompt")
+	cmd.Flags().BoolP("disable-confirmation", "y", false, "Disable confirmation prompt")
+	cmd.Flags().Bool("yes", false, "Skip the confirmation prompt (alias of --disable-confirmation)")
 	cmd.Flags().BoolVar(&disableBuildLogs, "disable-build-logs", false, "Disable build logs during deployment")
 	cmd.Flags().BoolVar(&detach, "detach", false, "Kick off deployment and exit without waiting for build completion. The build will continue on the server and Ctrl+C will not cancel it.")
 
@@ -75,6 +76,24 @@ type deployOptions struct {
 	detach             bool
 }
 
+// confirmationDisabled resolves the effective confirmation setting from
+// --disable-confirmation (-y) and its alias --yes
+func confirmationDisabled(flags *pflag.FlagSet) bool {
+	disableConfirmation, _ := flags.GetBool("disable-confirmation")
+	yes, _ := flags.GetBool("yes")
+	return disableConfirmation || yes
+}
+
+// validateConfirmationPrompt fails fast when a confirmation prompt would be
+// required but stdin is not a TTY, so a closed or piped stdin can never hang
+// the command or be mistaken for consent
+func validateConfirmationPrompt(stdinIsTTY, disableConfirmation bool) error {
+	if disableConfirmation || stdinIsTTY {
+		return nil
+	}
+	return ui.NewValidationError(fmt.Errorf("unable to prompt for confirmation: stdin is not a TTY. Re-run with -y/--yes to skip confirmation"))
+}
+
 func runDeploy(cmd *cobra.Command, opts deployOptions, disableConfirmation bool) error {
 	cmd.SilenceUsage = true
 
@@ -82,6 +101,11 @@ func runDeploy(cmd *cobra.Command, opts deployOptions, disableConfirmation bool)
 	displayOpts, err := ui.GetDisplayConfigFromContext(cmd)
 	if err != nil {
 		return ui.NewValidationError(fmt.Errorf("failed to get display options: %w", err))
+	}
+
+	// Fail fast if we would need to prompt for confirmation but cannot
+	if err := validateConfirmationPrompt(displayOpts.StdinIsTTY, disableConfirmation); err != nil {
+		return err
 	}
 
 	// Get config from context (loaded once in root command)
