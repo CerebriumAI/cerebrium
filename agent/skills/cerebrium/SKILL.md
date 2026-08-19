@@ -24,8 +24,8 @@ Cerebrium is a serverless GPU/CPU platform for deploying real-time and high-perf
 If Cerebrium is not set up yet, do this first — the rest of this skill assumes an
 authenticated CLI.
 
-1. **Create an account** at https://dashboard.cerebrium.ai — API keys and
-   authentication tokens are created there.
+1. **Create an account** at https://dashboard.cerebrium.ai, where API keys and
+   authentication tokens are created.
 2. **Install the CLI** (Python 3.8+):
    ```bash
    pip install cerebrium
@@ -39,12 +39,12 @@ authenticated CLI.
    cerebrium init my-app && cd my-app && cerebrium deploy
    ```
 
-Compute is billed by the second — see https://www.cerebrium.ai/pricing for current
+Compute is billed by the second. See https://www.cerebrium.ai/pricing for current
 rates and any starting credit.
 
 ## Working examples
 
-`https://github.com/CerebriumAI/examples` holds runnable reference implementations —
+`https://github.com/CerebriumAI/examples` holds runnable reference implementations:
 vLLM, SDXL, Pipecat voice agents, ASGI apps and more. Prefer adapting an example over
 writing a deployment from scratch; each one carries a working `cerebrium.toml`.
 
@@ -74,8 +74,13 @@ Reach for this skill when:
 | `cerebrium init my-app` | Create new project with main.py and cerebrium.toml |
 | `cerebrium deploy` | Deploy app to production |
 | `cerebrium run main.py::run --prompt "text"` | Execute function remotely (testing/iteration) |
-| `cerebrium project set PROJECT_ID` | Set active project |
+| `cerebrium projects set PROJECT_ID` | Set active project (`project` is a legacy alias) |
 | `cerebrium region set REGION` | Set default region for file commands |
+| `cerebrium logs APP_NAME` | View an app's logs, rather than the web dashboard |
+| `cerebrium apps list` / `apps get` | List apps, inspect one |
+| `cerebrium secrets add` / `secrets list` | Manage project secrets from the terminal |
+| `cerebrium scale APP_ID` | Update scaling configuration |
+| `cerebrium status` | Check Cerebrium service status |
 
 ### Core cerebrium.toml sections
 
@@ -138,7 +143,7 @@ POST with JSON body; returns `{run_id, run_time_ms, result}`.
 
 4. **Test locally**
    - Run `cerebrium run main.py::run --prompt "test input"` to execute in cloud
-   - Check logs in dashboard for errors
+   - Check for errors with `cerebrium logs APP_NAME`
 
 5. **Deploy**
    - Run `cerebrium deploy` from project root
@@ -151,13 +156,13 @@ POST with JSON body; returns `{run_id, run_time_ms, result}`.
    - Send JSON body matching function signature
 
 7. **Monitor and iterate**
-   - Check dashboard for logs, metrics, cold start times
+   - Check logs and startup behaviour with `cerebrium logs APP_NAME`
    - Adjust scaling, concurrency, or hardware in cerebrium.toml
    - Re-run `cerebrium deploy` to update
 
 ### Cold start optimization workflow
 
-1. **Measure baseline** — check dashboard startup time metrics
+1. **Measure baseline** — read startup timings from `cerebrium logs APP_NAME`
 2. **Move initialization to module scope** — load models outside `run()` function
 3. **Store weights on persistent storage** — use `/persistent-storage` instead of baking into image
 4. **Use Tensorizer or FlashPack** — for direct GPU loading of large models
@@ -172,7 +177,7 @@ POST with JSON body; returns `{run_id, run_time_ms, result}`.
 - **Concurrency defaults differ by compute type** — GPU defaults to 1, CPU to 100. Adjust `replica_concurrency` for your workload.
 - **APT/Conda changes trigger full rebuild** — changing system packages rebuilds the entire image. Batch updates together.
 - **Python version changes trigger full rebuild** — changing `python_version` or `docker_base_image_url` rebuilds everything.
-- **Secrets are not environment variables by default** — use the dashboard Secrets tab to add them; they become env vars at runtime.
+- **Secrets are not environment variables by default** — add them with `cerebrium secrets add`; they become env vars at runtime.
 - **Region-local storage** — `/persistent-storage` is per-region. Use `/global-persistent-storage` for multi-region apps.
 - **Private Docker Hub images need login** — run `docker login -u username` (not OAuth flow) before deploying with private base images.
 - **Initialization timeout** — `deployment_initialization_timeout` defaults to 600s. Increase if model loading takes longer.
@@ -190,12 +195,12 @@ Before deploying, verify:
 - [ ] System dependencies (ffmpeg, etc.) listed in `[cerebrium.dependencies.apt]`
 - [ ] Port in custom runtime `entrypoint` matches `port` parameter
 - [ ] Model weights stored on `/persistent-storage` or `/global-persistent-storage`, not in container
-- [ ] Secrets added via dashboard, not hardcoded in code
+- [ ] Secrets added with `cerebrium secrets add`, not hardcoded in code
 - [ ] `disable_auth` set correctly (false for production, true for testing)
 - [ ] Scaling parameters (`min_replicas`, `max_replicas`, `replica_concurrency`) match traffic pattern
 - [ ] No large files in `include` list; use `exclude` to skip unnecessary files
 - [ ] Test with `cerebrium run` before deploying
-- [ ] Check build logs in dashboard for errors (APT install, pip install, shell commands)
+- [ ] Check build logs with `cerebrium logs APP_NAME` for errors (APT install, pip install, shell commands)
 - [ ] Verify endpoint is callable with correct URL and auth header
 
 ## Resources
