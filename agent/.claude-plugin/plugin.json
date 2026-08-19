@@ -1,0 +1,26 @@
+{
+  "name": "cerebrium",
+  "description": "Deploy and scale real-time AI workloads on Cerebrium's serverless GPU/CPU platform - REST APIs, streaming endpoints, WebSockets and async workers, with cold-start tuning, autoscaling and per-second billing.",
+  "version": "1.1.0",
+  "author": {
+    "name": "Cerebrium",
+    "url": "https://github.com/CerebriumAI"
+  },
+  "homepage": "https://www.cerebrium.ai",
+  "repository": "https://github.com/CerebriumAI/cerebrium",
+  "license": "MIT",
+  "keywords": [
+    "serverless",
+    "gpu",
+    "inference",
+    "deployment",
+    "machine-learning",
+    "llm",
+    "vllm",
+    "autoscaling",
+    "cold-start",
+    "streaming",
+    "websockets",
+    "cerebrium"
+  ]
+}
