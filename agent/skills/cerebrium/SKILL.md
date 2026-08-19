@@ -13,15 +13,15 @@ metadata:
 Cerebrium is a serverless GPU/CPU platform for deploying real-time and high-performance AI workloads. Agents use it to turn Python functions into scalable REST APIs, streaming endpoints, WebSocket services, and async workers with automatic scaling, low cold starts (2-5 seconds), and per-second billing.
 
 **Key files and commands:**
-- `cerebrium.toml` — single configuration file for deployment, hardware, scaling, and dependencies
-- `cerebrium init [PROJECT_NAME]` — scaffold a new project
-- `cerebrium deploy` — deploy the app to production
-- `cerebrium run main.py::function_name` — execute code remotely for testing
+- `cerebrium.toml`: single configuration file for deployment, hardware, scaling, and dependencies
+- `cerebrium init [PROJECT_NAME]`: scaffold a new project
+- `cerebrium deploy`: deploy the app to production
+- `cerebrium run main.py::function_name`: execute code remotely for testing
 - Primary docs: https://cerebrium.ai/docs
 
 ## Getting started from zero
 
-If Cerebrium is not set up yet, do this first — the rest of this skill assumes an
+If Cerebrium is not set up yet, do this first. The rest of this skill assumes an
 authenticated CLI.
 
 1. **Create an account** at https://dashboard.cerebrium.ai, where API keys and
@@ -56,13 +56,13 @@ Live docs can also be queried directly:
 ## When to use
 
 Reach for this skill when:
-- **Deploying inference APIs** — serving LLMs, embeddings, image generation, or other ML models as REST endpoints
-- **Building real-time services** — streaming responses, WebSocket connections, or voice/video agents
-- **Optimizing for latency** — need low cold starts, multi-region deployment, or automatic scaling
-- **Managing GPU workloads** — configuring GPU type, memory, concurrency, and batching
-- **Setting up CI/CD** — automating deployments via GitHub Actions or service accounts
-- **Tuning performance** — reducing initialization time, configuring scaling metrics, or implementing batching
-- **Handling bursty traffic** — scaling from zero to many replicas based on demand
+- **Deploying inference APIs**: serving LLMs, embeddings, image generation, or other ML models as REST endpoints
+- **Building real-time services**: streaming responses, WebSocket connections, or voice/video agents
+- **Optimizing for latency**: need low cold starts, multi-region deployment, or automatic scaling
+- **Managing GPU workloads**: configuring GPU type, memory, concurrency, and batching
+- **Setting up CI/CD**: automating deployments via GitHub Actions or service accounts
+- **Tuning performance**: reducing initialization time, configuring scaling metrics, or implementing batching
+- **Handling bursty traffic**: scaling from zero to many replicas based on demand
 
 ## Quick reference
 
@@ -103,10 +103,10 @@ POST with JSON body; returns `{run_id, run_time_ms, result}`.
 
 ### Default environment variables
 
-- `APP_NAME` — app name from cerebrium.toml
-- `PROJECT_ID` — Cerebrium project ID
-- `BUILD_ID` — unique build identifier
-- `HF_HOME` — `/persistent-storage/.cache/huggingface` (for model caching)
+- `APP_NAME`: app name from cerebrium.toml
+- `PROJECT_ID`: Cerebrium project ID
+- `BUILD_ID`: unique build identifier
+- `HF_HOME`: `/persistent-storage/.cache/huggingface` (for model caching)
 
 ## Decision guidance
 
@@ -162,28 +162,28 @@ POST with JSON body; returns `{run_id, run_time_ms, result}`.
 
 ### Cold start optimization workflow
 
-1. **Measure baseline** — read startup timings from `cerebrium logs APP_NAME`
-2. **Move initialization to module scope** — load models outside `run()` function
-3. **Store weights on persistent storage** — use `/persistent-storage` instead of baking into image
-4. **Use Tensorizer or FlashPack** — for direct GPU loading of large models
-5. **Enable checkpointing** — capture GPU/CPU state after initialization
-6. **Configure scaling** — set `min_replicas`, `scaling_buffer`, or `cooldown` to keep warm containers
+1. **Measure baseline**: read startup timings from `cerebrium logs APP_NAME`
+2. **Move initialization to module scope**: load models outside `run()` function
+3. **Store weights on persistent storage**: use `/persistent-storage` instead of baking into image
+4. **Use Tensorizer or FlashPack**: for direct GPU loading of large models
+5. **Enable checkpointing**: capture GPU/CPU state after initialization
+6. **Configure scaling**: set `min_replicas`, `scaling_buffer`, or `cooldown` to keep warm containers
 
 ## Common gotchas
 
-- **`disable_auth` defaults to `true`** — endpoints are public by default. Set `disable_auth=false` and use API keys for production.
-- **Port mismatch in custom runtime** — the port in `entrypoint` must match the `port` parameter in `[cerebrium.runtime.custom]`.
-- **Model weights in container image** — baking large models into the image increases cold starts. Use `/persistent-storage` instead.
-- **Concurrency defaults differ by compute type** — GPU defaults to 1, CPU to 100. Adjust `replica_concurrency` for your workload.
-- **APT/Conda changes trigger full rebuild** — changing system packages rebuilds the entire image. Batch updates together.
-- **Python version changes trigger full rebuild** — changing `python_version` or `docker_base_image_url` rebuilds everything.
-- **Secrets are not environment variables by default** — add them with `cerebrium secrets add`; they become env vars at runtime.
-- **Region-local storage** — `/persistent-storage` is per-region. Use `/global-persistent-storage` for multi-region apps.
-- **Private Docker Hub images need login** — run `docker login -u username` (not OAuth flow) before deploying with private base images.
-- **Initialization timeout** — `deployment_initialization_timeout` defaults to 600s. Increase if model loading takes longer.
-- **Async functions run for max 12 hours** — bounded by `response_grace_period` in scaling config (default 15 minutes).
-- **Streaming requires generator/iterator** — use `yield` in the function; client receives SSE stream.
-- **WebSockets require custom runtime** — cannot use default Cortex runtime for WebSocket endpoints.
+- **`disable_auth` defaults to `true`**: endpoints are public by default. Set `disable_auth=false` and use API keys for production.
+- **Port mismatch in custom runtime**: the port in `entrypoint` must match the `port` parameter in `[cerebrium.runtime.custom]`.
+- **Model weights in container image**: baking large models into the image increases cold starts. Use `/persistent-storage` instead.
+- **Concurrency defaults differ by compute type**: GPU defaults to 1, CPU to 100. Adjust `replica_concurrency` for your workload.
+- **APT/Conda changes trigger full rebuild**: changing system packages rebuilds the entire image. Batch updates together.
+- **Python version changes trigger full rebuild**: changing `python_version` or `docker_base_image_url` rebuilds everything.
+- **Secrets are not environment variables by default**: add them with `cerebrium secrets add`; they become env vars at runtime.
+- **Region-local storage**: `/persistent-storage` is per-region. Use `/global-persistent-storage` for multi-region apps.
+- **Private Docker Hub images need login**: run `docker login -u username` (not OAuth flow) before deploying with private base images.
+- **Initialization timeout**: `deployment_initialization_timeout` defaults to 600s. Increase if model loading takes longer.
+- **Async functions run for max 12 hours**: bounded by `response_grace_period` in scaling config (default 15 minutes).
+- **Streaming requires generator/iterator**: use `yield` in the function; client receives SSE stream.
+- **WebSockets require custom runtime**: cannot use default Cortex runtime for WebSocket endpoints.
 
 ## Verification checklist
 
@@ -205,12 +205,12 @@ Before deploying, verify:
 
 ## Resources
 
-- **Full page navigation**: https://cerebrium.ai/docs/llms.txt — comprehensive list of all documentation pages
-- **TOML Reference**: https://cerebrium.ai/docs/toml-reference/toml-reference — complete configuration options
-- **REST API**: https://cerebrium.ai/docs/endpoints/inference-api — request/response format, authentication
-- **Scaling & Concurrency**: https://cerebrium.ai/docs/scaling/batching-concurrency — batching strategies and concurrency tuning
-- **Cold Start Optimization**: https://cerebrium.ai/docs/performance/faster-cold-starts — techniques to reduce initialization time
-- **CI/CD Pipelines**: https://cerebrium.ai/docs/deployments/ci-cd — GitHub Actions automation with service accounts
+- **Full page navigation**: https://cerebrium.ai/docs/llms.txt: comprehensive list of all documentation pages
+- **TOML Reference**: https://cerebrium.ai/docs/toml-reference/toml-reference, complete configuration options
+- **REST API**: https://cerebrium.ai/docs/endpoints/inference-api, request/response format, authentication
+- **Scaling & Concurrency**: https://cerebrium.ai/docs/scaling/batching-concurrency, batching strategies and concurrency tuning
+- **Cold Start Optimization**: https://cerebrium.ai/docs/performance/faster-cold-starts, techniques to reduce initialization time
+- **CI/CD Pipelines**: https://cerebrium.ai/docs/deployments/ci-cd, GitHub Actions automation with service accounts
 
 ---
 
