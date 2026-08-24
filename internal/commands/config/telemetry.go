@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/cerebriumai/cerebrium/internal/ui"
+	"github.com/cerebriumai/cerebrium/pkg/bugsnag"
 	"github.com/cerebriumai/cerebrium/pkg/config"
 	"github.com/spf13/cobra"
 )
@@ -34,7 +35,10 @@ This will prevent the CLI from sending crash reports and error information to he
 You can re-enable telemetry at any time using 'cerebrium config telemetry enable'.
 
 You can also disable telemetry temporarily using the environment variable:
-  export CEREBRIUM_TELEMETRY_DISABLED=true`,
+  export CEREBRIUM_TELEMETRY_DISABLED=true
+
+The CLI also honours the cross-tool DO_NOT_TRACK convention:
+  export DO_NOT_TRACK=1`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cmd.SilenceUsage = true
 
@@ -104,9 +108,12 @@ func newTelemetryStatusCmd() *cobra.Command {
 				return ui.NewValidationError(fmt.Errorf("failed to load config: %w", err))
 			}
 
-			if cfg.IsTelemetryEnabled() {
+			switch {
+			case bugsnag.IsDoNotTrackEnabled():
+				fmt.Println("Telemetry: disabled (DO_NOT_TRACK is set)")
+			case cfg.IsTelemetryEnabled():
 				fmt.Println("Telemetry: enabled")
-			} else {
+			default:
 				fmt.Println("Telemetry: disabled")
 			}
 
