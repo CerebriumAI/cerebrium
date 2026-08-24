@@ -12,6 +12,8 @@
 package clientenv
 
 import (
+	"errors"
+	"log/slog"
 	"os"
 	"strings"
 	"sync"
@@ -66,11 +68,16 @@ func HeaderValue() string {
 // detect classifies the client environment, returning the X-Client-Env value.
 // An agent classification wins over CI because an agent running inside a CI
 // job is more specifically an agent, and the hosted agent surfaces all set CI.
-// Any detection error is treated as no agent so classification can never
-// affect CLI behavior.
+// ErrAgentNotFound is the normal no-agent result; any other detection error is
+// logged and then treated as no agent so classification still cannot affect
+// CLI behavior.
 func detect() string {
-	if agent, err := detectagent.Detect(); err == nil {
+	agent, err := detectagent.Detect()
+	switch {
+	case err == nil:
 		return agentValuePrefix + headerSafeAgentName(agent.Name)
+	case !errors.Is(err, detectagent.ErrAgentNotFound):
+		slog.Warn("Agent detection failed", "error", err)
 	}
 	if isCI() {
 		return ValueCI
