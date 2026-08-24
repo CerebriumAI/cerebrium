@@ -50,6 +50,12 @@ func Initialize() error {
 		return nil
 	}
 
+	if isDoNotTrackEnabled() {
+		initialized = true
+		enabled = false
+		return nil
+	}
+
 	// Check if telemetry is disabled by user
 	cfg, _ := config.Load() // Ignore error - proceed with default behavior if config unavailable
 	if cfg != nil && !cfg.IsTelemetryEnabled() {
@@ -110,6 +116,14 @@ func Initialize() error {
 // This will be false if no API key was provided at compile time.
 func IsEnabled() bool {
 	return enabled
+}
+
+func isDoNotTrackEnabled() bool {
+	value := strings.TrimSpace(os.Getenv("DO_NOT_TRACK"))
+	if value == "" {
+		return false
+	}
+	return value != "0" && !strings.EqualFold(value, "false")
 }
 
 // addSystemMetadata enriches error reports with runtime environment information.
