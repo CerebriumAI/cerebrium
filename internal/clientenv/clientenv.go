@@ -78,21 +78,24 @@ func detect() string {
 	return ValueInteractive
 }
 
-// headerSafeAgentName makes a detected agent name safe for an HTTP header.
-// Registry identifiers pass through unchanged; AI_AGENT self-declarations are
-// lowercased, restricted to an identifier charset and capped. The charset
-// includes "@" because the detect-agent AI_AGENT convention carries an
-// optional version suffix (for example devin@1). A name that sanitizes away
-// entirely is reported as "unknown" so a detected agent stays in the agent
-// bucket instead of silently degrading to interactive.
+// headerSafeAgentName makes a detected agent name safe for an HTTP header and
+// normalizes it to the lowercase-hyphen identifier convention used across
+// agent registries (claude-code, gemini-cli). detect-agent's own names mix
+// underscores and hyphens and carry no stability contract, and these values
+// become analytics dimensions, so separators are normalized here rather than
+// letting upstream churn fork the recorded history. The charset includes "@"
+// because the detect-agent AI_AGENT convention carries an optional version
+// suffix (for example devin@1). A name that sanitizes away entirely is
+// reported as "unknown" so a detected agent stays in the agent bucket instead
+// of silently degrading to interactive.
 func headerSafeAgentName(raw string) string {
-	trimmed := strings.ToLower(strings.TrimSpace(raw))
+	trimmed := strings.ReplaceAll(strings.ToLower(strings.TrimSpace(raw)), "_", "-")
 	var builder strings.Builder
 	for _, char := range trimmed {
 		switch {
 		case char >= 'a' && char <= 'z',
 			char >= '0' && char <= '9',
-			char == '-', char == '.', char == '_', char == '@':
+			char == '-', char == '.', char == '@':
 			builder.WriteRune(char)
 		}
 	}

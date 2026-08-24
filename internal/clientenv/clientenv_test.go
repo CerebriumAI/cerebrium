@@ -55,12 +55,12 @@ func TestDetect(t *testing.T) {
 		{
 			name:     "detected agent",
 			vars:     map[string]string{"CLAUDECODE": "1"},
-			expected: "agent:claude_code",
+			expected: "agent:claude-code",
 		},
 		{
 			name:     "declared agent is sanitized for the header, keeping the version suffix",
-			vars:     map[string]string{"AI_AGENT": " My Bot@2.0\r\n"},
-			expected: "agent:mybot@2.0",
+			vars:     map[string]string{"AI_AGENT": " My_Bot@2.0\r\n"},
+			expected: "agent:my-bot@2.0",
 		},
 		{
 			name:     "declared agent sanitizing to empty reports unknown",
@@ -75,7 +75,7 @@ func TestDetect(t *testing.T) {
 		{
 			name:     "agent wins over CI",
 			vars:     map[string]string{"CLAUDECODE": "1", "CI": "true"},
-			expected: "agent:claude_code",
+			expected: "agent:claude-code",
 		},
 	}
 
