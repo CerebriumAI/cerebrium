@@ -80,9 +80,11 @@ func detect() string {
 
 // headerSafeAgentName makes a detected agent name safe for an HTTP header.
 // Registry identifiers pass through unchanged; AI_AGENT self-declarations are
-// lowercased, restricted to an identifier charset and capped. A name that
-// sanitizes away entirely is reported as "unknown" so a detected agent stays
-// in the agent bucket instead of silently degrading to interactive.
+// lowercased, restricted to an identifier charset and capped. The charset
+// includes "@" because the detect-agent AI_AGENT convention carries an
+// optional version suffix (for example devin@1). A name that sanitizes away
+// entirely is reported as "unknown" so a detected agent stays in the agent
+// bucket instead of silently degrading to interactive.
 func headerSafeAgentName(raw string) string {
 	trimmed := strings.ToLower(strings.TrimSpace(raw))
 	var builder strings.Builder
@@ -90,7 +92,7 @@ func headerSafeAgentName(raw string) string {
 		switch {
 		case char >= 'a' && char <= 'z',
 			char >= '0' && char <= '9',
-			char == '-', char == '.', char == '_':
+			char == '-', char == '.', char == '_', char == '@':
 			builder.WriteRune(char)
 		}
 	}

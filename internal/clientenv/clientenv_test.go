@@ -58,9 +58,9 @@ func TestDetect(t *testing.T) {
 			expected: "agent:claude_code",
 		},
 		{
-			name:     "declared agent is sanitized for the header",
-			vars:     map[string]string{"AI_AGENT": " My Bot\r\n"},
-			expected: "agent:mybot",
+			name:     "declared agent is sanitized for the header, keeping the version suffix",
+			vars:     map[string]string{"AI_AGENT": " My Bot@2.0\r\n"},
+			expected: "agent:mybot@2.0",
 		},
 		{
 			name:     "declared agent sanitizing to empty reports unknown",
