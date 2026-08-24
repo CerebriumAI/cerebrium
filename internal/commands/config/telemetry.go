@@ -37,7 +37,7 @@ You can re-enable telemetry at any time using 'cerebrium config telemetry enable
 You can also disable telemetry temporarily using the environment variable:
   export CEREBRIUM_TELEMETRY_DISABLED=true
 
-The CLI also honours the DO_NOT_TRACK convention (https://consoledonottrack.com):
+The CLI also honours the cross-tool DO_NOT_TRACK convention:
   export DO_NOT_TRACK=1`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cmd.SilenceUsage = true
