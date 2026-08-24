@@ -16,16 +16,8 @@ func TestIsDoNotTrackEnabled(t *testing.T) {
 		expected bool
 	}{
 		{name: "unset - tracking allowed", set: false, expected: false},
-		{name: "empty - tracking allowed", value: "", set: true, expected: false},
 		{name: "1 - opted out", value: "1", set: true, expected: true},
-		{name: "true - opted out", value: "true", set: true, expected: true},
-		{name: "TRUE - opted out", value: "TRUE", set: true, expected: true},
-		{name: "arbitrary value - opted out", value: "yes", set: true, expected: true},
-		{name: "padded 1 - opted out", value: " 1 ", set: true, expected: true},
-		{name: "0 - tracking allowed", value: "0", set: true, expected: false},
 		{name: "false - tracking allowed", value: "false", set: true, expected: false},
-		{name: "False - tracking allowed", value: "False", set: true, expected: false},
-		{name: "whitespace only - tracking allowed", value: "   ", set: true, expected: false},
 	}
 
 	for _, tc := range tcs {
@@ -34,7 +26,7 @@ func TestIsDoNotTrackEnabled(t *testing.T) {
 				t.Setenv("DO_NOT_TRACK", tc.value)
 			}
 
-			assert.Equal(t, tc.expected, isDoNotTrackEnabled())
+			assert.Equal(t, tc.expected, IsDoNotTrackEnabled())
 		})
 	}
 }

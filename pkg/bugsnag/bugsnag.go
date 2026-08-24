@@ -50,7 +50,7 @@ func Initialize() error {
 		return nil
 	}
 
-	if isDoNotTrackEnabled() {
+	if IsDoNotTrackEnabled() {
 		initialized = true
 		enabled = false
 		return nil
@@ -118,7 +118,9 @@ func IsEnabled() bool {
 	return enabled
 }
 
-func isDoNotTrackEnabled() bool {
+// IsDoNotTrackEnabled reports whether the DO_NOT_TRACK convention
+// (https://consoledonottrack.com) opts this process out of error reporting.
+func IsDoNotTrackEnabled() bool {
 	value := strings.TrimSpace(os.Getenv("DO_NOT_TRACK"))
 	if value == "" {
 		return false
