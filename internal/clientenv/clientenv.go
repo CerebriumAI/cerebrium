@@ -73,10 +73,10 @@ func HeaderValue() string {
 // CLI behavior.
 func detect() string {
 	agent, err := detectagent.Detect()
-	switch {
-	case err == nil:
+	if err == nil {
 		return agentValuePrefix + headerSafeAgentName(agent.Name)
-	case !errors.Is(err, detectagent.ErrAgentNotFound):
+	}
+	if !errors.Is(err, detectagent.ErrAgentNotFound) {
 		slog.Warn("Agent detection failed", "error", err)
 	}
 	if isCI() {
