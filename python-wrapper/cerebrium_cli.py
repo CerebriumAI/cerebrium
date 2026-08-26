@@ -10,6 +10,7 @@ import os
 import platform
 import re
 import stat
+import subprocess
 import sys
 import tarfile
 import zipfile
@@ -293,6 +294,19 @@ def ensure_binary() -> Path:
 def main():
     """Execute the Go binary with the provided arguments."""
     binary = ensure_binary()
+
+    if sys.platform == "win32":
+        # Windows has no true exec(): os.execv there is emulated by the CRT
+        # as spawn-wait-exit, with known quirks in how Ctrl+C reaches the
+        # new process. Keep the subprocess-based path here instead.
+        try:
+            result = subprocess.run([str(binary)] + sys.argv[1:])
+            sys.exit(result.returncode)
+        except KeyboardInterrupt:
+            sys.exit(130)
+        except Exception as e:
+            print(f"Error executing Cerebrium CLI: {e}", file=sys.stderr)
+            sys.exit(1)
 
     # Replace this process with the Go binary instead of spawning it as a
     # child. Anything that supervises `cerebrium` by PID (CI timeouts,
