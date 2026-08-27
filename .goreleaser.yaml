@@ -64,8 +64,8 @@ notarize:
         # Wait for notarization to complete
         wait: true
 
-        # Timeout for notarization (Apple can be slow)
-        timeout: 45m
+        # Apple rejects auth tokens with a lifetime over 20m, which caps this
+        timeout: 20m
 
 archives:
   - id: cerebrium
