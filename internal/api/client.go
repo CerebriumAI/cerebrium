@@ -491,7 +491,7 @@ func (c *client) UploadZip(ctx context.Context, uploadURL string, zipPath string
 			}
 
 			// Create PUT request with context
-			req, err := http.NewRequestWithContext(ctx, "PUT", uploadURL, file)
+			req, err := http.NewRequestWithContext(ctx, "PUT", uploadURL, io.NopCloser(file))
 			if err != nil {
 				return retry.Unrecoverable(fmt.Errorf("failed to create upload request: %w", err))
 			}
@@ -527,7 +527,9 @@ func (c *client) UploadZip(ctx context.Context, uploadURL string, zipPath string
 		retry.Delay(retryDelay),
 		retry.DelayType(retry.BackOffDelay),
 		retry.RetryIf(func(err error) bool {
-			return !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded)
+			return retry.IsRecoverable(err) &&
+				!errors.Is(err, context.Canceled) &&
+				!errors.Is(err, context.DeadlineExceeded)
 		}),
 		retry.OnRetry(func(n uint, err error) {
 			slog.Warn("Retrying zip upload", "attempt", n+1, "maxAttempts", maxAttempts, "error", err)

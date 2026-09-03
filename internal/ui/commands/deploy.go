@@ -1129,7 +1129,9 @@ func (m *DeployView) uploadZipWithProgress() error {
 		retry.Delay(retryDelay),
 		retry.DelayType(retry.BackOffDelay),
 		retry.RetryIf(func(err error) bool {
-			return !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded)
+			return retry.IsRecoverable(err) &&
+				!errors.Is(err, context.Canceled) &&
+				!errors.Is(err, context.DeadlineExceeded)
 		}),
 		retry.OnRetry(func(n uint, err error) {
 			slog.Warn("Retrying zip upload", "attempt", n+1, "maxAttempts", maxAttempts, "error", err)
