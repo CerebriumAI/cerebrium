@@ -271,7 +271,7 @@ func (m *ListView) fetchRuns() tea.Msg {
 	// Construct the app ID, handling both formats:
 	// - "5-dockerfile" -> "dev-p-0780791d-5-dockerfile"
 	// - "dev-p-0780791d-5-dockerfile" -> "dev-p-0780791d-5-dockerfile"
-	appID := normalizeAppID(m.conf.ProjectID, m.conf.AppName)
+	appID := api.NormalizeAppID(m.conf.ProjectID, m.conf.AppName)
 
 	// Call the API to fetch runs
 	runs, err := m.conf.Client.GetRuns(m.ctx, m.conf.ProjectID, appID, m.conf.AsyncOnly)
@@ -282,19 +282,6 @@ func (m *ListView) fetchRuns() tea.Msg {
 }
 
 // Utils
-
-// normalizeAppID ensures the app ID has the correct format.
-// If the appName already starts with the projectID prefix, use it as-is.
-// Otherwise, prepend the projectID.
-func normalizeAppID(projectID, appName string) string {
-	// Check if appName already has the project ID prefix
-	expectedPrefix := projectID + "-"
-	if strings.HasPrefix(appName, expectedPrefix) {
-		return appName
-	}
-	// Prepend the project ID
-	return fmt.Sprintf("%s-%s", projectID, appName)
-}
 
 func newTable(rows []table.Row) table.Model {
 	// Calculate dynamic column widths based on content

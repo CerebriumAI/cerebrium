@@ -1,7 +1,9 @@
 package api
 
 import (
+	"encoding/json"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -374,6 +376,94 @@ type Container struct {
 	Region                        string    `json:"region"`
 	BuildID                       string    `json:"buildId"`
 	IsTerminating                 bool      `json:"isTerminating"`
+}
+
+// MetricValue is a single sample in a metric series. The API relays raw query
+// values, which arrive as JSON strings, and pads gaps with null — so it decodes
+// from either form. It marshals back out as a plain number (or null) so our own
+// JSON output is directly comparable.
+type MetricValue struct {
+	Value float64
+	Valid bool
+}
+
+func (m *MetricValue) UnmarshalJSON(b []byte) error {
+	s := string(b)
+	if s == "null" {
+		return nil
+	}
+
+	if strings.HasPrefix(s, `"`) {
+		var str string
+		if err := json.Unmarshal(b, &str); err != nil {
+			return err
+		}
+		if str == "" {
+			return nil
+		}
+		value, err := strconv.ParseFloat(str, 64)
+		if err != nil {
+			return fmt.Errorf("failed to parse metric value %q: %w", str, err)
+		}
+		m.set(value)
+		return nil
+	}
+
+	var value float64
+	if err := json.Unmarshal(b, &value); err != nil {
+		return err
+	}
+	m.set(value)
+	return nil
+}
+
+// set records a sample, treating NaN and infinities as absent — they mean the
+// query had nothing to report, and they are not representable in JSON.
+func (m *MetricValue) set(value float64) {
+	if math.IsNaN(value) || math.IsInf(value, 0) {
+		return
+	}
+	m.Value = value
+	m.Valid = true
+}
+
+func (m MetricValue) MarshalJSON() ([]byte, error) {
+	if !m.Valid {
+		return []byte("null"), nil
+	}
+	return json.Marshal(m.Value)
+}
+
+// ChartSeries is one named line of a resource metric. Data is parallel to the
+// enclosing ChartData's Timestamps; entries are invalid where the range was
+// padded because no sample existed.
+type ChartSeries struct {
+	Name string        `json:"name"`
+	Data []MetricValue `json:"data"`
+}
+
+// ChartData is a time series for a single resource metric. At app level it carries
+// a P50, P90 and Max series; scoped to one container it carries a single series.
+type ChartData struct {
+	Timestamps []int64       `json:"timestamps"`
+	Series     []ChartSeries `json:"series"`
+}
+
+// ResourceMetrics holds utilisation time series for an app. The endpoint also
+// returns container-count and request-concurrency charts, which the CLI does not
+// surface yet.
+type ResourceMetrics struct {
+	CPU    ChartData `json:"cpu"`    // cores
+	Memory ChartData `json:"memory"` // GB of RAM
+	GPU    ChartData `json:"gpu"`    // GB of GPU memory (VRAM)
+}
+
+// ResourceMetricsOptions contains parameters for fetching resource metrics
+type ResourceMetricsOptions struct {
+	Start       time.Time
+	End         time.Time
+	ContainerID string // Scope to a single container (optional)
+	Resolution  string // "medium" or "high" for more data points (optional)
 }
 
 // AppBuild represents a build for a Cerebrium application

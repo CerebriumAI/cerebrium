@@ -3,7 +3,6 @@ package runs
 import (
 	"fmt"
 	"sort"
-	"strings"
 
 	"github.com/cerebriumai/cerebrium/internal/api"
 	"github.com/cerebriumai/cerebrium/internal/ui"
@@ -62,7 +61,7 @@ func runList(cmd *cobra.Command, appName string, asyncOnly bool) error {
 	}
 
 	// Construct the app ID
-	appID := normalizeAppID(projectID, appName)
+	appID := api.NormalizeAppID(projectID, appName)
 
 	// Show spinner while fetching
 	spinner := ui.NewSimpleSpinnerFor(outputFormat, "Loading runs...")
@@ -111,13 +110,4 @@ func runList(cmd *cobra.Command, appName string, asyncOnly bool) error {
 	}
 
 	return nil
-}
-
-// normalizeAppID ensures the app ID has the correct format.
-func normalizeAppID(projectID, appName string) string {
-	expectedPrefix := projectID + "-"
-	if strings.HasPrefix(appName, expectedPrefix) {
-		return appName
-	}
-	return fmt.Sprintf("%s-%s", projectID, appName)
 }
