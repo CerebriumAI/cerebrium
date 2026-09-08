@@ -56,7 +56,7 @@ func TestToken(t *testing.T) {
 
 		_, err := Token(t.Context(), cfg)
 
-		require.ErrorContains(t, err, "no access token found")
+		require.ErrorIs(t, err, ErrNotLoggedIn)
 	})
 
 	t.Run("reports an expired token with nothing to refresh with", func(t *testing.T) {
@@ -65,7 +65,7 @@ func TestToken(t *testing.T) {
 
 		_, err := Token(t.Context(), cfg)
 
-		require.ErrorContains(t, err, "no refresh token available")
+		require.ErrorIs(t, err, ErrSessionExpired)
 	})
 
 	t.Run("refreshes and saves an expired token", func(t *testing.T) {
@@ -91,7 +91,31 @@ func TestToken(t *testing.T) {
 		assert.Equal(t, fresh, reloaded.AccessToken)
 	})
 
-	t.Run("keeps credentials when the refresh call fails", func(t *testing.T) {
+	t.Run("clears credentials the auth server has rejected", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(`{"error":"invalid_grant"}`))
+		}))
+		defer server.Close()
+
+		t.Setenv("AUTH_URL", server.URL)
+		cfg := loadTestConfig(t)
+		cfg.AccessToken = testJWT(t, time.Now().Add(-time.Hour))
+		cfg.RefreshToken = "stored-refresh"
+
+		_, err := Token(t.Context(), cfg)
+
+		require.ErrorIs(t, err, ErrSessionExpired)
+		assert.Empty(t, cfg.AccessToken)
+		assert.Empty(t, cfg.RefreshToken)
+
+		reloaded, err := config.Load()
+		require.NoError(t, err)
+		assert.Empty(t, reloaded.AccessToken)
+		assert.Empty(t, reloaded.RefreshToken)
+	})
+
+	t.Run("keeps credentials when the refresh call itself fails", func(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.WriteHeader(http.StatusInternalServerError)
 		}))
@@ -105,6 +129,7 @@ func TestToken(t *testing.T) {
 		_, err := Token(t.Context(), cfg)
 
 		require.Error(t, err)
+		assert.NotErrorIs(t, err, ErrSessionExpired)
 		assert.Equal(t, "stored-refresh", cfg.RefreshToken)
 	})
 
@@ -114,6 +139,8 @@ func TestToken(t *testing.T) {
 
 		_, err := Token(t.Context(), cfg)
 
-		require.ErrorContains(t, err, "service account token has expired")
+		require.Error(t, err)
+		assert.NotErrorIs(t, err, ErrSessionExpired)
+		assert.NotErrorIs(t, err, ErrNotLoggedIn)
 	})
 }

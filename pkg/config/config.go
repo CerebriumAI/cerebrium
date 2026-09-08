@@ -391,6 +391,13 @@ func (c *Config) SetAccessToken(token string) {
 	c.AccessToken = token
 }
 
+// ClearSession removes the stored user session tokens and persists the change.
+func (c *Config) ClearSession() error {
+	c.AccessToken = ""
+	c.RefreshToken = ""
+	return Save(c)
+}
+
 // ExtractProjectIDFromClaims extracts project ID from JWT claims.
 // It checks multiple claim names to match Python CLI behavior:
 // 1. project_id, projectId, sub, project (top-level)
