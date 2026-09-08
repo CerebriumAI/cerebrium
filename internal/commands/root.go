@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 
+	"github.com/cerebriumai/cerebrium/internal/authsession"
 	appCmd "github.com/cerebriumai/cerebrium/internal/commands/apps"
 	configCmd "github.com/cerebriumai/cerebrium/internal/commands/config"
 	containersCmd "github.com/cerebriumai/cerebrium/internal/commands/containers"
@@ -32,7 +33,10 @@ func NewRootCmd() *cobra.Command {
 		// Individual commands set cmd.SilenceUsage = true to hide usage on errors.
 		SilenceErrors: true,
 		// Load config once and store in context for all subcommands
-		PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			// Failures here are about the environment, not the invocation, so usage is noise
+			cmd.SilenceUsage = true
+
 			// Set command context for Bugsnag
 			cerebrium_bugsnag.SetCommandContext(cmd.Name(), args)
 
@@ -41,17 +45,14 @@ func NewRootCmd() *cobra.Command {
 			// Get display options for logger setup
 			displayOpts, err := ui.NewDisplayConfig(cmd, verbose)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error getting display options: %v\n", err)
-				os.Exit(1)
+				return fmt.Errorf("failed to get display options: %w", err)
 			}
 
 			// Load config first (needed to get configured log level)
 			cfg, err := config.Load()
 			if err != nil {
-				// Config loading failed - print error and exit
-				// This is critical, we can't proceed without config
-				fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
-				os.Exit(1)
+				// Config loading failed - this is critical, we can't proceed without config
+				return fmt.Errorf("failed to load config: %w", err)
 			}
 
 			// Override service account token if provided via CLI flag
@@ -68,8 +69,7 @@ func NewRootCmd() *cobra.Command {
 				logLevel := cfg.GetLogLevel()
 				logFile, err := logrium.Setup(displayOpts.IsInteractive, logLevel)
 				if err != nil {
-					fmt.Fprintf(os.Stderr, "Error setting up logger: %v\n", err)
-					os.Exit(1)
+					return fmt.Errorf("failed to set up logger: %w", err)
 				}
 
 				// Print log file location if logging to file
@@ -92,6 +92,8 @@ func NewRootCmd() *cobra.Command {
 			if cmd.Name() != "version" && cmd.Name() != "config" {
 				version.PrintUpdateNotification(cmd.Context(), cfg.SkipVersionCheck)
 			}
+
+			return ensureAuthenticated(cmd, cfg, displayOpts)
 		},
 	}
 
@@ -103,19 +105,19 @@ func NewRootCmd() *cobra.Command {
 	rootCmd.PersistentFlags().String("service-account-token", "", "Service account token for authentication. Takes precedence over environment variable and stored session token.")
 
 	// Add subcommands
-	rootCmd.AddCommand(NewLoginCmd())
-	rootCmd.AddCommand(NewSaveAuthConfigCmd())
-	rootCmd.AddCommand(NewInitCmd())
+	rootCmd.AddCommand(authsession.WithoutAuth(NewLoginCmd()))
+	rootCmd.AddCommand(authsession.WithoutAuth(NewSaveAuthConfigCmd()))
+	rootCmd.AddCommand(authsession.WithoutAuth(NewInitCmd()))
 	rootCmd.AddCommand(NewDeployCmd())
 	rootCmd.AddCommand(NewRunCmd())
 	rootCmd.AddCommand(NewStatusCmd())
 	rootCmd.AddCommand(NewLogsCmd())
 	rootCmd.AddCommand(containersCmd.NewContainersCmd())
-	rootCmd.AddCommand(NewVersionCmd())
-	rootCmd.AddCommand(configCmd.NewConfigCmd())
+	rootCmd.AddCommand(authsession.WithoutAuth(NewVersionCmd()))
+	rootCmd.AddCommand(authsession.WithoutAuth(configCmd.NewConfigCmd()))
 	rootCmd.AddCommand(appCmd.NewAppsCmd())
 	rootCmd.AddCommand(projectCmd.NewProjectsCmd())
-	rootCmd.AddCommand(regionCmd.NewRegionCmd())
+	rootCmd.AddCommand(authsession.WithoutAuth(regionCmd.NewRegionCmd()))
 	rootCmd.AddCommand(runsCmd.NewRunsCmd())
 	rootCmd.AddCommand(secretsCmd.NewSecretsCmd())
 

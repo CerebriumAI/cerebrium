@@ -1,6 +1,7 @@
 package projects
 
 import (
+	"github.com/cerebriumai/cerebrium/internal/authsession"
 	"github.com/spf13/cobra"
 )
 
@@ -14,9 +15,9 @@ func NewProjectsCmd() *cobra.Command {
 	}
 
 	// Add subcommands
-	cmd.AddCommand(newCurrentCmd())
+	cmd.AddCommand(authsession.WithoutAuth(newCurrentCmd()))
 	cmd.AddCommand(newListCmd())
-	cmd.AddCommand(newSetCmd())
+	cmd.AddCommand(authsession.WithoutAuth(newSetCmd()))
 
 	return cmd
 }
