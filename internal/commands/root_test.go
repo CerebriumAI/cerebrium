@@ -5,6 +5,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/cerebriumai/cerebrium/internal/authsession"
 	"github.com/cerebriumai/cerebrium/internal/ui"
 	"github.com/cerebriumai/cerebrium/pkg/config"
 	"github.com/spf13/cobra"
@@ -220,7 +221,7 @@ func TestRootCommand_PersistentPreRun(t *testing.T) {
 			configFound = (cfg != nil && err == nil)
 		},
 	}
-	rootCmd.AddCommand(testCmd)
+	rootCmd.AddCommand(authsession.WithoutAuth(testCmd))
 
 	// Run the test command
 	rootCmd.SetArgs([]string{"test-config"})
