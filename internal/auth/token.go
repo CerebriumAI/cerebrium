@@ -72,7 +72,10 @@ func RefreshToken(ctx context.Context, authURL, clientID, refreshToken string) (
 		}
 		_ = json.Unmarshal(body, &errResp)
 
-		if errResp.Error == "invalid_grant" || resp.StatusCode == http.StatusUnauthorized {
+		// Only an explicit invalid_grant means the token itself was rejected. A bare
+		// 401 is usually invalid_client, i.e. our own config, and clearing on that
+		// would throw away a working refresh token.
+		if errResp.Error == "invalid_grant" {
 			return "", ErrInvalidGrant
 		}
 

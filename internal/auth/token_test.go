@@ -131,36 +131,29 @@ func TestRefreshToken(t *testing.T) {
 	})
 
 	t.Run("reports a rejected grant", func(t *testing.T) {
-		tcs := []struct {
-			name   string
-			status int
-			body   string
-		}{
-			{
-				name:   "invalid_grant",
-				status: http.StatusBadRequest,
-				body:   `{"error":"invalid_grant"}`,
-			},
-			{
-				name:   "unauthorized",
-				status: http.StatusUnauthorized,
-				body:   `{"error":"invalid_client"}`,
-			},
-		}
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(`{"error":"invalid_grant"}`))
+		}))
+		defer server.Close()
 
-		for _, tc := range tcs {
-			t.Run(tc.name, func(t *testing.T) {
-				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-					w.WriteHeader(tc.status)
-					_, _ = w.Write([]byte(tc.body))
-				}))
-				defer server.Close()
+		_, err := RefreshToken(context.Background(), server.URL, "client-id", "stored-refresh")
 
-				_, err := RefreshToken(context.Background(), server.URL, "client-id", "stored-refresh")
+		require.ErrorIs(t, err, ErrInvalidGrant)
+	})
 
-				require.ErrorIs(t, err, ErrInvalidGrant)
-			})
-		}
+	t.Run("does not treat a client misconfiguration as a rejected grant", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = w.Write([]byte(`{"error":"invalid_client"}`))
+		}))
+		defer server.Close()
+
+		_, err := RefreshToken(context.Background(), server.URL, "client-id", "stored-refresh")
+
+		require.Error(t, err)
+		assert.NotErrorIs(t, err, ErrInvalidGrant)
+		assert.Equal(t, "token refresh failed with status 401: invalid_client", err.Error())
 	})
 
 	t.Run("keeps the detail for unexpected failures", func(t *testing.T) {
