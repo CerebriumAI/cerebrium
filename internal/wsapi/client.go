@@ -8,7 +8,7 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/cerebriumai/cerebrium/internal/auth"
+	"github.com/cerebriumai/cerebrium/internal/authsession"
 	"github.com/cerebriumai/cerebrium/pkg/config"
 	"github.com/gorilla/websocket"
 )
@@ -207,53 +207,7 @@ func (c *client) StreamBuildLogs(ctx context.Context, projectID, buildID string,
 
 // getAuthToken retrieves the authentication token (service account or user token)
 func (c *client) getAuthToken(ctx context.Context) (string, error) {
-	// 1. Try service account token from environment variable first
-	serviceToken, err := config.GetServiceAccountTokenFromEnv()
-	if err != nil {
-		return "", fmt.Errorf("service account token error: %w", err)
-	}
-	if serviceToken != "" {
-		return serviceToken, nil
-	}
-
-	// 2. Try stored service account token
-	if token := c.cfg.GetServiceAccountToken(); token != "" {
-		if err := auth.ValidateToken(token); err == nil {
-			return token, nil
-		}
-		return "", fmt.Errorf("service account token has expired. Please generate a new one")
-	}
-
-	// 3. Try access token
-	token := c.cfg.GetAccessToken()
-	if token == "" {
-		return "", fmt.Errorf("no access token found. Please run 'cerebrium login' or provide a service account token")
-	}
-
-	// Check if access token is still valid
-	if err := auth.ValidateToken(token); err == nil {
-		return token, nil
-	}
-
-	// 4. Access token expired, try to refresh
-	refreshToken := c.cfg.GetRefreshToken()
-	if refreshToken == "" {
-		return "", fmt.Errorf("access token has expired and no refresh token available. Please run 'cerebrium login'")
-	}
-
-	envConfig := c.cfg.GetEnvConfig()
-	newToken, err := auth.RefreshToken(ctx, envConfig.AuthUrl, envConfig.ClientID, refreshToken)
-	if err != nil {
-		return "", fmt.Errorf("failed to refresh token: %w", err)
-	}
-
-	// Save the new token
-	c.cfg.SetAccessToken(newToken)
-	if err := config.Save(c.cfg); err != nil {
-		return "", fmt.Errorf("failed to save new token: %w", err)
-	}
-
-	return newToken, nil
+	return authsession.Token(ctx, c.cfg)
 }
 
 // pingLoop sends periodic ping messages to keep the connection alive.
