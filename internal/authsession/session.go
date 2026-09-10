@@ -11,14 +11,6 @@ import (
 	"github.com/cerebriumai/cerebrium/pkg/config"
 )
 
-var (
-	// ErrNotLoggedIn reports that no credentials are stored at all.
-	ErrNotLoggedIn = errors.New("not logged in. Please run 'cerebrium login', or set CEREBRIUM_SERVICE_ACCOUNT_TOKEN for non-interactive use")
-
-	// ErrSessionExpired reports that stored credentials exist but can no longer be renewed.
-	ErrSessionExpired = errors.New("your session has expired. Please run 'cerebrium login' to continue")
-)
-
 // Token returns the token to authenticate with, refreshing and persisting the
 // stored access token when it has expired.
 func Token(ctx context.Context, cfg *config.Config) (string, error) {
@@ -57,14 +49,13 @@ func Token(ctx context.Context, cfg *config.Config) (string, error) {
 
 	envConfig := cfg.GetEnvConfig()
 	newToken, err := auth.RefreshToken(ctx, envConfig.AuthUrl, envConfig.ClientID, refreshToken)
-	if err != nil {
-		if errors.Is(err, auth.ErrInvalidGrant) {
-			// Keeping a rejected grant only buys a failed round trip on every later command
-			if clearErr := cfg.ClearSession(); clearErr != nil {
-				slog.Warn("Failed to clear rejected credentials", "error", clearErr)
-			}
-			return "", ErrSessionExpired
+	if errors.Is(err, auth.ErrInvalidGrant) {
+		// Keeping a rejected grant only buys a failed round trip on every later command
+		if clearErr := cfg.ClearSession(); clearErr != nil {
+			slog.Warn("Failed to clear rejected credentials", "error", clearErr)
 		}
+		return "", ErrSessionExpired
+	} else if err != nil {
 		return "", fmt.Errorf("failed to refresh token: %w", err)
 	}
 

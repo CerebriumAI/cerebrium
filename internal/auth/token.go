@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -14,10 +13,6 @@ import (
 	"strings"
 	"time"
 )
-
-// ErrInvalidGrant reports that the auth server rejected the refresh token itself,
-// so no retry can succeed and the user has to log in again.
-var ErrInvalidGrant = errors.New("refresh token was rejected")
 
 // ValidateToken checks if a JWT token is valid (not expired).
 // Returns nil if valid, error if expired or invalid.
