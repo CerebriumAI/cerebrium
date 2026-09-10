@@ -1,10 +1,15 @@
 package commands
 
 import (
+	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
 	"github.com/cerebriumai/cerebrium/internal/authsession"
+	"github.com/cerebriumai/cerebrium/internal/ui"
+	"github.com/cerebriumai/cerebrium/pkg/config"
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -58,6 +63,50 @@ func TestReadLoginConsent(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			assert.Equal(t, tc.expected, readLoginConsent(strings.NewReader(tc.input)))
+		})
+	}
+}
+
+func TestEnsureAuthenticated(t *testing.T) {
+	t.Run("reports missing credentials as an auth error", func(t *testing.T) {
+		t.Setenv("CEREBRIUM_SERVICE_ACCOUNT_TOKEN", "")
+
+		cmd := &cobra.Command{Use: "deploy"}
+		cmd.SetContext(t.Context())
+
+		// Not a TTY, so the login prompt is skipped and the error comes straight back
+		err := ensureAuthenticated(cmd, &config.Config{}, ui.DisplayConfig{})
+
+		var uiErr *ui.UIError
+		require.ErrorAs(t, err, &uiErr)
+		assert.Equal(t, ui.ErrorTypeAuth, uiErr.Type)
+		assert.True(t, uiErr.SuppressUsage)
+		assert.ErrorIs(t, err, authsession.ErrNotLoggedIn)
+	})
+
+	t.Run("skips commands that need no credentials", func(t *testing.T) {
+		cmd := authsession.WithoutAuth(&cobra.Command{Use: "login"})
+		cmd.SetContext(t.Context())
+
+		require.NoError(t, ensureAuthenticated(cmd, &config.Config{}, ui.DisplayConfig{}))
+	})
+}
+
+func TestSuppressesUsage(t *testing.T) {
+	tcs := []struct {
+		name     string
+		err      error
+		expected bool
+	}{
+		{name: "no error", err: nil, expected: false},
+		{name: "plain error still shows usage", err: errors.New("boom"), expected: false},
+		{name: "ui error", err: ui.NewAuthError(errors.New("boom")), expected: true},
+		{name: "wrapped ui error", err: fmt.Errorf("context: %w", ui.NewAuthError(errors.New("boom"))), expected: true},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.expected, suppressesUsage(tc.err))
 		})
 	}
 }

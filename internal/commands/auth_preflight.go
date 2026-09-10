@@ -29,11 +29,11 @@ func ensureAuthenticated(cmd *cobra.Command, cfg *config.Config, displayOpts ui.
 
 	expired := errors.Is(err, authsession.ErrSessionExpired)
 	if !expired && !errors.Is(err, authsession.ErrNotLoggedIn) {
-		return ui.NewConfigurationError(err)
+		return ui.NewAuthError(err)
 	}
 
 	if !displayOpts.IsInteractive || !displayOpts.StdinIsTTY {
-		return ui.NewConfigurationError(err)
+		return ui.NewAuthError(err)
 	}
 
 	headline := "You are not logged in."
@@ -44,7 +44,7 @@ func ensureAuthenticated(cmd *cobra.Command, cfg *config.Config, displayOpts ui.
 	fmt.Print("Log in now? (Y/n): ")
 
 	if !readLoginConsent(os.Stdin) {
-		return ui.NewConfigurationError(err)
+		return ui.NewAuthError(err)
 	}
 
 	return runInteractiveLogin(cmd.Context(), cfg, displayOpts)

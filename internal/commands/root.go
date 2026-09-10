@@ -2,6 +2,7 @@ package commands
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -23,6 +24,75 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// prepareCommand loads everything a command needs before it runs. Errors are typed so
+// the caller can tell an unusable environment from a bad invocation.
+func prepareCommand(cmd *cobra.Command, args []string) error {
+	// Set command context for Bugsnag
+	cerebrium_bugsnag.SetCommandContext(cmd.Name(), args)
+
+	verbose, _ := cmd.Flags().GetBool("verbose")
+
+	// Get display options for logger setup
+	displayOpts, err := ui.NewDisplayConfig(cmd, verbose)
+	if err != nil {
+		return ui.NewInternalError(fmt.Errorf("failed to get display options: %w", err))
+	}
+
+	// Load config first (needed to get configured log level)
+	cfg, err := config.Load()
+	if err != nil {
+		// Config loading failed - this is critical, we can't proceed without config
+		return ui.NewConfigurationError(fmt.Errorf("failed to load config: %w", err))
+	}
+
+	// Override service account token if provided via CLI flag
+	// This takes precedence over environment variable and stored tokens
+	serviceAccountToken, _ := cmd.Flags().GetString("service-account-token")
+	if serviceAccountToken != "" {
+		cfg.ServiceAccountToken = serviceAccountToken
+		slog.Debug("Using service account token from CLI flag")
+	}
+
+	// Setup logger with configured log level
+	if verbose {
+		// Use configured log level (defaults to info if not set)
+		logLevel := cfg.GetLogLevel()
+		logFile, err := logrium.Setup(displayOpts.IsInteractive, logLevel)
+		if err != nil {
+			return ui.NewFileSystemError(fmt.Errorf("failed to set up logger: %w", err))
+		}
+
+		// Print log file location if logging to file
+		if logFile != "" {
+			fmt.Fprintf(os.Stderr, "Debug logs: %s\n", logFile)
+		}
+	} else {
+		// Disable logging entirely when --verbose is not set
+		logrium.Disable()
+	}
+
+	slog.Debug("Config loaded successfully")
+
+	// Store config and display options in context so subcommands can access them
+	ctx := context.WithValue(cmd.Context(), config.GetContextKey(), cfg)
+	ctx = context.WithValue(ctx, ui.GetDisplayConfigContextKey(), displayOpts)
+	cmd.SetContext(ctx)
+
+	// Run version check (skip for version and config commands)
+	if cmd.Name() != "version" && cmd.Name() != "config" {
+		version.PrintUpdateNotification(cmd.Context(), cfg.SkipVersionCheck)
+	}
+
+	return ensureAuthenticated(cmd, cfg, displayOpts)
+}
+
+// suppressesUsage reports whether err already carries its own presentation rules, in
+// which case Cobra's usage dump on top of it is noise.
+func suppressesUsage(err error) bool {
+	var uiErr *ui.UIError
+	return errors.As(err, &uiErr) && uiErr.SuppressUsage
+}
+
 func NewRootCmd() *cobra.Command {
 	rootCmd := &cobra.Command{
 		Use:   "cerebrium",
@@ -34,66 +104,11 @@ func NewRootCmd() *cobra.Command {
 		SilenceErrors: true,
 		// Load config once and store in context for all subcommands
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-			// Failures here are about the environment, not the invocation, so usage is noise
-			cmd.SilenceUsage = true
-
-			// Set command context for Bugsnag
-			cerebrium_bugsnag.SetCommandContext(cmd.Name(), args)
-
-			verbose, _ := cmd.Flags().GetBool("verbose")
-
-			// Get display options for logger setup
-			displayOpts, err := ui.NewDisplayConfig(cmd, verbose)
-			if err != nil {
-				return fmt.Errorf("failed to get display options: %w", err)
+			err := prepareCommand(cmd, args)
+			if suppressesUsage(err) {
+				cmd.SilenceUsage = true
 			}
-
-			// Load config first (needed to get configured log level)
-			cfg, err := config.Load()
-			if err != nil {
-				// Config loading failed - this is critical, we can't proceed without config
-				return fmt.Errorf("failed to load config: %w", err)
-			}
-
-			// Override service account token if provided via CLI flag
-			// This takes precedence over environment variable and stored tokens
-			serviceAccountToken, _ := cmd.Flags().GetString("service-account-token")
-			if serviceAccountToken != "" {
-				cfg.ServiceAccountToken = serviceAccountToken
-				slog.Debug("Using service account token from CLI flag")
-			}
-
-			// Setup logger with configured log level
-			if verbose {
-				// Use configured log level (defaults to info if not set)
-				logLevel := cfg.GetLogLevel()
-				logFile, err := logrium.Setup(displayOpts.IsInteractive, logLevel)
-				if err != nil {
-					return fmt.Errorf("failed to set up logger: %w", err)
-				}
-
-				// Print log file location if logging to file
-				if logFile != "" {
-					fmt.Fprintf(os.Stderr, "Debug logs: %s\n", logFile)
-				}
-			} else {
-				// Disable logging entirely when --verbose is not set
-				logrium.Disable()
-			}
-
-			slog.Debug("Config loaded successfully")
-
-			// Store config and display options in context so subcommands can access them
-			ctx := context.WithValue(cmd.Context(), config.GetContextKey(), cfg)
-			ctx = context.WithValue(ctx, ui.GetDisplayConfigContextKey(), displayOpts)
-			cmd.SetContext(ctx)
-
-			// Run version check (skip for version and config commands)
-			if cmd.Name() != "version" && cmd.Name() != "config" {
-				version.PrintUpdateNotification(cmd.Context(), cfg.SkipVersionCheck)
-			}
-
-			return ensureAuthenticated(cmd, cfg, displayOpts)
+			return err
 		},
 	}
 
