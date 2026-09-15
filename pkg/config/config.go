@@ -371,16 +371,16 @@ func (c *Config) GetServiceAccountToken() string {
 }
 
 // GetServiceAccountTokenFromEnv checks for a service account token from environment variable.
-// Returns empty string if not found or if validation fails.
+// The token is returned alongside a validation error so callers can describe what is wrong
+// with it; only a nil error means it is usable.
 func GetServiceAccountTokenFromEnv() (string, error) {
 	token := os.Getenv("CEREBRIUM_SERVICE_ACCOUNT_TOKEN")
 	if token == "" {
 		return "", nil // No service account token configured
 	}
 
-	// Validate the token
 	if err := auth.ValidateToken(token); err != nil {
-		return "", err
+		return token, err
 	}
 
 	return token, nil

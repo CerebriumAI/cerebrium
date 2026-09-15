@@ -21,6 +21,7 @@ type EnvConfig struct {
 	AuthUrl      string
 	ClientID     string
 	LogStreamUrl string
+	DashboardUrl string
 }
 
 // GetEnvironment returns the current environment from CEREBRIUM_ENV
@@ -48,6 +49,7 @@ func GetEnvConfig(env Environment) (*EnvConfig, error) {
 			AuthUrl:      getEnvOrDefault("AUTH_URL", "https://prod-cerebrium.auth.eu-west-1.amazoncognito.com/oauth2/token"),
 			ClientID:     getEnvOrDefault("CLIENT_ID", "2om0uempl69t4c6fc70ujstsuk"),
 			LogStreamUrl: getEnvOrDefault("LOGSTREAM_URL", "wss://logstream-api.aws.us-east-1.cerebrium.ai"),
+			DashboardUrl: getEnvOrDefault("DASHBOARD_URL", "https://dashboard.cerebrium.ai"),
 		}, nil
 	case EnvDev:
 		return &EnvConfig{
@@ -56,6 +58,7 @@ func GetEnvConfig(env Environment) (*EnvConfig, error) {
 			AuthUrl:      getEnvOrDefault("AUTH_URL", "https://dev-cerebrium.auth.eu-west-1.amazoncognito.com/oauth2/token"),
 			ClientID:     getEnvOrDefault("CLIENT_ID", "207hg1caksrebuc79pcq1r3269"),
 			LogStreamUrl: getEnvOrDefault("LOGSTREAM_URL", "wss://logstream-api.dev-aws.us-east-1.cerebrium.ai"),
+			DashboardUrl: getEnvOrDefault("DASHBOARD_URL", "https://dev-dashboard.cerebrium.ai"),
 		}, nil
 	case EnvLocal:
 		return &EnvConfig{
@@ -64,6 +67,7 @@ func GetEnvConfig(env Environment) (*EnvConfig, error) {
 			AuthUrl:      getEnvOrDefault("AUTH_URL", "https://dev-cerebrium.auth.eu-west-1.amazoncognito.com/oauth2/token"),
 			ClientID:     getEnvOrDefault("CLIENT_ID", "207hg1caksrebuc79pcq1r3269"),
 			LogStreamUrl: getEnvOrDefault("LOGSTREAM_URL", "wss://logstream-api.dev-aws.us-east-1.cerebrium.ai"),
+			DashboardUrl: getEnvOrDefault("DASHBOARD_URL", "https://dev-dashboard.cerebrium.ai"),
 		}, nil
 	default:
 		return nil, fmt.Errorf("invalid environment: %s", env)

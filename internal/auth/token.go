@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -14,8 +15,12 @@ import (
 	"time"
 )
 
+// ErrTokenExpired reports a well-formed token whose expiry has passed, so callers
+// can tell it apart from one they could not read at all.
+var ErrTokenExpired = errors.New("token has expired")
+
 // ValidateToken checks if a JWT token is valid (not expired).
-// Returns nil if valid, error if expired or invalid.
+// Returns nil if valid, ErrTokenExpired if expired, or a parse error if unreadable.
 func ValidateToken(token string) error {
 	claims, err := ParseClaims(token)
 	if err != nil {
@@ -30,7 +35,7 @@ func ValidateToken(token string) error {
 
 	expirationTime := time.Unix(int64(exp), 0)
 	if time.Now().After(expirationTime) {
-		return fmt.Errorf("token has expired")
+		return ErrTokenExpired
 	}
 
 	return nil
