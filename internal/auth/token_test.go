@@ -1,8 +1,11 @@
 package auth
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -107,5 +110,63 @@ func TestValidateToken(t *testing.T) {
 		err := ValidateToken("invalid-token")
 
 		require.Error(t, err)
+	})
+}
+
+func TestRefreshToken(t *testing.T) {
+	t.Run("returns the new access token", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			require.NoError(t, r.ParseForm())
+			assert.Equal(t, "refresh_token", r.Form.Get("grant_type"))
+			assert.Equal(t, "stored-refresh", r.Form.Get("refresh_token"))
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"access_token":"fresh-token"}`))
+		}))
+		defer server.Close()
+
+		token, err := RefreshToken(context.Background(), server.URL, "client-id", "stored-refresh")
+
+		require.NoError(t, err)
+		assert.Equal(t, "fresh-token", token)
+	})
+
+	t.Run("reports a rejected grant", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(`{"error":"invalid_grant"}`))
+		}))
+		defer server.Close()
+
+		_, err := RefreshToken(context.Background(), server.URL, "client-id", "stored-refresh")
+
+		require.ErrorIs(t, err, ErrInvalidGrant)
+	})
+
+	t.Run("does not treat a client misconfiguration as a rejected grant", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = w.Write([]byte(`{"error":"invalid_client"}`))
+		}))
+		defer server.Close()
+
+		_, err := RefreshToken(context.Background(), server.URL, "client-id", "stored-refresh")
+
+		require.Error(t, err)
+		assert.NotErrorIs(t, err, ErrInvalidGrant)
+		assert.Equal(t, "token refresh failed with status 401: invalid_client", err.Error())
+	})
+
+	t.Run("keeps the detail for unexpected failures", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusInternalServerError)
+			_, _ = w.Write([]byte(`{"error":"server_error","error_description":"try again later"}`))
+		}))
+		defer server.Close()
+
+		_, err := RefreshToken(context.Background(), server.URL, "client-id", "stored-refresh")
+
+		require.Error(t, err)
+		assert.NotErrorIs(t, err, ErrInvalidGrant)
+		assert.Equal(t, "token refresh failed with status 500: try again later", err.Error())
 	})
 }

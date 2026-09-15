@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -63,7 +64,31 @@ func RefreshToken(ctx context.Context, authURL, clientID, refreshToken string) (
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("token refresh failed with status %d: %s", resp.StatusCode, string(body))
+		slog.Debug("Token refresh rejected", "status", resp.StatusCode, "body", string(body))
+
+		var errResp struct {
+			Error       string `json:"error"`
+			Description string `json:"error_description"`
+		}
+		if err := json.Unmarshal(body, &errResp); err != nil {
+			slog.Debug("Token refresh error body was not JSON", "error", err)
+		}
+
+		// Only an explicit invalid_grant means the token itself was rejected. A bare
+		// 401 is usually invalid_client, i.e. our own config, and clearing on that
+		// would throw away a working refresh token.
+		if errResp.Error == "invalid_grant" {
+			return "", ErrInvalidGrant
+		}
+
+		detail := errResp.Description
+		if detail == "" {
+			detail = errResp.Error
+		}
+		if detail == "" {
+			detail = strings.TrimSpace(string(body))
+		}
+		return "", fmt.Errorf("token refresh failed with status %d: %s", resp.StatusCode, detail)
 	}
 
 	var result map[string]any
