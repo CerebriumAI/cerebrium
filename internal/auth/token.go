@@ -70,7 +70,9 @@ func RefreshToken(ctx context.Context, authURL, clientID, refreshToken string) (
 			Error       string `json:"error"`
 			Description string `json:"error_description"`
 		}
-		_ = json.Unmarshal(body, &errResp)
+		if err := json.Unmarshal(body, &errResp); err != nil {
+			slog.Debug("Token refresh error body was not JSON", "error", err)
+		}
 
 		// Only an explicit invalid_grant means the token itself was rejected. A bare
 		// 401 is usually invalid_client, i.e. our own config, and clearing on that
