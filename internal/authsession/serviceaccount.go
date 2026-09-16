@@ -16,7 +16,7 @@ func serviceAccountError(err error, token string, cfg *config.Config, fromEnv bo
 	source := "service account token"
 	remedy := "then save it with 'cerebrium save-auth-config <token>'"
 	if fromEnv {
-		source = "CEREBRIUM_SERVICE_ACCOUNT_TOKEN"
+		source = config.ServiceAccountEnvVar
 		remedy = "then update the environment variable"
 	}
 

@@ -18,6 +18,9 @@ import (
 const (
 	DefaultConfigDir  = ".cerebrium"
 	DefaultConfigFile = "config.yaml"
+
+	// ServiceAccountEnvVar supplies a service account token for non-interactive use.
+	ServiceAccountEnvVar = "CEREBRIUM_SERVICE_ACCOUNT_TOKEN"
 )
 
 // Config holds the CLI configuration
@@ -264,7 +267,7 @@ func (c *Config) GetCurrentProject() (string, error) {
 func (c *Config) maybeGetProjectFromServiceAccount() (string, error) {
 	// 1. Try to extract from service account token
 	// First check environment variable
-	if token := os.Getenv("CEREBRIUM_SERVICE_ACCOUNT_TOKEN"); token != "" {
+	if token := os.Getenv(ServiceAccountEnvVar); token != "" {
 		if claims, err := auth.ParseClaims(token); err == nil {
 			if projectID := ExtractProjectIDFromClaims(claims); projectID != "" {
 				return projectID, nil
@@ -368,22 +371,6 @@ func (c *Config) GetRefreshToken() string {
 // GetServiceAccountToken returns the stored service account token
 func (c *Config) GetServiceAccountToken() string {
 	return c.ServiceAccountToken
-}
-
-// GetServiceAccountTokenFromEnv checks for a service account token from environment variable.
-// The token is returned alongside a validation error so callers can describe what is wrong
-// with it; only a nil error means it is usable.
-func GetServiceAccountTokenFromEnv() (string, error) {
-	token := os.Getenv("CEREBRIUM_SERVICE_ACCOUNT_TOKEN")
-	if token == "" {
-		return "", nil // No service account token configured
-	}
-
-	if err := auth.ValidateToken(token); err != nil {
-		return token, err
-	}
-
-	return token, nil
 }
 
 // SetAccessToken updates the access token in memory
