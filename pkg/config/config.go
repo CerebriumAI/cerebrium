@@ -266,7 +266,7 @@ func (c *Config) GetCurrentProject() (string, error) {
 func (c *Config) maybeGetProjectFromServiceAccount() (string, error) {
 	// 1. Try to extract from service account token
 	// First check environment variable
-	if token := os.Getenv(ServiceAccountEnvVar); token != "" {
+	if token := GetServiceAccountTokenFromEnv(); token != "" {
 		if claims, err := auth.ParseClaims(token); err == nil {
 			if projectID := ExtractProjectIDFromClaims(claims); projectID != "" {
 				return projectID, nil
@@ -370,6 +370,12 @@ func (c *Config) GetRefreshToken() string {
 // GetServiceAccountToken returns the stored service account token
 func (c *Config) GetServiceAccountToken() string {
 	return c.ServiceAccountToken
+}
+
+// GetServiceAccountTokenFromEnv returns the service account token from the environment,
+// empty when unset. Callers validate it themselves.
+func GetServiceAccountTokenFromEnv() string {
+	return os.Getenv(ServiceAccountEnvVar)
 }
 
 // SetAccessToken updates the access token in memory

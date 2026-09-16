@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"os"
 
 	"github.com/cerebriumai/cerebrium/internal/auth"
 	"github.com/cerebriumai/cerebrium/pkg/config"
@@ -16,7 +15,7 @@ import (
 // stored access token when it has expired.
 func Token(ctx context.Context, cfg *config.Config) (string, error) {
 	// 1. Try service account token from environment variable first
-	if token := os.Getenv(config.ServiceAccountEnvVar); token != "" {
+	if token := config.GetServiceAccountTokenFromEnv(); token != "" {
 		if err := auth.ValidateToken(token); err != nil {
 			return "", serviceAccountError(err, token, cfg, true)
 		}
