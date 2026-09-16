@@ -19,7 +19,6 @@ const (
 	DefaultConfigDir  = ".cerebrium"
 	DefaultConfigFile = "config.yaml"
 
-	// ServiceAccountEnvVar supplies a service account token for non-interactive use.
 	ServiceAccountEnvVar = "CEREBRIUM_SERVICE_ACCOUNT_TOKEN"
 )
 
