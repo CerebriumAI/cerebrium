@@ -26,6 +26,15 @@ func testJWT(t *testing.T, exp time.Time) string {
 		base64.RawURLEncoding.EncodeToString([]byte("signature"))
 }
 
+func testServiceAccountJWT(t *testing.T, exp time.Time, projectID string) string {
+	t.Helper()
+	claims, err := json.Marshal(map[string]any{"exp": exp.Unix(), "projectId": projectID})
+	require.NoError(t, err)
+	return base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"HS256","typ":"JWT"}`)) + "." +
+		base64.RawURLEncoding.EncodeToString(claims) + "." +
+		base64.RawURLEncoding.EncodeToString([]byte("signature"))
+}
+
 // loadTestConfig returns a config backed by a throwaway file so Save has somewhere to write
 func loadTestConfig(t *testing.T) *config.Config {
 	t.Helper()
@@ -57,6 +66,52 @@ func TestToken(t *testing.T) {
 		_, err := Token(t.Context(), cfg)
 
 		require.ErrorIs(t, err, ErrNotLoggedIn)
+	})
+
+	t.Run("names the expiry date and the project's key page for a stored token", func(t *testing.T) {
+		cfg := loadTestConfig(t)
+		expiry := time.Now().Add(-time.Hour)
+		cfg.ServiceAccountToken = testServiceAccountJWT(t, expiry, "p-367e7969")
+
+		_, err := Token(t.Context(), cfg)
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "service account token expired on "+expiry.Local().Format("2006-01-02 15:04"))
+		assert.Contains(t, err.Error(), "/projects/p-367e7969/api-keys")
+		assert.Contains(t, err.Error(), "cerebrium save-auth-config")
+	})
+
+	t.Run("distinguishes a stored token it cannot read from an expired one", func(t *testing.T) {
+		cfg := loadTestConfig(t)
+		cfg.ServiceAccountToken = "not-even-a-jwt"
+
+		_, err := Token(t.Context(), cfg)
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "could not be read")
+		assert.NotContains(t, err.Error(), "expired")
+	})
+
+	t.Run("points an environment token at the environment, not the config file", func(t *testing.T) {
+		cfg := loadTestConfig(t)
+		t.Setenv("CEREBRIUM_SERVICE_ACCOUNT_TOKEN", testServiceAccountJWT(t, time.Now().Add(-time.Hour), "p-367e7969"))
+
+		_, err := Token(t.Context(), cfg)
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "CEREBRIUM_SERVICE_ACCOUNT_TOKEN expired on ")
+		assert.Contains(t, err.Error(), "update the environment variable")
+		assert.NotContains(t, err.Error(), "save-auth-config")
+	})
+
+	t.Run("falls back to the dashboard root when no project can be read", func(t *testing.T) {
+		cfg := loadTestConfig(t)
+		cfg.ServiceAccountToken = "not-even-a-jwt"
+
+		_, err := Token(t.Context(), cfg)
+
+		require.Error(t, err)
+		assert.NotContains(t, err.Error(), "/projects/")
 	})
 
 	t.Run("reports an expired token with nothing to refresh with", func(t *testing.T) {

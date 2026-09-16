@@ -15,20 +15,19 @@ import (
 // stored access token when it has expired.
 func Token(ctx context.Context, cfg *config.Config) (string, error) {
 	// 1. Try service account token from environment variable first
-	serviceToken, err := config.GetServiceAccountTokenFromEnv()
-	if err != nil {
-		return "", fmt.Errorf("service account token error: %w", err)
-	}
-	if serviceToken != "" {
-		return serviceToken, nil
+	if token := config.GetServiceAccountTokenFromEnv(); token != "" {
+		if err := auth.ValidateToken(token); err != nil {
+			return "", serviceAccountError(err, token, cfg, true)
+		}
+		return token, nil
 	}
 
 	// 2. Try stored service account token
 	if token := cfg.GetServiceAccountToken(); token != "" {
-		if err := auth.ValidateToken(token); err == nil {
-			return token, nil
+		if err := auth.ValidateToken(token); err != nil {
+			return "", serviceAccountError(err, token, cfg, false)
 		}
-		return "", errors.New("service account token has expired. Please generate a new one")
+		return token, nil
 	}
 
 	// 3. Try access token
