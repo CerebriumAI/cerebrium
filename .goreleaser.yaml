@@ -130,6 +130,7 @@ homebrew_casks:
 nfpms:
   - id: cerebrium
     package_name: cerebrium
+    file_name_template: "{{ .PackageName }}_{{ .Os }}_{{ .Arch }}"
     homepage: https://www.cerebrium.ai
     maintainer: Cerebrium AI <support@cerebrium.ai>
     description: CLI for deploying and managing Cerebrium apps
