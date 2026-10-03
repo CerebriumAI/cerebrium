@@ -39,6 +39,7 @@ sudo mv cerebrium /usr/local/bin/
 # Or install via package manager (Ubuntu/Debian)
 wget https://github.com/CerebriumAI/cerebrium/releases/latest/download/cerebrium_linux_amd64.deb
 sudo dpkg -i cerebrium_linux_amd64.deb
+# For ARM64, use: cerebrium_linux_arm64.deb
 ```
 
 ### Windows
@@ -57,8 +58,10 @@ New-Item -ItemType Directory -Force -Path "C:\Program Files\cerebrium"
 Move-Item -Force cerebrium.exe "C:\Program Files\cerebrium\cerebrium.exe"
 
 # Add to PATH (permanent)
+[Environment]::SetEnvironmentVariable("Path", [Environment]::GetEnvironmentVariable("Path", "Machine") + ";C:\Program Files\cerebrium", "Machine")
+
+# Add to PATH (current session)
 $env:Path += ";C:\Program Files\cerebrium"
-[Environment]::SetEnvironmentVariable("Path", $env:Path, [EnvironmentVariableTarget]::Machine)
 
 # Clean up
 Remove-Item cerebrium.zip
