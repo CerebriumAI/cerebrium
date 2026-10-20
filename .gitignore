@@ -35,6 +35,7 @@ __pycache__/
 # Binaries
 bin/
 dist/
+THIRD_PARTY_NOTICES
 
 # Claude
 .claude/

@@ -4,6 +4,7 @@ before:
   hooks:
     - go mod tidy
     - go test ./...
+    - bash .github/third-party-notices.sh
 
 builds:
   - id: cerebrium
@@ -86,6 +87,7 @@ archives:
       - LICENSE*
       - README*
       - CHANGELOG*
+      - THIRD_PARTY_NOTICES
 
 checksum:
   name_template: "checksums.txt"
@@ -145,6 +147,12 @@ nfpms:
 
     # Binary name
     bindir: /usr/bin
+
+    contents:
+      - src: LICENSE
+        dst: /usr/share/doc/cerebrium/LICENSE
+      - src: THIRD_PARTY_NOTICES
+        dst: /usr/share/doc/cerebrium/THIRD_PARTY_NOTICES
 
 # GitHub Release
 release:
