@@ -117,6 +117,20 @@ func TestGenerateDependencyFiles(t *testing.T) {
 	}
 }
 
+func TestGenerateDependencyFiles_CompatibleRelease(t *testing.T) {
+	for _, requirement := range []string{"numpy~=1.26", "uvicorn[standard]~=0.30.0"} {
+		t.Run(requirement, func(t *testing.T) {
+			deps := ParseRequirementsContent(requirement)
+			config := &projectconfig.ProjectConfig{
+				Dependencies: projectconfig.DependenciesConfig{Pip: deps},
+			}
+			files, err := GenerateDependencyFiles(config)
+			require.NoError(t, err)
+			assert.Equal(t, requirement+"\n", files["requirements.txt"])
+		})
+	}
+}
+
 func TestGenerateDependencyFiles_WithFilePaths(t *testing.T) {
 	// Create a temp directory with a requirements.txt file
 	tmpDir := t.TempDir()
