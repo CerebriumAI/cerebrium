@@ -37,8 +37,9 @@ sudo mv cerebrium /usr/local/bin/
 # For ARM64, use: cerebrium_cli_linux_arm64.tar.gz
 
 # Or install via package manager (Ubuntu/Debian)
-wget https://github.com/CerebriumAI/cerebrium/releases/latest/download/cerebrium_linux_amd64.deb
-sudo dpkg -i cerebrium_linux_amd64.deb
+# Download the .deb for your architecture from the releases page:
+# https://github.com/CerebriumAI/cerebrium/releases/latest
+sudo dpkg -i cerebrium_*_linux_amd64.deb
 ```
 
 ### Windows
