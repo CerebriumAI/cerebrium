@@ -41,7 +41,7 @@ Feature requests are welcome! Please:
 
 ### Prerequisites
 
-- **Go 1.25.2+** (check `go.mod` for exact version)
+- **Go 1.26.10+** (check `go.mod` for exact version)
 - **Make** (for build commands)
 - **Git**
 - Optional: **golangci-lint** for local linting
