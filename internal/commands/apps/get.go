@@ -19,10 +19,13 @@ func newGetCmd() *cobra.Command {
 
 Example:
   cerebrium apps get p-abc123
+  cerebrium apps get p-abc123 --output json
   cerebrium apps get p-abc123 --no-ansi  # Disable animations and colors`,
 		Args: cobra.ExactArgs(1),
 		RunE: runGet,
 	}
+
+	ui.AddOutputFlag(cmd)
 
 	return cmd
 }
@@ -33,6 +36,15 @@ func runGet(cmd *cobra.Command, args []string) error {
 	cmd.SilenceErrors = true
 
 	appID := args[0]
+
+	outputFormat, err := ui.ParseOutputFormat(cmd)
+	if err != nil {
+		return err
+	}
+
+	if outputFormat == ui.OutputJSON {
+		return runGetJSON(cmd, appID)
+	}
 
 	// Get display options from context (loaded once in root command)
 	displayOpts, err := ui.GetDisplayConfigFromContext(cmd)
@@ -98,4 +110,30 @@ func runGet(cmd *cobra.Command, args []string) error {
 	}
 
 	return nil
+}
+
+// runGetJSON bypasses the Bubbletea view and fetches the app directly, so the
+// payload is the only thing written to stdout.
+func runGetJSON(cmd *cobra.Command, appID string) error {
+	cfg, err := config.GetConfigFromContext(cmd)
+	if err != nil {
+		return ui.NewValidationError(fmt.Errorf("failed to get config: %w", err))
+	}
+
+	projectID, err := cfg.GetCurrentProject()
+	if err != nil {
+		return ui.NewValidationError(fmt.Errorf("failed to get current project: %w", err))
+	}
+
+	client, err := api.NewClient(cfg)
+	if err != nil {
+		return ui.NewValidationError(fmt.Errorf("failed to create API client: %w", err))
+	}
+
+	app, err := client.GetApp(cmd.Context(), projectID, appID)
+	if err != nil {
+		return ui.NewAPIError(err)
+	}
+
+	return ui.PrintJSON(app)
 }

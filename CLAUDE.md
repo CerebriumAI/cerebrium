@@ -139,6 +139,7 @@ ui.NewUserCancelledError()     // Ctrl+C (silent)
 ui.NewValidationError(err)     // Pre-flight
 ui.NewAPIError(err)            // API failures
 ui.NewFileSystemError(err)     // File ops
+ui.NewAuthError(err)           // Credentials
 ui.NewInternalError(err)       // Unexpected
 ```
 

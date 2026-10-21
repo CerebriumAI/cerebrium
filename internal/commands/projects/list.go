@@ -15,16 +15,24 @@ func newListCmd() *cobra.Command {
 		Short: "List all projects",
 		Long: `List all projects under your account.
 
-Example:
-  cerebrium projects list`,
+Examples:
+  cerebrium projects list
+  cerebrium projects list --output json`,
 		RunE: runList,
 	}
+
+	ui.AddOutputFlag(cmd)
 
 	return cmd
 }
 
 func runList(cmd *cobra.Command, args []string) error {
 	cmd.SilenceUsage = true
+
+	outputFormat, err := ui.ParseOutputFormat(cmd)
+	if err != nil {
+		return err
+	}
 
 	// Get config from context
 	cfg, err := config.GetConfigFromContext(cmd)
@@ -39,7 +47,7 @@ func runList(cmd *cobra.Command, args []string) error {
 	}
 
 	// Show spinner while fetching
-	spinner := ui.NewSimpleSpinner("Loading projects...")
+	spinner := ui.NewSimpleSpinnerFor(outputFormat, "Loading projects...")
 	spinner.Start()
 
 	// Fetch projects
@@ -47,6 +55,10 @@ func runList(cmd *cobra.Command, args []string) error {
 	spinner.Stop()
 	if err != nil {
 		return ui.NewAPIError(err)
+	}
+
+	if outputFormat == ui.OutputJSON {
+		return ui.PrintJSON(projects)
 	}
 
 	// Print results

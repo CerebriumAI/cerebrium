@@ -202,6 +202,6 @@ func PrintUpdateNotification(ctx context.Context, skipVersionCheck bool) {
 	fmt.Fprintf(os.Stderr, "  • Pip: pip install --upgrade cerebrium\n")
 	fmt.Fprintf(os.Stderr, "  • Download: https://github.com/CerebriumAI/cerebrium/releases/latest\n")
 	fmt.Fprintf(os.Stderr, "\n")
-	fmt.Fprintf(os.Stderr, "To disable these notifications: cerebrium config --version-check=false\n")
+	fmt.Fprintf(os.Stderr, "To disable these notifications: cerebrium config set skip-version-check true\n")
 	fmt.Fprintf(os.Stderr, "\n")
 }

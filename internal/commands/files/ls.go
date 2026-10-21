@@ -22,7 +22,8 @@ func NewLsCmd() *cobra.Command {
 Examples:
   cerebrium ls                    # List all files in the root directory
   cerebrium ls sub_folder/        # List all files in a specific directory
-  cerebrium ls --region us-west-2 # List files in a specific region`,
+  cerebrium ls --region us-west-2 # List files in a specific region
+  cerebrium ls --output json`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runLs(cmd, args, region)
@@ -30,12 +31,18 @@ Examples:
 	}
 
 	cmd.Flags().StringVarP(&region, "region", "r", "", "Region for the storage volume")
+	ui.AddOutputFlag(cmd)
 
 	return cmd
 }
 
 func runLs(cmd *cobra.Command, args []string, region string) error {
 	cmd.SilenceUsage = true
+
+	outputFormat, err := ui.ParseOutputFormat(cmd)
+	if err != nil {
+		return err
+	}
 
 	// Default path is root
 	path := "/"
@@ -67,7 +74,7 @@ func runLs(cmd *cobra.Command, args []string, region string) error {
 	}
 
 	// Show spinner while fetching
-	spinner := ui.NewSimpleSpinner("Loading files...")
+	spinner := ui.NewSimpleSpinnerFor(outputFormat, "Loading files...")
 	spinner.Start()
 
 	// Fetch files
@@ -86,6 +93,10 @@ func runLs(cmd *cobra.Command, args []string, region string) error {
 		}
 		return files[i].Name < files[j].Name
 	})
+
+	if outputFormat == ui.OutputJSON {
+		return ui.PrintJSON(files)
+	}
 
 	// Print results
 	if len(files) == 0 {

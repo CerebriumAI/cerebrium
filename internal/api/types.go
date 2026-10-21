@@ -58,10 +58,9 @@ type AppDetails struct {
 	ResponseGracePeriodSeconds string `json:"responseGracePeriodSeconds"` // e.g. "900"
 
 	// Status
-	Status          string   `json:"status"`
-	LastBuildStatus string   `json:"lastBuildStatus"`
-	LatestBuildID   string   `json:"latestBuildId,omitempty"`
-	Pods            []string `json:"pods,omitempty"`
+	Status          string `json:"status"`
+	LastBuildStatus string `json:"lastBuildStatus"`
+	LatestBuildID   string `json:"latestBuildId,omitempty"`
 }
 
 // GetCPU returns the CPU value as an integer

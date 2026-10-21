@@ -12,6 +12,7 @@ const (
 	ErrorTypeFileSystem                     // File operations - show error, no usage
 	ErrorTypeConfiguration                  // Config issues - show error, no usage
 	ErrorTypeInternal                       // Unexpected - show error, no usage
+	ErrorTypeAuth                           // Credentials - show error, no usage
 )
 
 // UIError defines a structured error type for communication between Bubbletea and Cobra.
@@ -75,6 +76,15 @@ func NewConfigurationError(err error) *UIError {
 		Type:          ErrorTypeConfiguration,
 		SuppressUsage: true,
 		SilentExit:    false, // Caller decides if shown in UI
+	}
+}
+
+func NewAuthError(err error) *UIError {
+	return &UIError{
+		Err:           err,
+		Type:          ErrorTypeAuth,
+		SuppressUsage: true,
+		SilentExit:    false,
 	}
 }
 

@@ -1,7 +1,9 @@
 package commands
 
 import (
+	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -13,6 +15,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/avast/retry-go/v4"
 	"github.com/bugsnag/bugsnag-go/v2"
 	"github.com/charmbracelet/bubbles/progress"
 	"github.com/charmbracelet/bubbles/viewport"
@@ -121,14 +124,14 @@ func NewDeployView(ctx context.Context, conf DeployConfig) *DeployView {
 	ctx, cancel := context.WithCancel(ctx)
 
 	return &DeployView{
-		ctx:             ctx,
-		ctxCancel:       cancel,
-		state:           initialState,
-		isPartnerDeploy: isPartnerDeploy,
-		spinner:         ui.NewSpinner(),
-		progressBar:     prog,
+		ctx:                 ctx,
+		ctxCancel:           cancel,
+		state:               initialState,
+		isPartnerDeploy:     isPartnerDeploy,
+		spinner:             ui.NewSpinner(),
+		progressBar:         prog,
 		atomicBytesUploaded: &atomic.Int64{},
-		conf:            conf,
+		conf:                conf,
 	}
 }
 
@@ -293,7 +296,7 @@ func (m *DeployView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.state = StateBuildingApp
 
 			if m.conf.SimpleOutput() {
-				fmt.Printf("✓ Created app (Build ID: %s)\n", msg.response.BuildID)
+				fmt.Printf("✓ Build pending (ID: %s)\n", msg.response.BuildID)
 			}
 
 			// Handle detach mode
@@ -304,7 +307,7 @@ func (m *DeployView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					fmt.Println("  Check the dashboard for build status.")
 				} else {
 					return m, tea.Sequence(
-						tea.Println(ui.SuccessStyle.Render(fmt.Sprintf("✓  Created app (Build ID: %s)", msg.response.BuildID))),
+						tea.Println(ui.SuccessStyle.Render(fmt.Sprintf("✓  Build pending (ID: %s)", msg.response.BuildID))),
 						tea.Println(ui.SuccessStyle.Render("✓  Build started in detached mode")),
 						tea.Println(fmt.Sprintf("   Build ID: %s", m.buildID)),
 						tea.Println("   Check the dashboard for build status."),
@@ -317,38 +320,14 @@ func (m *DeployView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			if m.conf.SimpleOutput() {
 				fmt.Println("Building app...")
+				return m, m.pollBuildStatus
 			}
 
-			// Initialize log viewer with streaming provider
-			provider := logging.NewStreamingBuildLogProvider(logging.StreamingBuildLogProviderConfig{
-				Client:    m.conf.WSClient,
-				ProjectID: m.conf.ProjectID,
-				BuildID:   m.buildID,
-			})
-			tickInterval := 50 * time.Millisecond
-
-			m.logViewer = logging.NewLogViewer(m.ctx, logging.LogViewerConfig{
-				DisplayConfig: m.conf.DisplayConfig,
-				Provider:      provider,
-				TickInterval:  tickInterval,
-				ShowHelp:      true,
-				AutoExpand:    true,
-			})
-
-			if !m.conf.SimpleOutput() {
-				printCmds := tea.Sequence(
-					tea.Println(ui.SuccessStyle.Render(fmt.Sprintf("✓  Created app (Build ID: %s)", msg.response.BuildID))),
-					tea.Println(""),
-				)
-				return m, tea.Batch(
-					printCmds,
-					m.logViewer.Init(),
-					m.pollBuildStatus,
-				)
-			}
-
+			// Partner services don't emit build logs - skip the log viewer
+			// and just poll status until the build completes.
 			return m, tea.Batch(
-				m.logViewer.Init(),
+				tea.Println(ui.SuccessStyle.Render(fmt.Sprintf("✓  Build pending (ID: %s)", msg.response.BuildID))),
+				tea.Println(""),
 				m.pollBuildStatus,
 			)
 		}
@@ -728,8 +707,10 @@ func (m *DeployView) View() string {
 	case StateCreatingApp:
 		output.WriteString(formatStateLine(m.spinner.View(), "Creating app...", ui.ActiveStyle.Render))
 		output.WriteString("\n")
-		output.WriteString(formatStateLine("-", "Upload to Cerebrium", ui.PendingStyle.Render))
-		output.WriteString("\n")
+		if !m.isPartnerService() {
+			output.WriteString(formatStateLine("-", "Upload to Cerebrium", ui.PendingStyle.Render))
+			output.WriteString("\n")
+		}
 		output.WriteString(formatStateLine("-", "Build app", ui.PendingStyle.Render))
 		output.WriteString("\n")
 
@@ -1016,6 +997,11 @@ func (m *DeployView) createApp() tea.Msg {
 	payload["disableBuildLogs"] = m.conf.DisableBuildLogs
 	payload["cliVersion"] = version.Version
 
+	// Upload the raw cerebrium.toml so the backend can parse config server-side.
+	if m.conf.Config.RawTOML != "" {
+		payload["cerebrium_toml"] = m.conf.Config.RawTOML
+	}
+
 	// Include Docker auth if available for private registry support
 	baseImage := m.conf.Config.Deployment.DockerBaseImageURL
 	dockerAuth, err := auth.GetDockerAuth()
@@ -1094,37 +1080,61 @@ func (m *DeployView) uploadZipWithProgress() error {
 		return fmt.Errorf("failed to stat zip file: %w", err)
 	}
 
-	// Create a reader that tracks progress
-	progressReader := &progressReader{
-		reader:  file,
-		counter: m.atomicBytesUploaded,
-	}
+	// Use a longer timeout for uploads (30 minutes for large files)
+	uploadClient := &http.Client{Timeout: 30 * time.Minute}
 
-	// Create PUT request with context
-	req, err := http.NewRequestWithContext(m.ctx, "PUT", m.appResponse.UploadURL, progressReader)
-	if err != nil {
-		return fmt.Errorf("failed to create upload request: %w", err)
-	}
+	const maxAttempts = 3
+	const retryDelay = 2 * time.Second
 
-	req.Header.Set("Content-Type", "application/zip")
-	req.ContentLength = fileInfo.Size()
+	return retry.Do(
+		func() error {
+			// Reset file position and progress counter for each attempt
+			if _, seekErr := file.Seek(0, io.SeekStart); seekErr != nil {
+				return retry.Unrecoverable(fmt.Errorf("failed to seek zip file: %w", seekErr))
+			}
+			m.atomicBytesUploaded.Store(0)
 
-	// Execute request using a simple HTTP client
-	client := &http.Client{
-		Timeout: 30 * time.Minute, // Allow up to 30 minutes for large uploads
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return fmt.Errorf("upload failed: %w", err)
-	}
-	defer resp.Body.Close() //nolint:errcheck // Deferred close, error not actionable
+			// Create a reader that tracks progress
+			progressReader := &progressReader{
+				reader:  file,
+				counter: m.atomicBytesUploaded,
+			}
 
-	if resp.StatusCode != 200 {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("upload failed with status %d: %s", resp.StatusCode, string(body))
-	}
+			// Create PUT request with context
+			req, err := http.NewRequestWithContext(m.ctx, "PUT", m.appResponse.UploadURL, progressReader)
+			if err != nil {
+				return retry.Unrecoverable(fmt.Errorf("failed to create upload request: %w", err))
+			}
+			req.Header.Set("Content-Type", "application/zip")
+			req.ContentLength = fileInfo.Size()
 
-	return nil
+			resp, err := uploadClient.Do(req)
+			if err != nil {
+				return fmt.Errorf("upload failed: %w", err)
+			}
+			defer resp.Body.Close() //nolint:errcheck // Deferred close, error not actionable
+
+			if resp.StatusCode != 200 {
+				body, _ := io.ReadAll(resp.Body)
+				if resp.StatusCode >= 400 && resp.StatusCode < 500 {
+					return retry.Unrecoverable(fmt.Errorf("upload failed with status %d: %s", resp.StatusCode, string(body)))
+				}
+				return fmt.Errorf("upload failed with status %d: %s", resp.StatusCode, string(body))
+			}
+
+			return nil
+		},
+		retry.Context(m.ctx),
+		retry.Attempts(maxAttempts),
+		retry.Delay(retryDelay),
+		retry.DelayType(retry.BackOffDelay),
+		retry.RetryIf(func(err error) bool {
+			return !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded)
+		}),
+		retry.OnRetry(func(n uint, err error) {
+			slog.Warn("Retrying zip upload", "attempt", n+1, "maxAttempts", maxAttempts, "error", err)
+		}),
+	)
 }
 
 // progressReader wraps an io.Reader and tracks bytes read
@@ -1294,14 +1304,21 @@ func (m *DeployView) showDeploymentSummary() {
 	fmt.Print("Do you want to deploy? (Y/n): ")
 }
 
-// waitForConfirmation waits for user input in non-TTY mode
+// waitForConfirmation waits for user input in simple output mode
 func (m *DeployView) waitForConfirmation() tea.Msg {
-	// Read a single line from stdin
-	var response string
-	fmt.Scanln(&response) //nolint:errcheck,gosec // User input handling, errors handled by empty response default
+	return readConfirmationResponse(os.Stdin)
+}
 
-	// Default to "yes" if empty (just Enter pressed)
-	if response == "" || strings.ToLower(response) == "y" || strings.ToLower(response) == "yes" {
+// readConfirmationResponse reads a single line from r and interprets it as a
+// confirmation response. An empty line defaults to yes (the prompt is Y/n);
+// EOF or any read error is a decline so a closed stdin can never consent
+func readConfirmationResponse(r io.Reader) confirmationResponseMsg {
+	line, err := bufio.NewReader(r).ReadString('\n')
+	response := strings.ToLower(strings.TrimSpace(line))
+	if err != nil && response == "" {
+		return confirmationResponseMsg{confirmed: false}
+	}
+	if response == "" || response == "y" || response == "yes" {
 		return confirmationResponseMsg{confirmed: true}
 	}
 	return confirmationResponseMsg{confirmed: false}
@@ -1401,8 +1418,8 @@ func (m *DeployView) renderDeploymentSummary() string {
 
 		// HARDWARE PARAMETERS
 		var hardwareItems []string
-		if m.conf.Config.Hardware.Compute != nil {
-			hardwareItems = append(hardwareItems, fmt.Sprintf("Compute: %s", *m.conf.Config.Hardware.Compute))
+		if m.conf.Config.Hardware.Compute.IsSet() {
+			hardwareItems = append(hardwareItems, fmt.Sprintf("Compute: %s", m.conf.Config.Hardware.Compute))
 		}
 		if m.conf.Config.Hardware.CPU != nil {
 			hardwareItems = append(hardwareItems, fmt.Sprintf("CPU: %.1f", *m.conf.Config.Hardware.CPU))
@@ -1410,7 +1427,7 @@ func (m *DeployView) renderDeploymentSummary() string {
 		if m.conf.Config.Hardware.Memory != nil {
 			hardwareItems = append(hardwareItems, fmt.Sprintf("Memory: %.0f GB", *m.conf.Config.Hardware.Memory))
 		}
-		if m.conf.Config.Hardware.GPUCount != nil && m.conf.Config.Hardware.Compute != nil && *m.conf.Config.Hardware.Compute != "CPU" {
+		if m.conf.Config.Hardware.GPUCount != nil {
 			hardwareItems = append(hardwareItems, fmt.Sprintf("GPU Count: %d", *m.conf.Config.Hardware.GPUCount))
 		}
 		if m.conf.Config.Hardware.Region != nil {
@@ -1469,7 +1486,7 @@ func (m *DeployView) renderDeploymentSummary() string {
 			concurrency := fmt.Sprintf("Replica Concurrency: %d", *m.conf.Config.Scaling.ReplicaConcurrency)
 
 			// Add GPU warning if applicable
-			if m.conf.Config.Hardware.Compute != nil && *m.conf.Config.Hardware.Compute != "CPU" && *m.conf.Config.Scaling.ReplicaConcurrency > 1 {
+			if m.conf.Config.Hardware.Compute.IsSet() && m.conf.Config.Hardware.Compute.Primary() != "CPU" && *m.conf.Config.Scaling.ReplicaConcurrency > 1 {
 				concurrency += " ⚠️  (Multiple concurrent requests on GPU)"
 			}
 			scalingItems = append(scalingItems, concurrency)
@@ -1549,8 +1566,8 @@ func (m *DeployView) renderDeploymentSummary() string {
 
 	// HARDWARE PARAMETERS
 	var hardwareRows []ui.TableRow
-	if m.conf.Config.Hardware.Compute != nil {
-		hardwareRows = append(hardwareRows, ui.TableRow{Label: "Compute:", Value: *m.conf.Config.Hardware.Compute})
+	if m.conf.Config.Hardware.Compute.IsSet() {
+		hardwareRows = append(hardwareRows, ui.TableRow{Label: "Compute:", Value: m.conf.Config.Hardware.Compute.String()})
 	}
 	if m.conf.Config.Hardware.CPU != nil {
 		hardwareRows = append(hardwareRows, ui.TableRow{Label: "CPU:", Value: fmt.Sprintf("%.1f", *m.conf.Config.Hardware.CPU)})
@@ -1558,7 +1575,7 @@ func (m *DeployView) renderDeploymentSummary() string {
 	if m.conf.Config.Hardware.Memory != nil {
 		hardwareRows = append(hardwareRows, ui.TableRow{Label: "Memory:", Value: fmt.Sprintf("%.0f GB", *m.conf.Config.Hardware.Memory)})
 	}
-	if m.conf.Config.Hardware.GPUCount != nil && m.conf.Config.Hardware.Compute != nil && *m.conf.Config.Hardware.Compute != "CPU" {
+	if m.conf.Config.Hardware.GPUCount != nil {
 		hardwareRows = append(hardwareRows, ui.TableRow{Label: "GPU Count:", Value: fmt.Sprintf("%d", *m.conf.Config.Hardware.GPUCount)})
 	}
 	if m.conf.Config.Hardware.Region != nil {
@@ -1636,7 +1653,7 @@ func (m *DeployView) renderDeploymentSummary() string {
 		concurrency := fmt.Sprintf("%d", *m.conf.Config.Scaling.ReplicaConcurrency)
 
 		// Add GPU warning if applicable
-		if m.conf.Config.Hardware.Compute != nil && *m.conf.Config.Hardware.Compute != "CPU" && *m.conf.Config.Scaling.ReplicaConcurrency > 1 {
+		if m.conf.Config.Hardware.Compute.IsSet() && m.conf.Config.Hardware.Compute.Primary() != "CPU" && *m.conf.Config.Scaling.ReplicaConcurrency > 1 {
 			concurrency += " ⚠️  (Multiple concurrent requests on GPU)"
 		}
 		scalingRows = append(scalingRows, ui.TableRow{Label: "Replica Concurrency:", Value: concurrency})

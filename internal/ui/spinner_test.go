@@ -74,3 +74,20 @@ func TestSpinnerModel_Update(t *testing.T) {
 	assert.NotNil(t, updatedModel, "Update should return model")
 	assert.NotNil(t, cmd, "Update should return next tick command")
 }
+
+// The JSON paths hold a nil spinner and call Start/Stop unconditionally, so a nil
+// receiver has to be a no-op rather than a panic.
+func TestSimpleSpinnerNilReceiverIsSafe(t *testing.T) {
+	var spinner *SimpleSpinner
+
+	assert.NotPanics(t, func() {
+		spinner.Start()
+		spinner.Stop()
+	})
+}
+
+func TestNewSimpleSpinnerFor(t *testing.T) {
+	assert.Nil(t, NewSimpleSpinnerFor(OutputJSON, "loading..."),
+		"JSON output must not emit spinner frames into the payload stream")
+	assert.NotNil(t, NewSimpleSpinnerFor(OutputTable, "loading..."))
+}

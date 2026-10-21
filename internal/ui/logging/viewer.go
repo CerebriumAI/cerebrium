@@ -3,6 +3,7 @@ package logging
 import (
 	"context"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -72,8 +73,8 @@ func NewLogViewer(ctx context.Context, config LogViewerConfig) *LogViewerModel {
 		config:        config,
 		state:         viewerStateInitialising,
 		spinner:       ui.NewSpinner(),
-		logChan:       make(chan []Log, 100), // Buffered to prevent blocking provider
-		doneChan:      make(chan error),
+		logChan:       make(chan []Log, 100),     // Buffered to prevent blocking provider
+		doneChan:      make(chan error, 1),       // Buffered so the provider publishes its result without waiting
 		anchorBottom:  true,                      // Auto-scroll to bottom by default
 		printedLogIDs: make(map[string]struct{}), // Track printed logs by ID
 	}
@@ -83,8 +84,6 @@ func NewLogViewer(ctx context.Context, config LogViewerConfig) *LogViewerModel {
 func (m *LogViewerModel) Init() tea.Cmd {
 	// Start provider in background goroutine
 	go func() {
-		defer close(m.logChan)
-
 		err := m.config.Provider.Collect(m.ctx, func(logs []Log) error {
 			if m.ctx.Err() != nil {
 				return m.ctx.Err()
@@ -94,16 +93,17 @@ func (m *LogViewerModel) Init() tea.Cmd {
 			m.logChan <- logs
 			return nil
 		})
-		// Provider closed - signal completion
+		// Publish the result before closing, so the reader - which learns the
+		// provider finished only from the closed channel - always finds it.
 		m.doneChan <- err
+		close(m.logChan)
 	}()
 
 	m.state = viewerStateRunning
 
 	return tea.Batch(
 		m.spinner.Init(),
-		waitForLogBatch(m.logChan),
-		waitForProviderDone(m.doneChan),
+		waitForLogBatch(m.logChan, m.doneChan),
 		tick(m.config.TickInterval),
 	)
 }
@@ -111,7 +111,16 @@ func (m *LogViewerModel) Init() tea.Cmd {
 func (m *LogViewerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case logBatchReceivedMsg:
-		for _, log := range msg.logs {
+		// A one-shot fetch pages backwards, so the batch arrives newest-first.
+		// Order it before printing: simple mode writes each line as it is
+		// appended, and stdout can't be re-sorted after the fact the way the
+		// interactive viewer re-sorts m.logs below.
+		batch := slices.Clone(msg.logs)
+		sort.SliceStable(batch, func(i, j int) bool {
+			return batch[i].Timestamp.Before(batch[j].Timestamp)
+		})
+
+		for _, log := range batch {
 			m.logs = append(m.logs, log)
 
 			// Direct output in simple mode
@@ -159,13 +168,13 @@ func (m *LogViewerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if len(printCmds) > 0 {
 				return m, tea.Batch(
 					tea.Sequence(printCmds...),
-					waitForLogBatch(m.logChan),
+					waitForLogBatch(m.logChan, m.doneChan),
 				)
 			}
 		}
 
 		// Keep listening for more logs
-		return m, waitForLogBatch(m.logChan)
+		return m, waitForLogBatch(m.logChan, m.doneChan)
 
 	case providerDoneMsg:
 		m.state = viewerStateFinished
@@ -174,7 +183,7 @@ func (m *LogViewerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tickMsg:
 		// Don't schedule another tick if we're done
-		if m.state == viewerStateFinished && len(m.logChan) == 0 {
+		if m.IsComplete() {
 			return m, nil
 		}
 
@@ -357,7 +366,9 @@ func (m *LogViewerModel) GetError() error {
 	return m.err
 }
 
-// IsComplete returns true if log collection has finished
+// IsComplete returns true if log collection has finished and every log it
+// produced has been handled. waitForLogBatch only reports completion after the
+// log channel drains, so reaching viewerStateFinished implies both.
 func (m *LogViewerModel) IsComplete() bool {
 	return m.state == viewerStateFinished
 }
@@ -378,15 +389,18 @@ type tickMsg time.Time
 
 // Commands
 
-func waitForLogBatch(ch <-chan []Log) tea.Cmd {
+// waitForLogBatch delivers the next batch of logs, or the provider's completion
+// once the log channel closes. Both travel the same channel on purpose: it orders
+// completion behind every log the provider emitted. Signalling completion
+// separately races with the logs, and losing that race means quitting on
+// IsComplete while a batch is still in flight, which silently drops it.
+func waitForLogBatch(logs <-chan []Log, done <-chan error) tea.Cmd {
 	return func() tea.Msg {
-		return logBatchReceivedMsg{logs: <-ch}
-	}
-}
-
-func waitForProviderDone(ch <-chan error) tea.Cmd {
-	return func() tea.Msg {
-		return providerDoneMsg{err: <-ch}
+		batch, ok := <-logs
+		if !ok {
+			return providerDoneMsg{err: <-done}
+		}
+		return logBatchReceivedMsg{logs: batch}
 	}
 }
 

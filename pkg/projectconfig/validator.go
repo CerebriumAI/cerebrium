@@ -24,13 +24,16 @@ func Validate(config *ProjectConfig) error {
 		}
 	}
 
-	// Check for main.py if not using custom runtime with dockerfile or custom entrypoint
+	// Check for main.py if not using custom runtime with dockerfile or custom entrypoint.
+	// Partner services run a prebuilt image and never package local files, so main.py
+	// is irrelevant for them.
 	hasDockerfile := config.CustomRuntime != nil && config.CustomRuntime.DockerfilePath != ""
 	hasCustomEntrypoint := config.CustomRuntime != nil &&
 		len(config.CustomRuntime.Entrypoint) > 0 &&
 		config.CustomRuntime.Entrypoint[0] != "uvicorn"
+	isPartnerService := config.PartnerService != nil
 
-	if !hasDockerfile && !hasCustomEntrypoint {
+	if !hasDockerfile && !hasCustomEntrypoint && !isPartnerService {
 		// Check if main.py exists
 		if _, err := os.Stat("main.py"); os.IsNotExist(err) {
 			if _, err := os.Stat("./main.py"); os.IsNotExist(err) {
@@ -40,7 +43,7 @@ func Validate(config *ProjectConfig) error {
 	}
 
 	// Default gpu_count to 1 if compute is set but gpu_count is not
-	if config.Hardware.Compute != nil && *config.Hardware.Compute != "CPU" {
+	if config.Hardware.Compute.IsSet() && config.Hardware.Compute.Primary() != "CPU" {
 		if config.Hardware.GPUCount == nil {
 			defaultGPUCount := 1
 			config.Hardware.GPUCount = &defaultGPUCount

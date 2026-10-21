@@ -11,7 +11,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// isValidSecretKey checks if a secret key follows Kubernetes secret key naming conventions.
+// isValidSecretKey checks whether a secret key matches the allowed format.
 // Keys must be 1-253 characters and contain only alphanumeric characters, hyphens, underscores, or dots.
 func isValidSecretKey(key string) bool {
 	if len(key) == 0 || len(key) > 253 {

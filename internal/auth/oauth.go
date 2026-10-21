@@ -10,6 +10,8 @@ import (
 	"os/exec"
 	"runtime"
 	"time"
+
+	"github.com/cerebriumai/cerebrium/internal/clientenv"
 )
 
 // DeviceAuthResponse represents the response from device authorization
@@ -48,6 +50,7 @@ func RequestDeviceCode(ctx context.Context, apiURL string) (*DeviceAuthResponse,
 
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Source", "cli")
+	req.Header.Set(clientenv.HeaderName, clientenv.HeaderValue())
 
 	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Do(req)
@@ -109,6 +112,7 @@ func PollForToken(ctx context.Context, apiURL string, deviceCode string) (*Token
 
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("X-Source", "cli")
+		req.Header.Set(clientenv.HeaderName, clientenv.HeaderValue())
 
 		resp, err := client.Do(req)
 		if err != nil {

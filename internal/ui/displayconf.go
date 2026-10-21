@@ -21,6 +21,7 @@ func GetDisplayConfigContextKey() DisplayConfigContextKey {
 type DisplayConfig struct {
 	DisableAnimation bool
 	IsInteractive    bool
+	StdinIsTTY       bool
 }
 
 func (d DisplayConfig) SimpleOutput() bool {
@@ -37,6 +38,10 @@ func NewDisplayConfig(cmd *cobra.Command, verbose bool) (DisplayConfig, error) {
 	// Detect if stdout is a TTY
 	// We only check stdout because that's where the TUI output goes
 	stdoutIsTTY := isatty.IsTerminal(os.Stdout.Fd())
+
+	// Detect if stdin is a TTY
+	// Commands that prompt for input must fail fast when it is not
+	stdinIsTTY := isatty.IsTerminal(os.Stdin.Fd())
 
 	// Check if stdout and stderr point to the same file
 	// This matters for verbose mode: if they're separate, verbose logs won't interfere with TUI
@@ -64,6 +69,7 @@ func NewDisplayConfig(cmd *cobra.Command, verbose bool) (DisplayConfig, error) {
 	opts := DisplayConfig{
 		DisableAnimation: disableAnimation,
 		IsInteractive:    isInteractive,
+		StdinIsTTY:       stdinIsTTY,
 	}
 
 	// Debug logging to help diagnose display options
@@ -74,6 +80,7 @@ func NewDisplayConfig(cmd *cobra.Command, verbose bool) (DisplayConfig, error) {
 		"disable-animation-flag", disableAnimationFlag,
 		"verbose-flag", verbose,
 		"stdout-is-tty", stdoutIsTTY,
+		"stdin-is-tty", stdinIsTTY,
 		"stderr-is-tty", isatty.IsTerminal(os.Stderr.Fd()),
 		"stderr-same-as-stdout", stderrRedirectedToStdout,
 		"verbose-forces-simple", verboseForcesSimpleOutput,

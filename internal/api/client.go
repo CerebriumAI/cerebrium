@@ -22,7 +22,8 @@ import (
 
 	"github.com/avast/retry-go/v4"
 	"github.com/bugsnag/bugsnag-go/v2"
-	"github.com/cerebriumai/cerebrium/internal/auth"
+	"github.com/cerebriumai/cerebrium/internal/authsession"
+	"github.com/cerebriumai/cerebrium/internal/clientenv"
 	"github.com/cerebriumai/cerebrium/internal/version"
 	cerebrium_bugsnag "github.com/cerebriumai/cerebrium/pkg/bugsnag"
 	"github.com/cerebriumai/cerebrium/pkg/config"
@@ -48,53 +49,7 @@ func NewClient(cfg *config.Config) (Client, error) {
 
 // getAuthToken retrieves the authentication token (service account or user token)
 func (c *client) getAuthToken(ctx context.Context) (string, error) {
-	// 1. Try service account token from environment variable first
-	serviceToken, err := config.GetServiceAccountTokenFromEnv()
-	if err != nil {
-		return "", fmt.Errorf("service account token error: %w", err)
-	}
-	if serviceToken != "" {
-		return serviceToken, nil
-	}
-
-	// 2. Try stored service account token
-	if token := c.config.GetServiceAccountToken(); token != "" {
-		if err := auth.ValidateToken(token); err == nil {
-			return token, nil
-		}
-		return "", fmt.Errorf("service account token has expired. Please generate a new one")
-	}
-
-	// 3. Try access token
-	token := c.config.GetAccessToken()
-	if token == "" {
-		return "", fmt.Errorf("no access token found. Please run 'cerebrium login' or provide a service account token")
-	}
-
-	// Check if access token is still valid
-	if err := auth.ValidateToken(token); err == nil {
-		return token, nil
-	}
-
-	// 4. Access token expired, try to refresh
-	refreshToken := c.config.GetRefreshToken()
-	if refreshToken == "" {
-		return "", fmt.Errorf("access token has expired and no refresh token available. Please run 'cerebrium login'")
-	}
-
-	envConfig := c.config.GetEnvConfig()
-	newToken, err := auth.RefreshToken(ctx, envConfig.AuthUrl, envConfig.ClientID, refreshToken)
-	if err != nil {
-		return "", fmt.Errorf("failed to refresh token: %w", err)
-	}
-
-	// Save the new token
-	c.config.SetAccessToken(newToken)
-	if err := config.Save(c.config); err != nil {
-		return "", fmt.Errorf("failed to save new token: %w", err)
-	}
-
-	return newToken, nil
+	return authsession.Token(ctx, c.config)
 }
 
 // request makes an HTTP request to the Cerebrium API with retry logic
@@ -141,6 +96,7 @@ func (c *client) request(ctx context.Context, method, path string, body any, req
 			req.Header.Set("Content-Type", "application/json")
 			req.Header.Set("X-Source", "cli")
 			req.Header.Set("X-CLI-Version", version.Version)
+			req.Header.Set(clientenv.HeaderName, clientenv.HeaderValue())
 
 			// Add system attribute headers for debugging
 			req.Header.Set("X-Client-OS", runtime.GOOS)
@@ -383,9 +339,9 @@ func (c *client) GetApp(ctx context.Context, projectID, appID string) (*AppDetai
 	return &appDetails, nil
 }
 
-// ListContainers retrieves recent containers for an app from the v2 endpoint,
-// which is the same one the dashboard uses. The response includes pods that are
-// being torn down — distinguished by the IsTerminating field on each record.
+// ListContainers retrieves recent containers for an app. The response includes
+// containers that are being torn down — distinguished by the IsTerminating field
+// on each record.
 func (c *client) ListContainers(ctx context.Context, projectID, appID string) ([]Container, error) {
 	path := fmt.Sprintf("v2/projects/%s/apps/%s/containers", projectID, appID)
 	body, err := c.request(ctx, "GET", path, nil, true)
@@ -478,43 +434,60 @@ func (c *client) UploadZip(ctx context.Context, uploadURL string, zipPath string
 
 	slog.Info("Uploading zip file", "size", fileInfo.Size(), "path", zipPath)
 
-	// Create PUT request with context
-	req, err := http.NewRequestWithContext(ctx, "PUT", uploadURL, file)
-	if err != nil {
-		slog.Error("Failed to create upload request", "error", err)
-		return fmt.Errorf("failed to create upload request: %w", err)
-	}
+	const maxAttempts = 3
+	const retryDelay = 2 * time.Second
 
-	req.Header.Set("Content-Type", "application/zip")
-	req.ContentLength = fileInfo.Size()
+	err = retry.Do(
+		func() error {
+			// Seek to start so each attempt reads the full file
+			if _, seekErr := file.Seek(0, io.SeekStart); seekErr != nil {
+				return retry.Unrecoverable(fmt.Errorf("failed to seek zip file: %w", seekErr))
+			}
 
-	// Execute request
-	startTime := time.Now()
-	resp, err := c.httpClient.Do(req)
-	duration := time.Since(startTime)
+			// Create PUT request with context
+			req, err := http.NewRequestWithContext(ctx, "PUT", uploadURL, file)
+			if err != nil {
+				return retry.Unrecoverable(fmt.Errorf("failed to create upload request: %w", err))
+			}
+			req.Header.Set("Content-Type", "application/zip")
+			req.ContentLength = fileInfo.Size()
 
-	if err != nil {
-		slog.Error("Zip upload request failed", "error", err, "duration", duration)
-		return fmt.Errorf("upload failed: %w", err)
-	}
-	defer resp.Body.Close() //nolint:errcheck // Deferred close, error not actionable
+			// Execute request
+			startTime := time.Now()
+			resp, err := c.httpClient.Do(req)
+			duration := time.Since(startTime)
 
-	if resp.StatusCode != 200 {
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			slog.Error("Failed to read error response", "error", err, "statusCode", resp.StatusCode)
-			return fmt.Errorf("failed to read error response body: %w", err)
-		}
-		slog.Error("Zip upload failed",
-			"statusCode", resp.StatusCode,
-			"response", string(body),
-			"duration", duration,
-		)
-		return fmt.Errorf("upload failed with status %d: %s", resp.StatusCode, string(body))
-	}
+			if err != nil {
+				slog.Error("Zip upload request failed", "error", err, "duration", duration)
+				return fmt.Errorf("upload failed: %w", err)
+			}
+			defer resp.Body.Close() //nolint:errcheck // Deferred close, error not actionable
 
-	slog.Info("Zip upload successful", "size", fileInfo.Size(), "duration", duration)
-	return nil
+			if resp.StatusCode != 200 {
+				body, _ := io.ReadAll(resp.Body)
+				slog.Error("Zip upload failed", "statusCode", resp.StatusCode, "response", string(body), "duration", duration)
+				// Don't retry on client errors (4xx)
+				if resp.StatusCode >= 400 && resp.StatusCode < 500 {
+					return retry.Unrecoverable(fmt.Errorf("upload failed with status %d: %s", resp.StatusCode, string(body)))
+				}
+				return fmt.Errorf("upload failed with status %d: %s", resp.StatusCode, string(body))
+			}
+
+			slog.Info("Zip upload successful", "size", fileInfo.Size(), "duration", duration)
+			return nil
+		},
+		retry.Context(ctx),
+		retry.Attempts(maxAttempts),
+		retry.Delay(retryDelay),
+		retry.DelayType(retry.BackOffDelay),
+		retry.RetryIf(func(err error) bool {
+			return !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded)
+		}),
+		retry.OnRetry(func(n uint, err error) {
+			slog.Warn("Retrying zip upload", "attempt", n+1, "maxAttempts", maxAttempts, "error", err)
+		}),
+	)
+	return err
 }
 
 // FetchBuildLogs retrieves build logs for a specific build
@@ -892,6 +865,7 @@ func (c *client) RunApp(ctx context.Context, projectID, appID, region, filename 
 	req.Header.Set("Content-Type", w.FormDataContentType())
 	req.Header.Set("X-Source", "cli")
 	req.Header.Set("X-CLI-Version", version.Version)
+	req.Header.Set(clientenv.HeaderName, clientenv.HeaderValue())
 
 	// Add system attribute headers for debugging
 	req.Header.Set("X-Client-OS", runtime.GOOS)

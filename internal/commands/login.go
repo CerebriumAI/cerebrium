@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"context"
 	"fmt"
 	"os"
 
@@ -45,10 +46,15 @@ func runLogin(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to get config: %w", err)
 	}
 
+	return runInteractiveLogin(cmd.Context(), cfg, displayOpts)
+}
+
+// runInteractiveLogin runs the OAuth device flow and stores the credentials it returns.
+func runInteractiveLogin(ctx context.Context, cfg *config.Config, displayOpts ui.DisplayConfig) error {
 	// For login, we need TTY for OAuth flow
 	// In non-TTY environments, users should use service account tokens
 	if !isatty.IsTerminal(os.Stdout.Fd()) {
-		return fmt.Errorf("login requires an interactive terminal. For non-interactive authentication, use service account tokens via the CEREBRIUM_SERVICE_ACCOUNT environment variable")
+		return fmt.Errorf("login requires an interactive terminal. Non-interactive environments do not need to log in: set CEREBRIUM_SERVICE_ACCOUNT_TOKEN, or pass --service-account-token, on the command you want to run")
 	}
 
 	// Create API client for the login flow
@@ -60,7 +66,7 @@ func runLogin(cmd *cobra.Command, args []string) error {
 	}
 
 	// Create Bubbletea model for login
-	model := uiCommands.NewLoginView(cmd.Context(), uiCommands.LoginConfig{
+	model := uiCommands.NewLoginView(ctx, uiCommands.LoginConfig{
 		DisplayConfig: displayOpts,
 		Config:        cfg,
 		Client:        client,

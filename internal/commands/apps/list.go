@@ -15,16 +15,24 @@ func newListCmd() *cobra.Command {
 		Short: "List all apps",
 		Long: `List all apps under your current context.
 
-Example:
-  cerebrium apps list`,
+Examples:
+  cerebrium apps list
+  cerebrium apps list --output json`,
 		RunE: runList,
 	}
+
+	ui.AddOutputFlag(cmd)
 
 	return cmd
 }
 
 func runList(cmd *cobra.Command, args []string) error {
 	cmd.SilenceUsage = true
+
+	outputFormat, err := ui.ParseOutputFormat(cmd)
+	if err != nil {
+		return err
+	}
 
 	// Get config from context
 	cfg, err := config.GetConfigFromContext(cmd)
@@ -45,7 +53,7 @@ func runList(cmd *cobra.Command, args []string) error {
 	}
 
 	// Show spinner while fetching
-	spinner := ui.NewSimpleSpinner("Loading apps...")
+	spinner := ui.NewSimpleSpinnerFor(outputFormat, "Loading apps...")
 	spinner.Start()
 
 	// Fetch apps
@@ -53,6 +61,10 @@ func runList(cmd *cobra.Command, args []string) error {
 	spinner.Stop()
 	if err != nil {
 		return ui.NewAPIError(err)
+	}
+
+	if outputFormat == ui.OutputJSON {
+		return ui.PrintJSON(apps)
 	}
 
 	// Print results

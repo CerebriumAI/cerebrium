@@ -1,9 +1,15 @@
 package commands
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"fmt"
+	"io"
+	"os"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/cerebriumai/cerebrium/internal/api"
 	apimock "github.com/cerebriumai/cerebrium/internal/api/mock"
@@ -12,6 +18,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 )
 
 //go:generate go test -v -run TestLogsView -update
@@ -365,4 +372,132 @@ func TestLogsView_RenderHelpText(t *testing.T) {
 		// With no logs or less than 40 logs, shouldn't show scroll hints
 		assert.NotContains(t, helpText, "j/k: scroll")
 	})
+}
+
+// TestLogsView_noFollowPrintsEveryLog guards the --no-follow path against losing
+// logs. The provider signals completion on a different channel from the logs
+// themselves, so the two race: if completion is handled first, LogsView quits on
+// IsComplete and whatever the provider already produced is never printed.
+//
+// The race is won or lost per run, so a single iteration passes by luck. Looping
+// makes a regression fail reliably instead of flaking in CI.
+func TestLogsView_noFollowPrintsEveryLog(t *testing.T) {
+	const (
+		iterations = 50
+		logCount   = 25
+	)
+
+	entries := make([]api.AppLogEntry, 0, logCount)
+	for i := range logCount {
+		entries = append(entries, api.AppLogEntry{
+			LogID:     fmt.Sprintf("log-%d", i),
+			Timestamp: time.Unix(int64(i), 0).UTC().Format(time.RFC3339),
+			LogLine:   fmt.Sprintf("line %d", i),
+			Stream:    "stdout",
+		})
+	}
+
+	for i := range iterations {
+		mockClient := apimock.NewMockClient(t)
+		mockClient.On("FetchAppLogs", mock.Anything, "test-project", "test-app", mock.Anything).
+			Return(&api.AppLogsResponse{Logs: entries}, nil).
+			Once()
+
+		model := NewLogsView(t.Context(), LogsConfig{
+			DisplayConfig: ui.DisplayConfig{IsInteractive: false, DisableAnimation: true},
+			Client:        mockClient,
+			ProjectID:     "test-project",
+			AppID:         "test-app",
+			AppName:       "test-app",
+			Follow:        false,
+		})
+
+		stdout := captureStdout(t, func() {
+			p := tea.NewProgram(model, tea.WithoutRenderer(), tea.WithInput(nil))
+			_, err := p.Run()
+			require.NoError(t, err)
+		})
+
+		printed := 0
+		if trimmed := strings.TrimSpace(stdout); trimmed != "" {
+			printed = len(strings.Split(trimmed, "\n"))
+		}
+		require.Equal(t, logCount, printed,
+			"run %d printed %d of %d logs — the fetched batch was dropped on exit", i, printed, logCount)
+	}
+}
+
+// captureStdout redirects os.Stdout for the duration of fn and returns what was
+// written. The log viewer prints to os.Stdout directly in simple output mode.
+func captureStdout(t *testing.T, fn func()) string {
+	t.Helper()
+
+	reader, writer, err := os.Pipe()
+	require.NoError(t, err)
+
+	original := os.Stdout
+	os.Stdout = writer
+	defer func() { os.Stdout = original }()
+
+	// Drain concurrently so fn can't block on a full pipe buffer.
+	captured := make(chan string, 1)
+	go func() {
+		var buf bytes.Buffer
+		_, _ = io.Copy(&buf, reader)
+		captured <- buf.String()
+	}()
+
+	fn()
+
+	require.NoError(t, writer.Close())
+	out := <-captured
+	require.NoError(t, reader.Close())
+
+	return out
+}
+
+// TestLogsView_noFollowPrintsOldestFirst pins the order of --no-follow output.
+// A one-shot fetch pages backwards, so the API returns the batch newest-first,
+// but logs have to read oldest-first like every other log tool.
+func TestLogsView_noFollowPrintsOldestFirst(t *testing.T) {
+	const logCount = 5
+
+	// Newest-first, as the backend returns for a backward fetch.
+	entries := make([]api.AppLogEntry, 0, logCount)
+	for i := logCount - 1; i >= 0; i-- {
+		entries = append(entries, api.AppLogEntry{
+			LogID:     fmt.Sprintf("log-%d", i),
+			Timestamp: time.Unix(int64(i), 0).UTC().Format(time.RFC3339),
+			LogLine:   fmt.Sprintf("line %d", i),
+			Stream:    "stdout",
+		})
+	}
+
+	mockClient := apimock.NewMockClient(t)
+	mockClient.On("FetchAppLogs", mock.Anything, "test-project", "test-app", mock.Anything).
+		Return(&api.AppLogsResponse{Logs: entries}, nil).
+		Once()
+
+	model := NewLogsView(t.Context(), LogsConfig{
+		DisplayConfig: ui.DisplayConfig{IsInteractive: false, DisableAnimation: true},
+		Client:        mockClient,
+		ProjectID:     "test-project",
+		AppID:         "test-app",
+		AppName:       "test-app",
+		Follow:        false,
+	})
+
+	stdout := captureStdout(t, func() {
+		p := tea.NewProgram(model, tea.WithoutRenderer(), tea.WithInput(nil))
+		_, err := p.Run()
+		require.NoError(t, err)
+	})
+
+	lines := strings.Split(strings.TrimSpace(stdout), "\n")
+	require.Len(t, lines, logCount)
+
+	for i, line := range lines {
+		assert.Contains(t, line, fmt.Sprintf("line %d", i),
+			"output line %d is out of order — the batch was printed newest-first", i)
+	}
 }
