@@ -1,6 +1,6 @@
 module github.com/cerebriumai/cerebrium
 
-go 1.25.2
+go 1.26.10
 
 require (
 	github.com/avast/retry-go/v4 v4.7.0
