@@ -160,21 +160,6 @@ func (c *client) request(ctx context.Context, method, path string, body any, req
 				slog.Warn("Authentication failed", "statusCode", resp.StatusCode, "path", path)
 				authErr := getAuthErr(resp.StatusCode, respBody)
 
-				// Report authentication errors to Bugsnag
-				cerebrium_bugsnag.NotifyWithMetadata(
-					ctx,
-					authErr,
-					bugsnag.SeverityWarning,
-					bugsnag.MetaData{
-						"api": {
-							"status_code": resp.StatusCode,
-							"method":      method,
-							"path":        path,
-							"attempt":     attempt,
-						},
-					},
-				)
-
 				return retry.Unrecoverable(authErr)
 			}
 
