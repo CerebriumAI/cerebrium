@@ -91,7 +91,8 @@ func generateRequirementsContent(deps map[string]string) string {
 		} else {
 			// Handle version specifiers properly
 			if strings.HasPrefix(version, "=") || strings.HasPrefix(version, ">") ||
-				strings.HasPrefix(version, "<") || strings.HasPrefix(version, "!") {
+				strings.HasPrefix(version, "<") || strings.HasPrefix(version, "!") ||
+				strings.HasPrefix(version, "~=") {
 				lines = append(lines, fmt.Sprintf("%s%s", pkg, version))
 			} else {
 				lines = append(lines, fmt.Sprintf("%s==%s", pkg, version))
