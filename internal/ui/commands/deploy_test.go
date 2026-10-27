@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 	"testing/iotest"
+	"time"
 
 	"github.com/cerebriumai/cerebrium/internal/api"
 	apimock "github.com/cerebriumai/cerebrium/internal/api/mock"
@@ -1267,4 +1268,47 @@ func TestReadConfirmationResponse(t *testing.T) {
 			assert.Equal(t, tc.confirmed, msg.confirmed)
 		})
 	}
+}
+
+func TestDeployView_BuildPollFailure(t *testing.T) {
+	newModel := func(t *testing.T) *DeployView {
+		return NewDeployView(t.Context(), DeployConfig{
+			DisplayConfig: ui.DisplayConfig{IsInteractive: false, DisableAnimation: true},
+			Config:        partnerConfig("partner-app"),
+			ProjectID:     "test-project",
+			Client:        apimock.NewMockClient(t),
+			WSClient:      wsmock.NewMockClient(t),
+		})
+	}
+	pollErr := buildStatusPollErrorMsg{err: errors.New("failed with status code 403")}
+
+	t.Run("keeps polling through a short outage", func(t *testing.T) {
+		model := newModel(t)
+
+		_, cmd := model.Update(pollErr)
+
+		require.NotNil(t, cmd)
+		assert.False(t, model.pollFailingSince.IsZero())
+	})
+
+	t.Run("gives up once failing past the limit", func(t *testing.T) {
+		model := newModel(t)
+		model.pollFailingSince = time.Now().Add(-maxBuildPollFailure - time.Second)
+
+		_, cmd := model.Update(pollErr)
+
+		require.NotNil(t, cmd)
+		uiErr, ok := cmd().(*ui.UIError)
+		require.True(t, ok)
+		assert.ErrorContains(t, uiErr.Err, "403")
+	})
+
+	t.Run("a successful poll resets the failure window", func(t *testing.T) {
+		model := newModel(t)
+		model.pollFailingSince = time.Now().Add(-time.Minute)
+
+		model.Update(buildStatusUpdateMsg{buildID: "build-1", status: "building"})
+
+		assert.True(t, model.pollFailingSince.IsZero())
+	})
 }
