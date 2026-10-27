@@ -75,18 +75,19 @@ type DeployView struct {
 	state DeployState
 
 	// State data
-	isPartnerDeploy bool // Track if this is a partner app deployment
-	fileList        []string
-	zipPath         string
-	zipSize         int64
-	buildID         string
-	appResponse     *api.CreateAppResponse
-	logViewer       *logging.LogViewerModel
-	idleMsgIdx      int
-	buildStatus     string
-	spinner         *ui.SpinnerModel
-	message         string
-	err             *ui.UIError
+	isPartnerDeploy  bool // Track if this is a partner app deployment
+	fileList         []string
+	zipPath          string
+	zipSize          int64
+	buildID          string
+	appResponse      *api.CreateAppResponse
+	logViewer        *logging.LogViewerModel
+	idleMsgIdx       int
+	buildStatus      string
+	pollFailingSince time.Time
+	spinner          *ui.SpinnerModel
+	message          string
+	err              *ui.UIError
 
 	// Upload progress tracking
 	progressBar         progress.Model
@@ -459,6 +460,7 @@ func (m *DeployView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Build status update from polling
 		slog.Debug("Build status update", "status", msg.status, "buildId", msg.buildID)
 		m.buildStatus = msg.status
+		m.pollFailingSince = time.Time{}
 
 		// Check if status is terminal
 		if ui.IsTerminalStatus(msg.status) {
@@ -473,6 +475,13 @@ func (m *DeployView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case buildStatusPollErrorMsg:
 		// Failed to fetch build status, retry after delay
+		if m.pollFailingSince.IsZero() {
+			m.pollFailingSince = time.Now()
+		}
+		if time.Since(m.pollFailingSince) > maxBuildPollFailure {
+			err := ui.NewAPIError(fmt.Errorf("failed to fetch build status: %w", msg.err))
+			return m, func() tea.Msg { return err }
+		}
 		return m, m.scheduleNextBuildPoll()
 
 	case buildCompleteMsg:
@@ -1227,6 +1236,8 @@ func (m *DeployView) pollBuildStatus() tea.Msg {
 		status:  build.Status,
 	}
 }
+
+const maxBuildPollFailure = 2 * time.Minute
 
 func (m *DeployView) scheduleNextBuildPoll() tea.Cmd {
 	return tea.Tick(1*time.Second, func(t time.Time) tea.Msg {
