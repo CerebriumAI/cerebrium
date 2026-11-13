@@ -272,10 +272,13 @@ func getAuthErr(respCode int, respBody []byte) error {
 		errMsg += ". You must log in to use this functionality. Please run 'cerebrium login'"
 
 	case http.StatusForbidden, http.StatusMethodNotAllowed:
-		errMsg += ". You do not have permission to access this resource"
-		if errResp.Message != "" {
-			errMsg += fmt.Sprintf(". Message from server: \"%s\"", errResp.Message)
+		if errResp.Code == "unauthenticated" {
+			return fmt.Errorf("%s Run 'cerebrium login'", errResp.Message)
 		}
+		if errResp.Message != "" {
+			return errors.New(errResp.Message)
+		}
+		errMsg += ". You do not have permission to access this resource"
 
 	default:
 		errMsg += ". You must log in to use this functionality. Please run 'cerebrium login'"

@@ -156,6 +156,7 @@ type Project struct {
 // ErrorResponse represents an API error response
 type ErrorResponse struct {
 	Message string `json:"message"`
+	Code    string `json:"code"`
 }
 
 // CreateAppResponse represents the response from creating a new app/build
